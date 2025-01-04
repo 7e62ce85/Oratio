@@ -1,8 +1,9 @@
 # Oratio
 
-https://phuks.co/
+Oratio will be a free speech forum software.
 
-A phoxy link and discussion aggregator with snek (python3)
+Forked from: https://github.com/Phuks-co/throat
+https://phuks.co/
 
 ## Dependencies:
 
