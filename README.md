@@ -1,8 +1,10 @@
-# Throat
+# Oratio
 
+Oratio (WIP) will be free speech forum software.
+
+Forked from the phuks/Throat project:
+https://github.com/Phuks-co/throat
 https://phuks.co/
-
-A phoxy link and discussion aggregator with snek (python3)
 
 ## Dependencies:
 
