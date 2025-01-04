@@ -8,7 +8,8 @@ https://phuks.co/
 
 ## Dependencies:
 
- - A database server, MySQL, MariaDB and Postgres have been tested. Sqlite should work for messing locally
+ - A database server, MySQL, MariaDB and Postgres have been tested. Sqlite should work for messing locally.
+   (Oratio will start with a focus on using MySQL)
  - Redis
  - Python >= 3.7
  - A recent node/npm
