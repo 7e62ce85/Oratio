@@ -1,0 +1,28 @@
+{
+  # for more info about the config, check out the documentation
+  # https://join-lemmy.org/docs/en/administration/configuration.html
+
+  database: {
+    host: postgres
+    port: 5432
+    user: "lemmy"
+    password: "15JpMF0Xv1NfoJPsY9aG"
+    database: "lemmy"
+    pool_size: 5
+    # Alternative way:
+    #uri: "postgresql://lemmy:15JpMF0Xv1NfoJPsY9aG@postgres/lemmy"
+  }
+  hostname: "defadb.com"
+  pictrs: {
+    url: "http://pictrs:8080/"
+    api_key: "15JpMF0Xv1NfoJPsY9aG"
+  }
+  email: {
+    smtp_server: "postfix:25"
+    smtp_from_address: "noreply@defadb.com"
+    tls_type: "none"
+  }
+  federation: {
+    enabled: false
+  }
+}
