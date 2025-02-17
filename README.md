@@ -69,6 +69,7 @@ This project aims to:
 ---
 
 ### 2. Lemmy Installation (Ansible)
+( https://github.com/LemmyNet/lemmy-ansible/tree/main )
 
 1. **Install Ansible (Local or WSL)**
    ```bash
