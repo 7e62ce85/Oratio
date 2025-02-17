@@ -1,4 +1,5 @@
 # DigitalOcean Lemmy & Bitcoincash Payment Service
+(Initial API endpoint testing has been completed, with successful GET invoice generation and POST payment callback verification. The core API infrastructure is responding as expected, though the actual BCH payment processing is not yet implemented.)
 
 This project describes the final implementation of **Lemmy** and a **Bitcoincash Payment Service** (Rust-based) using Docker containers on a DigitalOcean Droplet (1GB RAM, Debian 12), with **Nginx** configured as a reverse proxy and SSL (Let's Encrypt) settings applied.
 
