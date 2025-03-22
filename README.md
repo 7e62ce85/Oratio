@@ -1,4 +1,4 @@
-# Lemmy and BitcoinCash Payment System Development Documentation
+# Lemmy and Payment System 
 
 This project details the implementation of a **Lemmy** community platform and a **BitcoinCash Payment Service** on a DigitalOcean Droplet. The services run in Docker containers with Nginx configured as a reverse proxy with SSL applied.
 
