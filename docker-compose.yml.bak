@@ -1,0 +1,121 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "4"
+
+services:
+  proxy:
+    image: docker.io/library/nginx 
+    ports:
+      # Note, change lemmy_port in vars.yml if it is already in use on your system
+   #  - "127.0.0.1:9633:8536"
+      - "80:80"  
+      - "443:443"
+    volumes:
+      - ./nginx_internal.conf:/etc/nginx/nginx.conf:ro,Z
+      - ./proxy_params:/etc/nginx/proxy_params:ro,Z
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    restart: always
+    logging: *default-logging
+    depends_on:
+      - pictrs
+      - lemmy-ui
+
+  lemmy:
+    image: dessalines/lemmy:0.19.8
+    hostname: lemmy
+    restart: always
+    logging: *default-logging
+    environment:
+      - RUST_LOG=warn
+    volumes:
+      - ./lemmy.hjson:/config/config.hjson:Z
+    depends_on:
+      - postgres
+      - pictrs
+
+  lemmy-ui:
+    image: dessalines/lemmy-ui:0.19.8
+    environment:
+      - LEMMY_UI_LEMMY_INTERNAL_HOST=lemmy:8536
+      - LEMMY_UI_LEMMY_EXTERNAL_HOST=defadb.com
+      - LEMMY_UI_HTTPS=True
+    volumes:
+      - ./volumes/lemmy-ui/extra_themes:/app/extra_themes:Z
+    depends_on:
+      - lemmy
+    restart: always
+    logging: *default-logging
+
+  pictrs:
+    image: docker.io/asonix/pictrs:0.5
+    # this needs to match the pictrs url in lemmy.hjson
+    hostname: pictrs
+    # we can set options to pictrs like this, here we set max. image size and forced format for conversion
+    # entrypoint: /sbin/tini -- /usr/local/bin/pict-rs -p /mnt -m 4 --image-format webp
+    environment:
+      - PICTRS__SERVER__API_KEY=15JpMF0Xv1NfoJPsY9aG
+      - PICTRS__MEDIA__ANIMATION__MAX_WIDTH=256
+      - PICTRS__MEDIA__ANIMATION__MAX_HEIGHT=256
+      - PICTRS__MEDIA__ANIMATION__MAX_AREA=65536
+      - PICTRS__MEDIA__ANIMATION__MAX_FRAME_COUNT=400
+      - PICTRS__MEDIA__VIDEO__ENABLE=True
+      - PICTRS__MEDIA__VIDEO__MAX_FILE_SIZE=20
+      - PICTRS_OPENTELEMETRY_URL=http://otel:4137
+      - RUST_LOG=info
+      - RUST_BACKTRACE=full
+    user: 991:991
+    volumes:
+      - ./volumes/pictrs:/mnt:Z
+    restart: always
+    logging: *default-logging
+
+  postgres:
+    image: docker.io/pgautoupgrade/pgautoupgrade:16-alpine
+    hostname: postgres
+    environment:
+      - POSTGRES_USER=lemmy
+      - POSTGRES_PASSWORD=15JpMF0Xv1NfoJPsY9aG
+      - POSTGRES_DB=lemmy
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data:Z
+      - ./customPostgresql.conf:/etc/postgresql.conf:Z
+    restart: always
+    command: postgres -c config_file=/etc/postgresql.conf
+    shm_size: 256m #2g
+    logging: *default-logging
+
+  postfix:
+    image: docker.io/mwader/postfix-relay
+    environment:
+      - POSTFIX_myhostname=defadb.com
+    restart: "always"
+    logging: *default-logging
+
+  electron-cash:
+    image: python:3.9-slim
+    container_name: electron-cash
+    volumes:
+      - ./bitcoincash_service/electron-cash-data:/root/.electron-cash
+      - ./bitcoincash_service/setup-electron-cash.sh:/setup.sh
+    ports:
+      - "127.0.0.1:7777:7777"  # JSON-RPC 포트, 내부에서만 접근 가능
+    command: bash -c "chmod +x /setup.sh && /setup.sh && sleep 10 && electron-cash daemon start && tail -f /dev/null"
+    restart: always
+    logging: *default-logging
+
+  bitcoincash-service:
+    build:
+      context: ./bitcoincash_service
+    container_name: bitcoincash-service
+    depends_on:
+      - electron-cash
+    ports:
+      - "8081:8081"  # 결제 서비스 API 포트
+    environment:
+      - ELECTRON_CASH_URL=http://electron-cash:7777
+      - RPC_USER=bchrpc
+      - RPC_PASSWORD=helicoptarian
+    restart: always
+    logging: *default-logging

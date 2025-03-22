@@ -1,0 +1,58 @@
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    access_log /var/log/nginx/access.log;
+    error_log  /var/log/nginx/error.log;
+
+    server {
+        listen 80;
+        server_name payments.defadb.com;
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl;
+        server_name payments.defadb.com;
+
+        ssl_certificate /etc/letsencrypt/live/defadb.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/defadb.com/privkey.pem;
+
+        location / {
+            proxy_pass http://localhost:8081;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+
+    server {
+        listen 80;
+        server_name defadb.com www.defadb.com;
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl;
+        server_name defadb.com www.defadb.com;
+        ssl_certificate /etc/letsencrypt/live/defadb.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/defadb.com/privkey.pem;
+
+        location / {
+            proxy_pass http://lemmy-ui:1234;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+
+        location ~ ^/(api|pictrs|feeds|nodeinfo|.well-known|version|sitemap.xml) {
+            proxy_pass http://lemmy:8536;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+}
