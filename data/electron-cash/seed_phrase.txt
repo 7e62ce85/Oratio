@@ -1,3 +1,0 @@
-Your wallet generation seed is:
-    "split fitness dry drill math put orbit exact bamboo hello bubble acquire"
-Wallet seed format: bip39

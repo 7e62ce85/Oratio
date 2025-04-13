@@ -1,8 +1,0 @@
-{
-  "rpcuser": "bchrpc",
-  "rpcpassword": "$(generate_password)",
-  "rpchost": "0.0.0.0",
-  "rpcport": 7777,
-  "netuser": "bchrpc",
-  "netpassword": "$(generate_password)"
-}

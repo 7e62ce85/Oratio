@@ -1,3 +1,0 @@
-Your wallet generation seed is:
-    "visa leg magic sort rail fold caution alarm champion change edge usual"
-Wallet seed format: bip39

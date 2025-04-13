@@ -1,0 +1,24 @@
+# PostgreSQL 데이터 파일
+volumes/postgres/
+
+# pictrs 파일
+volumes/pictrs/
+
+# 로그 파일
+*.log
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 데이터베이스 파일
+*.db
+data/bitcoincash/
+data/electron_cash/
+data/electron-cash/
+electron-cash-data/
+
+# 기타 캐시 및 임시 파일
+*.swp
+.DS_Store
