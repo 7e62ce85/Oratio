@@ -1,0 +1,182 @@
+{
+    "addr_history": {
+        "12o5gAqm9LDQ1BpfoTqksM9caRnQSBp3ZS": [],
+        "132KRYWjh9V8cFxA8PoFDBP6rCBrHFzJBB": [],
+        "13AM3MEVcTYSK8oYvu5Qp7WoXDTU2yp24c": [],
+        "13t7DpAAsJS9jRykuB3BZpstZxHofwst6d": [],
+        "13xXtvhGMRYLyEDQokcnWpFsbithTGbtda": [],
+        "14GYmysQQyExJ3YhCqhqkJkBjKKcLqy8gB": [],
+        "14QpVhNq8ESbwGBB5gSYJNcUmLjAPk4VSc": [],
+        "14hZ13ZvpFu7UVavdkB9tFEHmFK2hoes2Y": [],
+        "14rirTnSxmxa7wmtfd8we9kjbAYMNLAX7V": [],
+        "152CraGvBQ1J2gPAJHwfSiDY2Y3CqYZbMS": [],
+        "15hwDJ9RZKBnHjHtfCqsudJgCLrw9eDs3r": [],
+        "15rvDECcvudLTffMDbHAJKZCEfbo4NemoZ": [],
+        "177dHNcbgjtwC6arT9cwUGW83MAksKNRNE": [],
+        "17sDvuWdvMTkidKag5D3DS8Gag2ouu8y3x": [],
+        "18ckx12xYPdRFZhtscDwXCFNyjmVCMrSdN": [],
+        "18u9AMnUvBFiR2ZYmzG7GsmsUGVFqo9aBZ": [],
+        "19EHm1dRtRFcmyLuAjMi2akfQ1e8u58yPw": [],
+        "1AmWiU2AicHwjLrY751AFTLaEgUujH1G1k": [],
+        "1B6u8bysMz6eXaqnBDAiH7VEd6ib9cdPwT": [],
+        "1B7ayum3FXeCE9wm7L3c5aW3zrpN3NELQB": [],
+        "1BBACnRSWn97jqkg8GrGbAqsiJP9NXjAjD": [],
+        "1Bzofnudr8pNyCUjVLP31KYig6jHcPJjmH": [],
+        "1CPWk8rocBj5ERKFRKXw3qSSBbSLLos3CX": [],
+        "1DeY46qzfH3MDopLjpPp4C9WTHPRKok595": [
+            [
+                "bb7f954bd16ed9cc883a6306588d4e5673b9cd286a04959b90514a151be87aaf",
+                893736
+            ]
+        ],
+        "1FtHWi4yMXiNEGnWo5xAFZsw18eKD3EtkK": [],
+        "1FyAtZivjJfAPv4L1X5uZp3Ny8qA15v564": [],
+        "1GNDMFVeuQ7gpMpBaG3rPj1zKxYgNWce1r": [],
+        "1GXxkyxSYMorXc8xZGVtUr23hx5vaFcxCK": [
+            [
+                "5c4404cec632ae6a67a1ae689b4cf1802edc515c953acf9b0b5603dd30f3f443",
+                893747
+            ]
+        ],
+        "1GdPdHM6hgEb3zs1nWFHeKkUm4xLyc3Njt": [],
+        "1GhLiGdLZ2oeP8WWKKEj4vA39cqLaUcLVH": [],
+        "1GiGUyYhgJhBAYkpqHZ2kZAwizguyPScUK": [],
+        "1Hi6TDLg4L1igVndsZ54tHobc4wkkcpoGt": [],
+        "1HwJVgNfRVGeeutLwoHDHz3GL7wuhX4jht": [],
+        "1Jpsk2J6um6XCfZj6kRgxodGbn3vfBGMPh": [],
+        "1KLtFxTB8ZShtdZG9pESqKnjGseCty9EcU": [],
+        "1KU7oumsodu7GVfwqGkDsqU1NcrAXdNgn3": [],
+        "1LkZKbcFgcoGZrErPA3vTWQvH21S5YpLd1": [],
+        "1Lxca11hSKhjKADzSqTetaJ1fnf7PCUgka": [],
+        "1M169hBYruFktt6PFcxMrrPUzPc9C7k2Ny": [],
+        "1MFCAMwBHVAiwD8aHYkvsR7ffXDcKT87dP": [],
+        "1Mmde53siz6N8FWP7yNVvfGmcpZTMULyvb": [],
+        "1PLo52zqfYgYd7aoCLGdorpHaAuuKmUJ7S": [],
+        "1PQfzyB98EZ6f4cN9zVxqABKwUkjxbcQ9x": [],
+        "1QHBs3vX2vFFMqjDSCiqe25wBMB4xLg5RF": [],
+        "1quBM5GQ38Yoo2AwoYvPNvNdt3BxkqaSa": []
+    },
+    "addresses": {
+        "change": [
+            "1Lxca11hSKhjKADzSqTetaJ1fnf7PCUgka",
+            "17sDvuWdvMTkidKag5D3DS8Gag2ouu8y3x",
+            "1BBACnRSWn97jqkg8GrGbAqsiJP9NXjAjD",
+            "132KRYWjh9V8cFxA8PoFDBP6rCBrHFzJBB",
+            "1CPWk8rocBj5ERKFRKXw3qSSBbSLLos3CX",
+            "1GNDMFVeuQ7gpMpBaG3rPj1zKxYgNWce1r",
+            "1PQfzyB98EZ6f4cN9zVxqABKwUkjxbcQ9x",
+            "1AmWiU2AicHwjLrY751AFTLaEgUujH1G1k",
+            "1GdPdHM6hgEb3zs1nWFHeKkUm4xLyc3Njt",
+            "1LkZKbcFgcoGZrErPA3vTWQvH21S5YpLd1",
+            "1MFCAMwBHVAiwD8aHYkvsR7ffXDcKT87dP",
+            "15rvDECcvudLTffMDbHAJKZCEfbo4NemoZ",
+            "1Bzofnudr8pNyCUjVLP31KYig6jHcPJjmH",
+            "1QHBs3vX2vFFMqjDSCiqe25wBMB4xLg5RF",
+            "14rirTnSxmxa7wmtfd8we9kjbAYMNLAX7V",
+            "1KU7oumsodu7GVfwqGkDsqU1NcrAXdNgn3",
+            "13t7DpAAsJS9jRykuB3BZpstZxHofwst6d",
+            "1GhLiGdLZ2oeP8WWKKEj4vA39cqLaUcLVH",
+            "1Mmde53siz6N8FWP7yNVvfGmcpZTMULyvb",
+            "1GiGUyYhgJhBAYkpqHZ2kZAwizguyPScUK"
+        ],
+        "receiving": [
+            "1DeY46qzfH3MDopLjpPp4C9WTHPRKok595",
+            "1GXxkyxSYMorXc8xZGVtUr23hx5vaFcxCK",
+            "13xXtvhGMRYLyEDQokcnWpFsbithTGbtda",
+            "1FyAtZivjJfAPv4L1X5uZp3Ny8qA15v564",
+            "1B7ayum3FXeCE9wm7L3c5aW3zrpN3NELQB",
+            "18ckx12xYPdRFZhtscDwXCFNyjmVCMrSdN",
+            "19EHm1dRtRFcmyLuAjMi2akfQ1e8u58yPw",
+            "1FtHWi4yMXiNEGnWo5xAFZsw18eKD3EtkK",
+            "14QpVhNq8ESbwGBB5gSYJNcUmLjAPk4VSc",
+            "12o5gAqm9LDQ1BpfoTqksM9caRnQSBp3ZS",
+            "1B6u8bysMz6eXaqnBDAiH7VEd6ib9cdPwT",
+            "14GYmysQQyExJ3YhCqhqkJkBjKKcLqy8gB",
+            "15hwDJ9RZKBnHjHtfCqsudJgCLrw9eDs3r",
+            "1Jpsk2J6um6XCfZj6kRgxodGbn3vfBGMPh",
+            "18u9AMnUvBFiR2ZYmzG7GsmsUGVFqo9aBZ",
+            "13AM3MEVcTYSK8oYvu5Qp7WoXDTU2yp24c",
+            "1M169hBYruFktt6PFcxMrrPUzPc9C7k2Ny",
+            "1quBM5GQ38Yoo2AwoYvPNvNdt3BxkqaSa",
+            "152CraGvBQ1J2gPAJHwfSiDY2Y3CqYZbMS",
+            "14hZ13ZvpFu7UVavdkB9tFEHmFK2hoes2Y",
+            "1HwJVgNfRVGeeutLwoHDHz3GL7wuhX4jht",
+            "1PLo52zqfYgYd7aoCLGdorpHaAuuKmUJ7S",
+            "177dHNcbgjtwC6arT9cwUGW83MAksKNRNE",
+            "1Hi6TDLg4L1igVndsZ54tHobc4wkkcpoGt",
+            "1KLtFxTB8ZShtdZG9pESqKnjGseCty9EcU"
+        ]
+    },
+    "cash_accounts_data": {
+        "ext_reg_tx": {},
+        "minimal_ch_cache": [],
+        "verified_tx": {},
+        "wallet_reg_tx": {}
+    },
+    "ct_txi": {},
+    "ct_txid_hash": "b957150c7ca0356cb2e02f13b6b93c690e4e0685d0f6c4f999b913b1e2aca9b7",
+    "ct_txo": {},
+    "keystore": {
+        "derivation": "m/44'/145'/0'",
+        "seed": "visa leg magic sort rail fold caution alarm champion change edge usual",
+        "seed_type": "bip39",
+        "type": "bip32",
+        "xprv": "xprv9yHihXrAUQy4EQ7ZtJUmoTAhrD7qoXQwpDrfr3S75KW9i3LFPE2AUuMqAoR3VJhsVJhqXExT92jsPMyHkHp2wiK6TnWTnPLKwWANsXs1msW",
+        "xpub": "xpub6CH573P4JnXMStC2zL1nAb7SQExLCz8oBSnGeRqidf38aqfPvmLR2hgK27EpecG5z1fjcQNTzuntHmDE6L9XZ7FxdB84Y37RZTyGC7b6ZyP"
+    },
+    "keystore_derivations": [
+        "m/44'/145'/0'"
+    ],
+    "pruned_txo": {},
+    "seed_type": "bip39",
+    "seed_version": 17,
+    "slp": {
+        "token_quantities": {},
+        "txo_byaddr": {},
+        "validity": {},
+        "version": 0.1
+    },
+    "transactions": {
+        "5c4404cec632ae6a67a1ae689b4cf1802edc515c953acf9b0b5603dd30f3f443": "0200000001af7ae81b154a51909b95046a28cdb973564e8d5806633a88ccd96ed14b957fbb010000006b4830450221009a1f93595e9bd08897072cb9ba498d03a0314c23f14253a97e0634b1038d632b02206d1adb16d3066c263a5427661490884489965af6a7fdf919191a2bf38418f52d412102b2fc197f2c325e6ff07eba2fabdc8be472803170b2ddfb90a3ec61ff163f834bffffffff0210270000000000001976a914aa64e909abaa893610fea62fa764c691acc916d588ac1fb8e90b000000001976a9148905c405c982e94109d7fe21866c4232668313db88ac00000000",
+        "bb7f954bd16ed9cc883a6306588d4e5673b9cd286a04959b90514a151be87aaf": "0200000001edf19cbe077a4fd5b01adf6fb22efdbc8ab02bafa420494905de7fa35ab65184010000006a473044022023dd289421e7ea2859e9af3500266eae784311b20e7cc1dd92fb9544b6989b8802201d79bb75752eebf82bad997ecf6b10793604c515e14f681ad22119f5958a08294121034159366b608240cf465995427892e6ea53104efc195d54f0f0f72ccee33d91f8ffffffff0210270000000000001976a9148abad2762ec6fa62ab8af82956bb7e224a72981588ac44e0e90b000000001976a914257238a7a46ba29ee901cb5813243b41af3a588788ac00000000"
+    },
+    "tx_fees": {
+        "5c4404cec632ae6a67a1ae689b4cf1802edc515c953acf9b0b5603dd30f3f443": 277,
+        "bb7f954bd16ed9cc883a6306588d4e5673b9cd286a04959b90514a151be87aaf": 277
+    },
+    "txi": {},
+    "txo": {
+        "5c4404cec632ae6a67a1ae689b4cf1802edc515c953acf9b0b5603dd30f3f443": {
+            "1GXxkyxSYMorXc8xZGVtUr23hx5vaFcxCK": [
+                [
+                    0,
+                    10000,
+                    false
+                ]
+            ]
+        },
+        "bb7f954bd16ed9cc883a6306588d4e5673b9cd286a04959b90514a151be87aaf": {
+            "1DeY46qzfH3MDopLjpPp4C9WTHPRKok595": [
+                [
+                    0,
+                    10000,
+                    false
+                ]
+            ]
+        }
+    },
+    "use_encryption": false,
+    "verified_tx3": {
+        "5c4404cec632ae6a67a1ae689b4cf1802edc515c953acf9b0b5603dd30f3f443": [
+            893747,
+            1744521990,
+            6
+        ],
+        "bb7f954bd16ed9cc883a6306588d4e5673b9cd286a04959b90514a151be87aaf": [
+            893736,
+            1744513941,
+            416
+        ]
+    },
+    "wallet_type": "standard"
+}

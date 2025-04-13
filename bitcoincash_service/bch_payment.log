@@ -1,0 +1,14 @@
+2025-03-16 05:44:44,076 - bch_payment - INFO - 데이터베이스 초기화 완료
+2025-03-16 05:46:18,813 - bch_payment - INFO - 데이터베이스 초기화 완료
+2025-03-16 05:46:18,839 - bch_payment - ERROR - Electron Cash 호출 오류: HTTPConnectionPool(host='electron-cash', port=7777): Max retries exceeded with url: / (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f0320c36c70>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+2025-03-16 05:46:18,841 - bch_payment - ERROR - 주소 생성 실패
+2025-03-16 05:46:18,848 - bch_payment - INFO - 새 주소 생성: bitcoincash:qz394b323707f3488f84112542799648
+2025-03-16 06:18:44,913 - bch_payment - INFO - 데이터베이스 초기화 완료
+2025-03-16 06:18:44,951 - bch_payment - ERROR - Electron Cash 호출 오류: HTTPConnectionPool(host='electron-cash', port=7777): Max retries exceeded with url: / (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f1bcc9e03d0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-03-16 06:18:44,952 - bch_payment - ERROR - 잔액 확인 실패
+2025-03-16 06:27:46,752 - bch_payment - INFO - 데이터베이스 초기화 완료
+2025-03-16 06:27:46,802 - bch_payment - ERROR - Electron Cash 호출 오류: HTTPConnectionPool(host='electron-cash', port=7777): Max retries exceeded with url: / (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f95c8f98460>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-03-16 06:27:46,804 - bch_payment - ERROR - 잔액 확인 실패
+2025-03-16 06:28:52,849 - bch_payment - INFO - 데이터베이스 초기화 완료
+2025-03-16 06:28:52,905 - bch_payment - ERROR - Electron Cash 호출 오류: HTTPConnectionPool(host='electron-cash', port=7777): Max retries exceeded with url: / (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7feda53fd460>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-03-16 06:28:52,905 - bch_payment - ERROR - 잔액 확인 실패

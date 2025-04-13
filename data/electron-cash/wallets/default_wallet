@@ -1,0 +1,23 @@
+{
+    "keystore": {
+        "derivation": "m/44'/145'/0'",
+        "seed": "split fitness dry drill math put orbit exact bamboo hello bubble acquire",
+        "seed_type": "bip39",
+        "type": "bip32",
+        "xprv": "xprv9yyvqiha3ZvC6BuKcvskfGsRq1x2SHZMuwBEFBiJRQYrmDnpsBn8RNNEHUYj8gWd2cyEq6AKJgKPu8wARNcJw73P3uSNA2Dr6FDC3i5xUov",
+        "xpub": "xpub6CyHFEETswUVJfynixQm2QpAP3nWqkHDHA6q3a7uyk5qe27yQj6NyAgi8mv5niqXxVNpkEbB7QM4P9U8vBK2Zm2u42gnLc37xhU5Ha9SEoX"
+    },
+    "keystore_derivations": [
+        "m/44'/145'/0'"
+    ],
+    "seed_type": "bip39",
+    "seed_version": 17,
+    "slp": {
+        "token_quantities": {},
+        "txo_byaddr": {},
+        "validity": {},
+        "version": 0.1
+    },
+    "use_encryption": false,
+    "wallet_type": "standard"
+}

@@ -1,0 +1,148 @@
+---
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "4"
+
+services:
+  proxy:
+    image: docker.io/library/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx_internal.conf:/etc/nginx/nginx.conf:ro,Z
+      - ./proxy_params:/etc/nginx/proxy_params:ro,Z
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    restart: always
+    logging: *default-logging
+    depends_on:
+      - pictrs
+      - lemmy-ui
+
+  lemmy:
+    image: dessalines/lemmy:0.19.8
+    hostname: lemmy
+    restart: always
+    logging: *default-logging
+    environment:
+      - RUST_LOG=warn
+    volumes:
+      - ./lemmy.hjson:/config/config.hjson:Z
+    depends_on:
+      - postgres
+      - pictrs
+
+  lemmy-ui:
+    image: dessalines/lemmy-ui:0.19.8
+    environment:
+      - LEMMY_UI_LEMMY_INTERNAL_HOST=lemmy:8536
+      - LEMMY_UI_LEMMY_EXTERNAL_HOST=defadb.com
+      - LEMMY_UI_HTTPS=True
+    volumes:
+      - ./volumes/lemmy-ui/extra_themes:/app/extra_themes:Z
+    depends_on:
+      - lemmy
+    restart: always
+    logging: *default-logging
+
+  pictrs:
+    image: docker.io/asonix/pictrs:0.5
+    hostname: pictrs
+    environment:
+      - PICTRS__SERVER__API_KEY=15JpMF0Xv1NfoJPsY9aG
+      - PICTRS__MEDIA__ANIMATION__MAX_WIDTH=256
+      - PICTRS__MEDIA__ANIMATION__MAX_HEIGHT=256
+      - PICTRS__MEDIA__ANIMATION__MAX_AREA=65536
+      - PICTRS__MEDIA__ANIMATION__MAX_FRAME_COUNT=400
+      - PICTRS__MEDIA__VIDEO__ENABLE=True
+      - PICTRS__MEDIA__VIDEO__MAX_FILE_SIZE=20
+      - PICTRS_OPENTELEMETRY_URL=http://otel:4137
+      - RUST_LOG=info
+      - RUST_BACKTRACE=full
+    user: 991:991
+    volumes:
+      - ./volumes/pictrs:/mnt:Z
+    restart: always
+    logging: *default-logging
+
+  postgres:
+    image: docker.io/pgautoupgrade/pgautoupgrade:16-alpine
+    hostname: postgres
+    environment:
+      - POSTGRES_USER=lemmy
+      - POSTGRES_PASSWORD=15JpMF0Xv1NfoJPsY9aG
+      - POSTGRES_DB=lemmy
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data:Z
+      - ./customPostgresql.conf:/etc/postgresql.conf:Z
+    restart: always
+    command: postgres -c config_file=/etc/postgresql.conf
+    shm_size: 256m
+    logging: *default-logging
+
+  postfix:
+    image: docker.io/mwader/postfix-relay
+    environment:
+      - POSTFIX_myhostname=defadb.com
+    restart: "always"
+    logging: *default-logging
+
+  # BitcoinCash 결제 서비스
+  bitcoincash-service:
+    build:
+      context: ./bitcoincash_service
+      dockerfile: Dockerfile
+    container_name: bitcoincash-service
+    restart: always
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - MOCK_MODE=false  # 실제 결제 활성화
+      - TESTNET=false     # 테스트넷 사용 (실제 서비스시 false로 변경)
+      - PAYOUT_WALLET=bitcoincash:qr3jejs0qn6wnssw8659duv7c3nnx92f6sfsvam05w  # 수정된 실제 지갑 주소로 변경
+      - DIRECT_MODE=true  # 직접 결제 모드 활성화
+      - ELECTRON_CASH_URL=http://electron-cash:7777
+      - ELECTRON_CASH_USER=bchrpc
+      - ELECTRON_CASH_PASSWORD=secure_password_change_me
+      - LEMMY_API_URL=http://lemmy:8536
+      - LEMMY_API_KEY=${LEMMY_API_KEY:-changeme}
+      - LEMMY_ADMIN_USER=${LEMMY_ADMIN_USER}
+      - LEMMY_ADMIN_PASS=${LEMMY_ADMIN_PASS}
+      - DB_PATH=/data/payments.db
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-secure_random_key}
+      - MIN_CONFIRMATIONS=1
+    volumes:
+      - ./bitcoincash_service:/app
+      - ./data/bitcoincash:/data
+    ports:
+      - "8081:8081"
+    depends_on:
+      - electron-cash
+      - lemmy
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    networks:
+      - default
+
+  # Electron Cash 지갑 서비스
+  electron-cash:
+    build: ./electron_cash
+    container_name: electron-cash
+    restart: always
+    networks:
+      - default
+    volumes:
+      # Changed volume mount to avoid overriding the /app directory
+      - ./data/electron_cash:/root/.electron-cash
+    environment:
+      - RPC_USER=bchrpc
+      - RPC_PASSWORD=secure_password_change_me
+    ports:
+      - "7777:7777"
+
+volumes:
+  electron_cash_data:
+    # Volume for Electron Cash wallet data

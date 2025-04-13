@@ -1,0 +1,20 @@
+[secp256k1] warning: libsecp256k1 library failed to load
+[secp256k1] warning: loading from /usr/local/lib/python3.9/site-packages/electroncash/libsecp256k1.so.0 failed with: <class 'OSError'>
+[secp256k1] warning: loading from libsecp256k1.so.0 failed with: <class 'OSError'>
+[ecc] info: libsecp256k1 library not available, falling back to python-ecdsa. This means signing operations will be slower. Try running:
+
+  $  contrib/make_secp
+
+(You need to be running from the git sources for contrib/make_secp to be available)
+/usr/local/lib/python3.9/site-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.27.3 is exactly one major version older than the runtime version 6.30.2 at paymentrequest.proto. Please update the gencode to avoid compatibility violations in the next runtime release.
+  warnings.warn(
+/usr/local/lib/python3.9/getpass.py:91: GetPassWarning: Can not control echo on the terminal.
+  passwd = fallback_getpass(prompt, stream)
+Warning: Password input may be echoed.
+Password (hit return if you do not wish to encrypt your wallet):
+Your wallet generation seed is:
+    "visa leg magic sort rail fold caution alarm champion change edge usual"
+Wallet seed format: bip39
+Your wallet derivation path is: m/44'/145'/0'
+Please keep your seed information in a safe place; if you lose it, you will not be able to restore your wallet.
+Wallet saved in '/root/.electron-cash/wallets/default_wallet'

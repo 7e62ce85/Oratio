@@ -1,0 +1,214 @@
+<!-- templates/invoice.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Cash Invoice</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 800px;
+            margin-top: 50px;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #4caf50;
+            color: white;
+            border-radius: 15px 15px 0 0!important;
+        }
+        .qr-code {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .qr-code img {
+            max-width: 200px;
+            border: 1px solid #ddd;
+            padding: 5px;
+        }
+        .address-box {
+            background-color: #f1f1f1;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            margin-bottom: 20px;
+        }
+        .copy-btn {
+            cursor: pointer;
+        }
+        .status-badge {
+            font-size: 1.2rem;
+            padding: 8px 15px;
+        }
+        .timer {
+            font-size: 1.1rem;
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-center">Bitcoin Cash Payment</h2>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-4">
+                    <h4>Invoice #{{ invoice.invoice_id[:8] }}</h4>
+                    <div class="status-container">
+                        <span class="badge status-badge 
+                            {% if invoice.status == 'paid' %}bg-success
+                            {% elif invoice.status == 'pending' %}bg-warning
+                            {% else %}bg-danger{% endif %}">
+                            {{ invoice.status|upper }}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <div class="qr-code">
+                            <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h4>Payment Details</h4>
+                        <table class="table">
+                            <tr>
+                                <th>Amount:</th>
+                                <td>{{ invoice.amount }} BCH</td>
+                            </tr>
+                            <tr>
+                                <th>Status:</th>
+                                <td>{{ invoice.status|capitalize }}</td>
+                            </tr>
+                            <tr>
+                                <th>Expires at:</th>
+                                <td>{{ formatted_expiry }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <h5>Payment Address</h5>
+                    <div class="address-box">
+                        {{ invoice.payment_address }}
+                        <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                                onclick="copyToClipboard('{{ invoice.payment_address }}')">
+                            Copy
+                        </button>
+                    </div>
+                </div>
+                
+                {% if invoice.status == 'pending' %}
+                <div class="alert alert-info">
+                    <p>
+                        <strong>Instructions:</strong> Send exactly {{ invoice.amount }} BCH to the address above.
+                        Once confirmed, your payment will be processed automatically.
+                    </p>
+                    <p class="timer" id="timer"></p>
+                </div>
+                
+                <div class="text-center">
+                    <button id="check-status-btn" class="btn btn-primary" onclick="checkStatus()">
+                        Check Payment Status
+                    </button>
+                </div>
+                {% else %}
+                <div class="alert alert-success">
+                    <p>
+                        <strong>Thank you for your payment!</strong> 
+                        Your account has been credited with the appropriate amount.
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Function to copy address to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    alert('Address copied to clipboard!');
+                })
+                .catch(err => {
+                    console.error('Failed to copy: ', err);
+                });
+        }
+        
+        // Function to check payment status
+        function checkStatus() {
+            const invoiceId = '{{ invoice.invoice_id }}';
+            const statusBtn = document.getElementById('check-status-btn');
+            
+            statusBtn.disabled = true;
+            statusBtn.innerHTML = 'Checking...';
+            
+            fetch(`/check_payment/${invoiceId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'paid') {
+                        // Refresh the page to show the paid status
+                        location.reload();
+                    } else {
+                        statusBtn.disabled = false;
+                        statusBtn.innerHTML = 'Check Payment Status';
+                        alert('Payment not detected yet. Please try again after sending payment.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking status:', error);
+                    statusBtn.disabled = false;
+                    statusBtn.innerHTML = 'Check Payment Status';
+                });
+        }
+        
+        // Countdown timer for expiry
+        function updateTimer() {
+            const expiresAt = {{ invoice.expires_at }} * 1000; // Convert to milliseconds
+            const now = new Date().getTime();
+            const distance = expiresAt - now;
+            
+            if (distance <= 0) {
+                document.getElementById('timer').innerHTML = 'EXPIRED';
+                return;
+            }
+            
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            
+            document.getElementById('timer').innerHTML = 
+                `Time remaining: ${hours}h ${minutes}m ${seconds}s`;
+        }
+        
+        // Auto-refresh status every 30 seconds for pending invoices
+        {% if invoice.status == 'pending' %}
+        setInterval(() => {
+            fetch(`/check_payment/{{ invoice.invoice_id }}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'paid') {
+                        location.reload();
+                    }
+                });
+        }, 30000);
+        
+        // Update timer every second
+        setInterval(updateTimer, 1000);
+        updateTimer();
+        {% endif %}
+    </script>
+</body>
+</html>
