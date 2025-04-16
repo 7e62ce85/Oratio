@@ -22,3 +22,25 @@ electron-cash-data/
 # 기타 캐시 및 임시 파일
 *.swp
 .DS_Store
+
+# 환경 변수 파일 (sensitive)
+.env
+.env.*
+*.env
+
+# 보안 관련 파일
+*password*
+*key*
+*secret*
+*certificate*
+*cert*
+*token*
+*seed*
+*wallet*
+*.pem
+*.key
+wallet_*.sh
+
+# 백업 파일
+*.bak
+*backup*

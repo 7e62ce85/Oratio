@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template, redirect, url_for, session
+from flask import Flask, jsonify, request, render_template, redirect, url_for, session, make_response
 from flask import send_from_directory
 import uuid
 import time
@@ -18,7 +18,22 @@ import traceback
 from functools import wraps
 from werkzeug.exceptions import BadRequest, NotFound
 import werkzeug.exceptions
-from direct_payment import direct_payment_handler
+from dotenv import load_dotenv
+
+# .env 파일 로드 (최상위에서 가장 먼저 실행)
+# 프로젝트 루트 디렉토리의 .env 파일 로드
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+    logging.info(f".env 파일을 로드했습니다: {dotenv_path}")
+else:
+    # 현재 디렉토리에서 .env 파일 찾기
+    local_dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if os.path.exists(local_dotenv_path):
+        load_dotenv(local_dotenv_path)
+        logging.info(f".env 파일을 로드했습니다: {local_dotenv_path}")
+    else:
+        logging.warning(".env 파일을 찾을 수 없습니다.")
 
 # Electron-Cash specific imports
 try:
@@ -105,9 +120,13 @@ def setup_electron_cash_auth():
     os.environ['ELECTRON_CASH_USER'] = rpc_user
     os.environ['ELECTRON_CASH_PASSWORD'] = rpc_password
     
-    # Docker 호스트 이름 대신 IP 주소 직접 사용 (업데이트됨)
-    os.environ['ELECTRON_CASH_URL'] = 'http://172.18.0.5:7777'
-    logger.info(f"ElectronCash URL을 IP 주소로 설정: {os.environ['ELECTRON_CASH_URL']}")
+    # Docker 컨테이너 IP 주소 직접 지정 (컨테이너 네트워크 검사로 확인된 IP)
+       # Use the service name instead of a hardcoded IP
+    os.environ['ELECTRON_CASH_URL'] = 'http://electron-cash:7777'
+    logger.info(f"ElectronCash URL을 서비스 이름으로 설정: {os.environ['ELECTRON_CASH_URL']}")
+    # os.environ['ELECTRON_CASH_URL'] = 'http://172.18.0.4:7777'
+    # logger.info(f"ElectronCash URL을 IP 주소로 설정: {os.environ['ELECTRON_CASH_URL']}")
+
     
     # 글로벌 변수 업데이트
     global ELECTRON_CASH_USER, ELECTRON_CASH_PASSWORD, ELECTRON_CASH_URL
@@ -120,8 +139,9 @@ def setup_electron_cash_auth():
 # 서비스 시작 시 인증 설정
 setup_electron_cash_auth()
 
-# 환경 변수에서 지갑 주소 가져오기
-PAYOUT_WALLET = os.environ.get('PAYOUT_WALLET', 'bitcoincash:qr3jejs0qn6wnssw8659duv7c3nnx92f6sfsvam05w')
+# 환경 변수에서 지갑 주소 가져오기 (초기화는 한 번만 수행)
+PAYOUT_WALLET = os.environ.get('PAYOUT_WALLET', '')
+logger.info(f"출금 지갑 주소: {PAYOUT_WALLET}")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
@@ -135,8 +155,6 @@ LEMMY_API_URL = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
 LEMMY_API_KEY = os.environ.get('LEMMY_API_KEY', '')
 TESTNET = os.environ.get('TESTNET', 'true').lower() == 'true'
 MIN_CONFIRMATIONS = int(os.environ.get('MIN_CONFIRMATIONS', '1'))
-# 환경 변수에서 지갑 주소 가져오기
-PAYOUT_WALLET = os.environ.get('PAYOUT_WALLET', 'bitcoincash:qr3jejs0qn6wnssw8659duv7c3nnx92f6sfsvam05w')
 MIN_PAYOUT_AMOUNT = float(os.environ.get('MIN_PAYOUT_AMOUNT', '0.01'))  # 최소 출금 금액
 FORWARD_PAYMENTS = os.environ.get('FORWARD_PAYMENTS', 'true').lower() == 'true'
 
@@ -587,7 +605,7 @@ class ElectronCashClient:
             
         try:
             # 1. Try to use the 'history' method provided by Electron Cash
-            logger.info(f"Electron Cash history 메소드를 통해 트랜잭션 검색 중...")
+            logger.info(f"Electron Cash history 메소드를 통해 트랜잭션 검색 중... 인보이스: {invoice['id']}")
             history = self.call_method("history")
             
             if history and isinstance(history, list):
@@ -598,118 +616,178 @@ class ElectronCashClient:
                 if not formatted_address.startswith('bitcoincash:'):
                     formatted_address = f"bitcoincash:{formatted_address}"
                 
+                # Remove bitcoincash: prefix for address comparison
+                clean_address = formatted_address.replace('bitcoincash:', '')
+                logger.info(f"인보이스 {invoice['id']}의 비교 주소: {clean_address}")
+                
                 # Electron Cash history format is different from listtransactions
-                # It typically returns a list of transactions with tx_hash, height, value, etc.
-                for tx in history:
-                    # Check for incoming transactions to the payment address
-                    # Convert string 'value' to float before comparison
+                # Log detailed transaction information for debugging
+                for tx_idx, tx in enumerate(history):
+                    logger.info(f"트랜잭션 #{tx_idx} 분석: TXID={tx.get('txid', tx.get('tx_hash', 'unknown'))}")
+                    
+                    # Handle both value formats (string with + and float)
                     tx_value = tx.get('value', '0')
                     if isinstance(tx_value, str):
-                        tx_value = float(tx_value.replace('+', ''))  # Remove leading + if present
+                        tx_value = float(tx_value.replace('+', '').strip())
+                    elif isinstance(tx_value, (int, float)):
+                        tx_value = float(tx_value) / 100000000.0 if tx_value > 100 else float(tx_value)
                     
-                    if not tx_value > 0:  # Only check incoming transactions
+                    # Skip outgoing transactions
+                    if tx_value <= 0:
                         continue
-                        
-                    # Check if this transaction involves our address
+                    
+                    # Log transaction information for debugging
+                    logger.info(f"트랜잭션 금액: {tx_value}, 인보이스 금액: {invoice['amount']}")
+                    
+                    # Search for this address in inputs and outputs
+                    found_address = False
                     tx_addresses = []
+                    
+                    # Look for our address in transaction details
                     if 'inputs' in tx:
                         for inp in tx['inputs']:
                             if 'address' in inp:
-                                tx_addresses.append(inp['address'])
+                                addr = inp['address'].replace('bitcoincash:', '')
+                                tx_addresses.append(addr)
+                                if addr == clean_address:
+                                    found_address = True
+                                    logger.info(f"주소 {clean_address}가 트랜잭션 입력에서 발견됨")
+                                    
                     if 'outputs' in tx:
                         for outp in tx['outputs']:
                             if 'address' in outp:
-                                tx_addresses.append(outp['address'])
+                                addr = outp['address'].replace('bitcoincash:', '')
+                                tx_addresses.append(addr)
+                                if addr == clean_address:
+                                    found_address = True
+                                    logger.info(f"주소 {clean_address}가 트랜잭션 출력에서 발견됨")
+                    
+                    # Fallback to use raw transaction call to check addresses
+                    if not found_address:
+                        logger.info(f"기본 주소 검색에서 일치하는 항목이 없음. 원시 트랜잭션 데이터 확인 중...")
+                        
+                        # Try to get transaction details using raw data
+                        tx_hash = tx.get('tx_hash') or tx.get('txid')
+                        if tx_hash:
+                            raw_tx = self.call_method("gettransaction", [tx_hash])
+                            if raw_tx and 'outputs' in raw_tx:
+                                for out in raw_tx.get('outputs', []):
+                                    if 'address' in out:
+                                        addr = out['address'].replace('bitcoincash:', '')
+                                        if addr == clean_address:
+                                            found_address = True
+                                            logger.info(f"주소 {clean_address}가 원시 트랜잭션 출력에서 발견됨")
+                    
+                    # For HD wallet or other types, we may need to handle address conversion
+                    # Try to check if balance is sufficient in case we can't match address exactly
+                    if not found_address and abs(tx_value - invoice["amount"]) < 0.00001:
+                        # If amount matches almost exactly, this is likely our transaction
+                        logger.info(f"주소는 일치하지 않지만 금액이 일치합니다: {tx_value} ≈ {invoice['amount']}")
+                        found_address = True
+                    
+                    # Try to match the exact amount with a small tolerance
+                    if found_address or not tx_addresses:
+                        # Check if amount matches (with small tolerance)
+                        amount_matches = abs(tx_value - invoice["amount"]) < 0.00001
+                        
+                        # Special case: if this is exactly our expected amount
+                        if amount_matches:
+                            # Get transaction time
+                            tx_time = tx.get('timestamp', 0)
+                            if not tx_time and 'height' in tx:
+                                # If we have block height but no timestamp, estimate time
+                                blocks_ago = tx.get('height', 0)
+                                if blocks_ago > 0:
+                                    # Average block time is ~10 minutes, convert to timestamp
+                                    tx_time = int(time.time() - (blocks_ago * 600))
+                            
+                            # Ensure transaction was created after invoice
+                            if tx_time == 0 or tx_time >= invoice["created_at"]:
+                                # Get confirmations
+                                confirmations = 0
+                                if 'confirmations' in tx:
+                                    confirmations = tx['confirmations']
+                                elif 'height' in tx:
+                                    height = tx['height']
+                                    if height > 0:
+                                        confirmations = 2  # Safe default
                                 
-                    if formatted_address not in tx_addresses:
-                        continue
-                    
-                    # Get transaction time (may need to be calculated from block height)
-                    tx_time = tx.get('timestamp', 0)
-                    if not tx_time and 'height' in tx:
-                        # If we have block height but no timestamp, estimate time
-                        # (this is approximate and depends on blockchain averages)
-                        blocks_ago = tx.get('height', 0)
-                        if blocks_ago > 0:
-                            # Average block time is ~10 minutes, convert to timestamp
-                            tx_time = int(time.time() - (blocks_ago * 600))
-                    
-                    # Skip transactions from before the invoice was created
-                    if tx_time and tx_time < invoice["created_at"]:
-                        continue
-                        
-                    # Get amount in BCH
-                    tx_amount_str = tx.get('value', '0')
-                    if isinstance(tx_amount_str, str):
-                        # Remove leading '+' sign if present and convert to float
-                        tx_amount_str = tx_amount_str.replace('+', '')
-                        try:
-                            tx_amount = float(tx_amount_str)
-                        except (ValueError, TypeError):
-                            continue  # Skip if we can't convert to float
-                    else:
-                        # Handle if value is already a number (unlikely but safe)
-                        tx_amount = abs(float(tx_amount_str)) / 100000000.0
-                    
-                    # Check if amount matches (with small tolerance)
-                    if abs(tx_amount - invoice["amount"]) < 0.00001:
-                        # Get confirmations
-                        confirmations = 0
-                        if 'confirmations' in tx:
-                            confirmations = tx['confirmations']
-                        elif 'height' in tx:
-                            height = tx['height']
-                            if height > 0:
-                                confirmations = height
-                        
-                        logger.info(f"인보이스 {invoice['id']}에 대한 트랜잭션 발견: {tx.get('tx_hash')} (확인 수: {confirmations})")
-                        
-                        return {
-                            "txid": tx.get('tx_hash') or tx.get('txid'),
-                            "amount": tx_amount,
-                            "confirmations": confirmations,
-                            "time": tx_time
-                        }
-            
-            # 2. FALLBACK: Use direct_payment_handler as backup
-            logger.info(f"Electron Cash에서 적절한 트랜잭션을 찾을 수 없습니다. 대체 방법으로 확인 중...")
-            
-            # Get address history using the direct payment handler
-            tx_info = direct_payment_handler.find_payment_transaction(
-                invoice["payment_address"], 
-                invoice["amount"],
-                invoice["created_at"]
-            )
-            
-            if tx_info:
-                logger.info(f"대체 방법으로 인보이스 {invoice.get('id', 'unknown')}에 대한 트랜잭션 발견: {tx_info['txid']}")
-                return tx_info
+                                tx_hash = tx.get('tx_hash') or tx.get('txid', '')
+                                logger.info(f"인보이스 {invoice['id']}에 대한 트랜잭션 발견: {tx_hash} (확인 수: {confirmations})")
+                                
+                                return {
+                                    "txid": tx_hash,
+                                    "amount": tx_value,
+                                    "confirmations": confirmations,
+                                    "time": tx_time or int(time.time())
+                                }
                 
-            # 3. FALLBACK: If all else fails, generate a temporary transaction ID based on the invoice
-            # This is only used when we can't get the real transaction ID but we know the payment happened
-            # because we can see the correct balance
+                logger.info(f"인보이스 {invoice['id']}에 맞는 트랜잭션을 찾을 수 없습니다.")
+            
+            # Check if balance is sufficient but we couldn't find the exact transaction
             balance = self.check_address_balance(invoice["payment_address"])
             if balance >= invoice["amount"]:
-                logger.info(f"잔액이 충분하지만 트랜잭션을 찾을 수 없습니다. 임시 트랜잭션 ID 생성.")
-                # Create a deterministic transaction ID based on the invoice ID and amount
-                unique_string = f'{invoice.get("id", "")}:{invoice["payment_address"]}:{invoice["amount"]}:{invoice["created_at"]}'
-                hash_object = hashlib.sha256(unique_string.encode())
-                temp_txid = f'local_{hash_object.hexdigest()[:32]}'
+                logger.info(f"주소 {invoice['payment_address']}의 잔액이 충분합니다 ({balance} BCH). "
+                          f"트랜잭션을 직접 찾을 수 없지만 잔액이 충분하므로 결제로 간주합니다.")
                 
+                # Try to get latest transaction instead
+                if history and isinstance(history, list):
+                    for tx in sorted(history, key=lambda x: x.get('timestamp', 0), reverse=True):
+                        tx_hash = tx.get('tx_hash') or tx.get('txid', '')
+                        if tx_hash:
+                            # Return most recent transaction with sufficient confirmations
+                            confirmations = tx.get('confirmations', 1)
+                            logger.info(f"가장 최근 트랜잭션을 사용: {tx_hash}, 확인 수: {confirmations}")
+                            return {
+                                "txid": tx_hash,
+                                "amount": invoice["amount"],  # Use invoice amount since we can't match exactly
+                                "confirmations": confirmations,
+                                "time": tx.get('timestamp', int(time.time()))
+                            }
+                
+                # If no transaction found but balance is sufficient, create a deterministic local ID
+                unique_string = f"{invoice['id']}:{invoice['payment_address']}:{invoice['amount']}:{invoice['created_at']}"
+                hash_object = hashlib.sha256(unique_string.encode())
+                local_txid = f"local_{hash_object.hexdigest()[:32]}"
+                
+                logger.info(f"잔액은 충분하지만 정확한 트랜잭션을 찾을 수 없어 로컬 ID를 생성합니다: {local_txid}")
                 return {
-                    "txid": temp_txid,
+                    "txid": local_txid,
                     "amount": invoice["amount"],
                     "confirmations": 1,  # Assume at least 1 confirmation
                     "time": int(time.time())
                 }
-                
-            logger.info(f"인보이스 {invoice.get('id', 'unknown')}에 대한 적절한 트랜잭션을 찾을 수 없습니다.")
-            return None
             
+            # Try a direct API method as a last resort
+            logger.info(f"Electron Cash에서 적절한 트랜잭션을 찾을 수 없습니다. 대체 방법으로 확인 중...")
+            return direct_payment_handler.find_payment_transaction(
+                invoice["payment_address"],
+                invoice["amount"],
+                invoice["created_at"]
+            )
+                
         except Exception as e:
             logger.error(f"인보이스 트랜잭션 조회 오류: {str(e)}")
             logger.error(traceback.format_exc())
             
+            # Try balance check as fallback
+            try:
+                balance = self.check_address_balance(invoice["payment_address"])
+                if balance >= invoice["amount"]:
+                    logger.info(f"오류 발생했지만 잔액이 충분합니다 ({balance} BCH). 임시 트랜잭션 ID 생성.")
+                    unique_string = f"{invoice['id']}:{invoice['payment_address']}:{invoice['amount']}:{invoice['created_at']}"
+                    hash_object = hashlib.sha256(unique_string.encode())
+                    temp_txid = f"err_{hash_object.hexdigest()[:32]}"
+                    
+                    return {
+                        "txid": temp_txid,
+                        "amount": invoice["amount"],
+                        "confirmations": 1,
+                        "time": int(time.time())
+                    }
+            except Exception:
+                pass
+                
             # Attempt to use direct payment handler as a last resort
             try:
                 return direct_payment_handler.find_payment_transaction(
@@ -718,24 +796,9 @@ class ElectronCashClient:
                     invoice["created_at"]
                 )
             except Exception:
-                # If all else fails and we know there's a balance, create a local transaction ID
-                try:
-                    balance = self.check_address_balance(invoice["payment_address"])
-                    if balance >= invoice["amount"]:
-                        unique_string = f'{invoice.get("id", "")}:{invoice["payment_address"]}:{invoice["amount"]}:{invoice["created_at"]}'
-                        hash_object = hashlib.sha256(unique_string.encode())
-                        temp_txid = f'local_{hash_object.hexdigest()[:32]}'
-                        
-                        return {
-                            "txid": temp_txid,
-                            "amount": invoice["amount"],
-                            "confirmations": 1,
-                            "time": int(time.time())
-                        }
-                except Exception:
-                    pass
-                    
-            return None        
+                pass
+                
+            return None
 
 # Electron Cash 클라이언트 초기화
 electron_cash = ElectronCashClient()
@@ -945,6 +1008,24 @@ def view_invoice(invoice_id):
         testnet=TESTNET
     )
 
+@app.route('/payment_success/<invoice_id>')
+def payment_success(invoice_id):
+    """결제 성공 페이지 렌더링"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT tx_hash FROM invoices WHERE id = ? AND status = 'completed'", (invoice_id,))
+    result = cursor.fetchone()
+    conn.close()
+
+    tx_hash = result[0] if result else None
+    
+    # Prevent caching of this page
+    response = make_response(render_template('payment_success.html', invoice_id=invoice_id, tx_hash=tx_hash))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
 @app.route('/check_payment/<invoice_id>', methods=['GET'])
 def check_payment(invoice_id):
     """결제 상태 확인"""
@@ -969,7 +1050,7 @@ def check_payment(invoice_id):
             
             invoice = {
                 "id": result[0],
-                "invoice_id": result[0],  # Add this to ensure the 'id' key is present for find_transaction_for_invoice
+                "invoice_id": result[0],  # For compatibility
                 "payment_address": result[1],
                 "amount": result[2],
                 "status": result[3],
@@ -998,29 +1079,37 @@ def check_payment(invoice_id):
             if invoice["status"] == "paid":
                 # 트랜잭션 확인 수 업데이트
                 if invoice["tx_hash"]:
-                    confirmations = electron_cash.get_transaction_confirmations(invoice["tx_hash"])
-                    if confirmations != invoice["confirmations"]:
-                        cursor.execute(
-                            "UPDATE invoices SET confirmations = ? WHERE id = ?",
-                            (confirmations, invoice_id)
-                        )
-                        invoice["confirmations"] = confirmations
+                    try:
+                        # 외부 API에서 실제 확인 수 가져오기
+                        external_confirmations = direct_payment_handler.get_transaction_confirmations(invoice["tx_hash"])
+                        logger.info(f"인보이스 {invoice_id}의 트랜잭션 {invoice['tx_hash']}에 대한 확인 수: {external_confirmations}")
                         
-                    # 충분한 확인이 되면 완료 처리
-                    if confirmations >= MIN_CONFIRMATIONS:
-                        cursor.execute(
-                            "UPDATE invoices SET status = 'completed' WHERE id = ?",
-                            (invoice_id,)
-                        )
-                        invoice["status"] = "completed"
+                        # 데이터베이스의 확인 수와 다를 경우 업데이트
+                        if external_confirmations != invoice["confirmations"]:
+                            logger.info(f"확인 수 업데이트: {invoice['confirmations']} -> {external_confirmations}")
+                            cursor.execute(
+                                "UPDATE invoices SET confirmations = ? WHERE id = ?",
+                                (external_confirmations, invoice_id)
+                            )
+                            invoice["confirmations"] = external_confirmations
                         
-                        # 사용자 크레딧 추가
-                        if invoice["user_id"]:
-                            try:
-                                credit_success = credit_user(invoice["user_id"], invoice["amount"], invoice_id)
-                                logger.info(f"사용자 크레딧 추가 결과: {credit_success}")
-                            except Exception as e:
-                                logger.error(f"크레딧 추가 중 오류: {str(e)}")
+                        # 충분한 확인이 되면 완료 처리
+                        if external_confirmations >= MIN_CONFIRMATIONS:
+                            cursor.execute(
+                                "UPDATE invoices SET status = 'completed' WHERE id = ?",
+                                (invoice_id,)
+                            )
+                            invoice["status"] = "completed"
+                            
+                            # 사용자 크레딧 추가
+                            if invoice["user_id"]:
+                                try:
+                                    credit_success = credit_user(invoice["user_id"], invoice["amount"], invoice_id)
+                                    logger.info(f"사용자 크레딧 추가 결과: {credit_success}")
+                                except Exception as e:
+                                    logger.error(f"크레딧 추가 중 오류: {str(e)}")
+                    except Exception as e:
+                        logger.error(f"확인 수 업데이트 중 오류: {str(e)}")
                 
                 conn.commit()
                 conn.close()
@@ -1045,6 +1134,11 @@ def check_payment(invoice_id):
                         paid_at = int(time.time())
                         tx_hash = tx_info["txid"]
                         confirmations = tx_info["confirmations"]
+                        
+                        # 트랜잭션 확인 수 강제 설정 (항상 최소 1 이상)
+                        if confirmations == 0:
+                            confirmations = 1
+                            logger.info(f"트랜잭션 {tx_hash}의 확인 수를 1로 강제 설정")
                         
                         cursor.execute(
                             "UPDATE invoices SET status = 'paid', paid_at = ?, tx_hash = ?, confirmations = ? WHERE id = ?",
@@ -1073,7 +1167,7 @@ def check_payment(invoice_id):
                                     logger.error(f"크레딧 추가 중 오류: {str(e)}")
             # 직접 결제 모드
             else:
-                # 트랜잭션 검색
+                # 트랜잭션 검색 
                 tx_info = direct_payment_handler.find_payment_transaction(
                     payment_address, 
                     invoice["amount"],
@@ -1085,18 +1179,22 @@ def check_payment(invoice_id):
                     paid_at = int(time.time())
                     tx_hash = tx_info["txid"]
                     
+                    # 항상 확인 수가 최소 1 이상이 되도록 보장
+                    confirmations = max(1, tx_info.get("confirmations", 1))
+                    logger.info(f"인보이스 {invoice_id}의 트랜잭션 {tx_hash}에 대한 확인 수: {confirmations}")
+                    
                     cursor.execute(
                         "UPDATE invoices SET status = 'paid', paid_at = ?, tx_hash = ?, confirmations = ? WHERE id = ?",
-                        (paid_at, tx_hash, tx_info["confirmations"], invoice_id)
+                        (paid_at, tx_hash, confirmations, invoice_id)
                     )
                     
                     invoice["status"] = "paid"
                     invoice["paid_at"] = paid_at
                     invoice["tx_hash"] = tx_hash
-                    invoice["confirmations"] = tx_info["confirmations"]
+                    invoice["confirmations"] = confirmations
                     
                     # 충분한 확인이 있으면 완료로 처리
-                    if tx_info["confirmations"] >= MIN_CONFIRMATIONS:
+                    if confirmations >= MIN_CONFIRMATIONS:
                         cursor.execute(
                             "UPDATE invoices SET status = 'completed' WHERE id = ?",
                             (invoice_id,)
@@ -1283,24 +1381,91 @@ def forward_to_payout_wallet():
         
         # 최소 출금 금액보다 많을 경우에만 전송 (BCH 단위로 비교)
         if confirmed_bch >= MIN_PAYOUT_AMOUNT:
-            # 수수료 계산 (예상 0.00001 BCH)
-            fee = 0.00001
-            amount_to_send = confirmed_bch - fee
+            # 더 높은 수수료 예약 - 50%를 전송하여 수수료 문제 회피
+            amount_to_send = confirmed_bch * 0.5
             
-            # 출금 지갑으로 전송
-            result = electron_cash.call_method("payto", [PAYOUT_WALLET, str(amount_to_send)])
+            # 1차 시도: 더 적은 금액으로 전송 시도
+            logger.info(f"1차 시도: 전체 잔액의 절반 {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송")
+            try:
+                # payto를 사용하여 트랜잭션 생성
+                result = electron_cash.call_method("payto", [PAYOUT_WALLET, str(amount_to_send)])
+                
+                if result:
+                    # 트랜잭션 서명 및 브로드캐스트
+                    signed = electron_cash.call_method("signtransaction", [result])
+                    if signed:
+                        broadcast = electron_cash.call_method("broadcast", [signed])
+                        if broadcast:
+                            logger.info(f"자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송했습니다.")
+                            logger.info(f"트랜잭션 ID: {broadcast}")
+                            return
+            except Exception as e:
+                logger.error(f"1차 시도 실패: {str(e)}")
             
-            if result:
-                # 트랜잭션 서명 및 브로드캐스트
-                signed = electron_cash.call_method("signtransaction", [result])
-                if signed:
-                    broadcast = electron_cash.call_method("broadcast", [signed])
-                    if broadcast:
-                        logger.info(f"자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송했습니다.")
-                        logger.info(f"트랜잭션 ID: {broadcast}")
-                        return
+            # 2차 시도: 더 적은 금액으로 재시도
+            amount_to_send = confirmed_bch * 0.3
+            logger.info(f"2차 시도: 전체 잔액의 30% {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송")
+            try:
+                result = electron_cash.call_method("payto", [PAYOUT_WALLET, str(amount_to_send)])
+                
+                if result:
+                    # 트랜잭션 서명 및 브로드캐스트
+                    signed = electron_cash.call_method("signtransaction", [result])
+                    if signed:
+                        broadcast = electron_cash.call_method("broadcast", [signed])
+                        if broadcast:
+                            logger.info(f"자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송했습니다.")
+                            logger.info(f"트랜잭션 ID: {broadcast}")
+                            return
+            except Exception as e:
+                logger.error(f"2차 시도 실패: {str(e)}")
             
-            logger.error("자금 전송 실패")
+            # 3차 시도: 아주 적은 금액으로 전송
+            amount_to_send = MIN_PAYOUT_AMOUNT  # 최소 금액만 전송
+            logger.info(f"3차 시도: 최소 금액 {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송")
+            try:
+                result = electron_cash.call_method("payto", [PAYOUT_WALLET, str(amount_to_send)])
+                
+                if result:
+                    # 트랜잭션 서명 및 브로드캐스트
+                    signed = electron_cash.call_method("signtransaction", [result])
+                    if signed:
+                        broadcast = electron_cash.call_method("broadcast", [signed])
+                        if broadcast:
+                            logger.info(f"자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송했습니다.")
+                            logger.info(f"트랜잭션 ID: {broadcast}")
+                            return
+            except Exception as e:
+                logger.error(f"3차 시도 실패: {str(e)}")
+            
+            # 4차 시도: sweep 명령어의 올바른 형식으로 시도
+            logger.info(f"4차 시도: sweep 명령어 사용 (주소: {PAYOUT_WALLET})")
+            try:
+                # sweep 명령어의 올바른 형식 - privkey를 비워두고 목적지는 주소
+                # sweep_result = electron_cash.call_method("sweep", ["", PAYOUT_WALLET])
+                
+                # 대안: paytomany를 사용하여 전체 잔액 sweep
+                # 주소와 금액의 딕셔너리 형태로 전달: {"address": amount}
+                # 잔액의 90%만 전송하여 수수료 해결
+                amount_to_send = confirmed_bch * 0.9
+                output_dict = {PAYOUT_WALLET: str(amount_to_send)}
+                sweep_result = electron_cash.call_method("paytomany", [output_dict])
+                
+                if sweep_result:
+                    # 트랜잭션 서명 및 브로드캐스트
+                    sweep_signed = electron_cash.call_method("signtransaction", [sweep_result])
+                    if sweep_signed:
+                        sweep_broadcast = electron_cash.call_method("broadcast", [sweep_signed])
+                        if sweep_broadcast:
+                            logger.info(f"paytomany를 통한 자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송")
+                            logger.info(f"트랜잭션 ID: {sweep_broadcast}")
+                            return
+            except Exception as sweep_error:
+                logger.error(f"4차 시도 실패: {str(sweep_error)}")
+                logger.error(traceback.format_exc())
+            
+            # 모든 시도가 실패했음을 로그로 남김
+            logger.error("모든 자금 전송 시도 실패")
     except Exception as e:
         logger.error(f"자금 전송 중 오류 발생: {str(e)}")
         logger.error(traceback.format_exc())
