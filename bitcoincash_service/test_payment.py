@@ -9,7 +9,22 @@ This script tests the critical components of the payment system:
 
 import logging
 import json
-from app import electron_cash, direct_payment_handler, logger
+# Update imports to use the new refactored structure
+from services.electron_cash import electron_cash
+from config import logger
+try:
+    from direct_payment import direct_payment_handler
+except ImportError:
+    # If direct_payment_handler is not available, create a mock
+    logger.warning("direct_payment_handler not available, using mock")
+    class MockDirectPaymentHandler:
+        def get_address(self):
+            return "mock_address"
+        def check_address_balance(self, address):
+            return 0.0
+        def get_transaction_confirmations(self, tx_hash):
+            return 0
+    direct_payment_handler = MockDirectPaymentHandler()
 
 # Configure logging to show all messages for testing
 logging.basicConfig(level=logging.INFO)

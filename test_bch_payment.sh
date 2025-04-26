@@ -40,13 +40,13 @@ fi
 
 # Display current wallet balance
 echo -e "\n${BOLD}${BLUE}===== WALLET STATUS =====${NC}"
-BALANCE=$(docker exec -t $CONTAINER_ID python3 -c "from app import electron_cash; balance = electron_cash.call_method('getbalance'); print(balance);")
+BALANCE=$(docker exec -t $CONTAINER_ID python3 -c "from services.electron_cash import electron_cash; balance = electron_cash.call_method('getbalance'); print(balance);")
 echo -e "${CYAN}Current ElectronCash wallet balance:${NC} ${YELLOW}$BALANCE BCH${NC}"
 
 # Check transaction history
 echo -e "\n${BOLD}${BLUE}===== RECENT TRANSACTIONS =====${NC}"
 docker exec -t $CONTAINER_ID python3 -c "
-from app import electron_cash
+from services.electron_cash import electron_cash
 import json
 history = electron_cash.call_method('history')
 if history and len(history) > 0:
@@ -73,7 +73,7 @@ echo -e "${CYAN}Minimum confirmations:${NC} ${MIN_CONFIRMATIONS}"
 echo -e "\n${BOLD}${BLUE}===== CONFIRMATION TRACKING TEST =====${NC}"
 if [ -n "$BALANCE" ] && [ "$BALANCE" != "0" ]; then
   docker exec -t $CONTAINER_ID python3 -c "
-from app import direct_payment_handler
+from direct_payment import direct_payment_handler
 import time
 
 # Test real transaction confirmation tracking with a known tx hash

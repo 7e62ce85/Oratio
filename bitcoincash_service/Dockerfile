@@ -34,6 +34,9 @@ COPY . .
 # templates 디렉토리가 없으면 생성
 RUN mkdir -p templates
 
+# 스크립트를 실행 가능하게 설정
+RUN chmod +x /app/start.sh
+
 # 포트 노출
 EXPOSE 8081
 
@@ -43,4 +46,4 @@ ENV FLASK_ENV=production
 ENV MOCK_MODE=true
 
 # 애플리케이션 실행
-CMD ["gunicorn", "--bind", "0.0.0.0:8081", "app:app"]
+CMD ["/app/start.sh"]

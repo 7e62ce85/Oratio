@@ -12,26 +12,41 @@
         .message { margin-top: 20px; font-size: 1.5em; color: #28a745; font-weight: bold; }
         .details { margin-top: 30px; color: #555; }
         .btn-primary { margin-top: 30px; }
+        .credit-info { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 25px; border-left: 4px solid #28a745; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="success-container">
             <div class="success-icon">✓</div>
-            <div class="message">Payment Successful!</div>
+            <h1 class="message">결제가 완료되었습니다!</h1>
+            
             <div class="details">
-                <div class="card">
-                    <div class="card-body">
-                        <p>Your payment for invoice <strong>{{ invoice_id }}</strong> has been confirmed.</p>
-                        {% if tx_hash %}
-                        <p>Transaction Hash: <a href="https://blockchair.com/bitcoin-cash/transaction/{{ tx_hash }}" target="_blank" class="text-decoration-none">{{ tx_hash }}</a></p>
-                        {% endif %}
-                        <p>Your account has been credited with the payment amount.</p>
-                    </div>
-                </div>
-                <a href="/" class="btn btn-primary">Return to Payment Service</a>
-                <a href="https://defadb.com/" class="btn btn-outline-secondary">Return to defadb.com</a>
+                <p>인보이스 ID: <span id="invoice-id">{{ invoice_id }}</span></p>
+                {% if tx_hash %}
+                <p>트랜잭션 ID: 
+                    <a href="https://blockchair.com/bitcoin-cash/transaction/{{ tx_hash }}" target="_blank" 
+                       class="text-break" style="word-wrap: break-word; max-width: 500px; display: inline-block;">
+                       {{ tx_hash }}
+                    </a>
+                    <br>
+                    <small class="text-muted">(Blockchair에서 트랜잭션 상세 보기)</small>
+                </p>
+                {% endif %}
+                {% if amount %}
+                <p>결제 금액: {{ amount }} BCH</p>
+                {% endif %}
             </div>
+            
+            {% if user_id and credit_added %}
+            <div class="credit-info">
+                <h3>계정에 크레딧이 추가되었습니다!</h3>
+                <p>{{ amount }} BCH가 사용자 계정에 성공적으로 추가되었습니다.</p>
+                <p>현재 보유 크레딧: {{ total_credit }} BCH</p>
+            </div>
+            {% endif %}
+            
+            <a href="/" class="btn btn-primary">홈으로 돌아가기</a>
         </div>
     </div>
 </body>

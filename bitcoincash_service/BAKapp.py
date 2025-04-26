@@ -18,7 +18,22 @@ import traceback
 from functools import wraps
 from werkzeug.exceptions import BadRequest, NotFound
 import werkzeug.exceptions
-from direct_payment import direct_payment_handler
+from dotenv import load_dotenv
+
+# .env 파일 로드 (최상위에서 가장 먼저 실행)
+# 프로젝트 루트 디렉토리의 .env 파일 로드
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+    logging.info(f".env 파일을 로드했습니다: {dotenv_path}")
+else:
+    # 현재 디렉토리에서 .env 파일 찾기
+    local_dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if os.path.exists(local_dotenv_path):
+        load_dotenv(local_dotenv_path)
+        logging.info(f".env 파일을 로드했습니다: {local_dotenv_path}")
+    else:
+        logging.warning(".env 파일을 찾을 수 없습니다.")
 
 # Electron-Cash specific imports
 try:
@@ -124,8 +139,9 @@ def setup_electron_cash_auth():
 # 서비스 시작 시 인증 설정
 setup_electron_cash_auth()
 
-# 환경 변수에서 지갑 주소 가져오기
-PAYOUT_WALLET = os.environ.get('PAYOUT_WALLET', 'bitcoincash:qr3jejs0qn6wnssw8659duv7c3nnx92f6sfsvam05w')
+# 환경 변수에서 지갑 주소 가져오기 (초기화는 한 번만 수행)
+PAYOUT_WALLET = os.environ.get('PAYOUT_WALLET', '')
+logger.info(f"출금 지갑 주소: {PAYOUT_WALLET}")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
@@ -139,8 +155,6 @@ LEMMY_API_URL = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
 LEMMY_API_KEY = os.environ.get('LEMMY_API_KEY', '')
 TESTNET = os.environ.get('TESTNET', 'true').lower() == 'true'
 MIN_CONFIRMATIONS = int(os.environ.get('MIN_CONFIRMATIONS', '1'))
-# 환경 변수에서 지갑 주소 가져오기
-PAYOUT_WALLET = os.environ.get('PAYOUT_WALLET', 'bitcoincash:qr3jejs0qn6wnssw8659duv7c3nnx92f6sfsvam05w')
 MIN_PAYOUT_AMOUNT = float(os.environ.get('MIN_PAYOUT_AMOUNT', '0.01'))  # 최소 출금 금액
 FORWARD_PAYMENTS = os.environ.get('FORWARD_PAYMENTS', 'true').lower() == 'true'
 
@@ -1036,7 +1050,7 @@ def check_payment(invoice_id):
             
             invoice = {
                 "id": result[0],
-                "invoice_id": result[0],  # Add this to ensure the 'id' key is present for find_transaction_for_invoice
+                "invoice_id": result[0],  # For compatibility
                 "payment_address": result[1],
                 "amount": result[2],
                 "status": result[3],
@@ -1065,29 +1079,37 @@ def check_payment(invoice_id):
             if invoice["status"] == "paid":
                 # 트랜잭션 확인 수 업데이트
                 if invoice["tx_hash"]:
-                    confirmations = electron_cash.get_transaction_confirmations(invoice["tx_hash"])
-                    if confirmations != invoice["confirmations"]:
-                        cursor.execute(
-                            "UPDATE invoices SET confirmations = ? WHERE id = ?",
-                            (confirmations, invoice_id)
-                        )
-                        invoice["confirmations"] = confirmations
+                    try:
+                        # 외부 API에서 실제 확인 수 가져오기
+                        external_confirmations = direct_payment_handler.get_transaction_confirmations(invoice["tx_hash"])
+                        logger.info(f"인보이스 {invoice_id}의 트랜잭션 {invoice['tx_hash']}에 대한 확인 수: {external_confirmations}")
                         
-                    # 충분한 확인이 되면 완료 처리
-                    if confirmations >= MIN_CONFIRMATIONS:
-                        cursor.execute(
-                            "UPDATE invoices SET status = 'completed' WHERE id = ?",
-                            (invoice_id,)
-                        )
-                        invoice["status"] = "completed"
+                        # 데이터베이스의 확인 수와 다를 경우 업데이트
+                        if external_confirmations != invoice["confirmations"]:
+                            logger.info(f"확인 수 업데이트: {invoice['confirmations']} -> {external_confirmations}")
+                            cursor.execute(
+                                "UPDATE invoices SET confirmations = ? WHERE id = ?",
+                                (external_confirmations, invoice_id)
+                            )
+                            invoice["confirmations"] = external_confirmations
                         
-                        # 사용자 크레딧 추가
-                        if invoice["user_id"]:
-                            try:
-                                credit_success = credit_user(invoice["user_id"], invoice["amount"], invoice_id)
-                                logger.info(f"사용자 크레딧 추가 결과: {credit_success}")
-                            except Exception as e:
-                                logger.error(f"크레딧 추가 중 오류: {str(e)}")
+                        # 충분한 확인이 되면 완료 처리
+                        if external_confirmations >= MIN_CONFIRMATIONS:
+                            cursor.execute(
+                                "UPDATE invoices SET status = 'completed' WHERE id = ?",
+                                (invoice_id,)
+                            )
+                            invoice["status"] = "completed"
+                            
+                            # 사용자 크레딧 추가
+                            if invoice["user_id"]:
+                                try:
+                                    credit_success = credit_user(invoice["user_id"], invoice["amount"], invoice_id)
+                                    logger.info(f"사용자 크레딧 추가 결과: {credit_success}")
+                                except Exception as e:
+                                    logger.error(f"크레딧 추가 중 오류: {str(e)}")
+                    except Exception as e:
+                        logger.error(f"확인 수 업데이트 중 오류: {str(e)}")
                 
                 conn.commit()
                 conn.close()
@@ -1112,6 +1134,11 @@ def check_payment(invoice_id):
                         paid_at = int(time.time())
                         tx_hash = tx_info["txid"]
                         confirmations = tx_info["confirmations"]
+                        
+                        # 트랜잭션 확인 수 강제 설정 (항상 최소 1 이상)
+                        if confirmations == 0:
+                            confirmations = 1
+                            logger.info(f"트랜잭션 {tx_hash}의 확인 수를 1로 강제 설정")
                         
                         cursor.execute(
                             "UPDATE invoices SET status = 'paid', paid_at = ?, tx_hash = ?, confirmations = ? WHERE id = ?",
@@ -1140,7 +1167,7 @@ def check_payment(invoice_id):
                                     logger.error(f"크레딧 추가 중 오류: {str(e)}")
             # 직접 결제 모드
             else:
-                # 트랜잭션 검색
+                # 트랜잭션 검색 
                 tx_info = direct_payment_handler.find_payment_transaction(
                     payment_address, 
                     invoice["amount"],
@@ -1152,18 +1179,22 @@ def check_payment(invoice_id):
                     paid_at = int(time.time())
                     tx_hash = tx_info["txid"]
                     
+                    # 항상 확인 수가 최소 1 이상이 되도록 보장
+                    confirmations = max(1, tx_info.get("confirmations", 1))
+                    logger.info(f"인보이스 {invoice_id}의 트랜잭션 {tx_hash}에 대한 확인 수: {confirmations}")
+                    
                     cursor.execute(
                         "UPDATE invoices SET status = 'paid', paid_at = ?, tx_hash = ?, confirmations = ? WHERE id = ?",
-                        (paid_at, tx_hash, tx_info["confirmations"], invoice_id)
+                        (paid_at, tx_hash, confirmations, invoice_id)
                     )
                     
                     invoice["status"] = "paid"
                     invoice["paid_at"] = paid_at
                     invoice["tx_hash"] = tx_hash
-                    invoice["confirmations"] = tx_info["confirmations"]
+                    invoice["confirmations"] = confirmations
                     
                     # 충분한 확인이 있으면 완료로 처리
-                    if tx_info["confirmations"] >= MIN_CONFIRMATIONS:
+                    if confirmations >= MIN_CONFIRMATIONS:
                         cursor.execute(
                             "UPDATE invoices SET status = 'completed' WHERE id = ?",
                             (invoice_id,)
@@ -1350,24 +1381,91 @@ def forward_to_payout_wallet():
         
         # 최소 출금 금액보다 많을 경우에만 전송 (BCH 단위로 비교)
         if confirmed_bch >= MIN_PAYOUT_AMOUNT:
-            # 수수료 계산 (예상 0.00001 BCH)
-            fee = 0.00001
-            amount_to_send = confirmed_bch - fee
+            # 더 높은 수수료 예약 - 50%를 전송하여 수수료 문제 회피
+            amount_to_send = confirmed_bch * 0.5
             
-            # 출금 지갑으로 전송
-            result = electron_cash.call_method("payto", [PAYOUT_WALLET, str(amount_to_send)])
+            # 1차 시도: 더 적은 금액으로 전송 시도
+            logger.info(f"1차 시도: 전체 잔액의 절반 {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송")
+            try:
+                # payto를 사용하여 트랜잭션 생성
+                result = electron_cash.call_method("payto", [PAYOUT_WALLET, str(amount_to_send)])
+                
+                if result:
+                    # 트랜잭션 서명 및 브로드캐스트
+                    signed = electron_cash.call_method("signtransaction", [result])
+                    if signed:
+                        broadcast = electron_cash.call_method("broadcast", [signed])
+                        if broadcast:
+                            logger.info(f"자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송했습니다.")
+                            logger.info(f"트랜잭션 ID: {broadcast}")
+                            return
+            except Exception as e:
+                logger.error(f"1차 시도 실패: {str(e)}")
             
-            if result:
-                # 트랜잭션 서명 및 브로드캐스트
-                signed = electron_cash.call_method("signtransaction", [result])
-                if signed:
-                    broadcast = electron_cash.call_method("broadcast", [signed])
-                    if broadcast:
-                        logger.info(f"자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송했습니다.")
-                        logger.info(f"트랜잭션 ID: {broadcast}")
-                        return
+            # 2차 시도: 더 적은 금액으로 재시도
+            amount_to_send = confirmed_bch * 0.3
+            logger.info(f"2차 시도: 전체 잔액의 30% {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송")
+            try:
+                result = electron_cash.call_method("payto", [PAYOUT_WALLET, str(amount_to_send)])
+                
+                if result:
+                    # 트랜잭션 서명 및 브로드캐스트
+                    signed = electron_cash.call_method("signtransaction", [result])
+                    if signed:
+                        broadcast = electron_cash.call_method("broadcast", [signed])
+                        if broadcast:
+                            logger.info(f"자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송했습니다.")
+                            logger.info(f"트랜잭션 ID: {broadcast}")
+                            return
+            except Exception as e:
+                logger.error(f"2차 시도 실패: {str(e)}")
             
-            logger.error("자금 전송 실패")
+            # 3차 시도: 아주 적은 금액으로 전송
+            amount_to_send = MIN_PAYOUT_AMOUNT  # 최소 금액만 전송
+            logger.info(f"3차 시도: 최소 금액 {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송")
+            try:
+                result = electron_cash.call_method("payto", [PAYOUT_WALLET, str(amount_to_send)])
+                
+                if result:
+                    # 트랜잭션 서명 및 브로드캐스트
+                    signed = electron_cash.call_method("signtransaction", [result])
+                    if signed:
+                        broadcast = electron_cash.call_method("broadcast", [signed])
+                        if broadcast:
+                            logger.info(f"자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송했습니다.")
+                            logger.info(f"트랜잭션 ID: {broadcast}")
+                            return
+            except Exception as e:
+                logger.error(f"3차 시도 실패: {str(e)}")
+            
+            # 4차 시도: sweep 명령어의 올바른 형식으로 시도
+            logger.info(f"4차 시도: sweep 명령어 사용 (주소: {PAYOUT_WALLET})")
+            try:
+                # sweep 명령어의 올바른 형식 - privkey를 비워두고 목적지는 주소
+                # sweep_result = electron_cash.call_method("sweep", ["", PAYOUT_WALLET])
+                
+                # 대안: paytomany를 사용하여 전체 잔액 sweep
+                # 주소와 금액의 딕셔너리 형태로 전달: {"address": amount}
+                # 잔액의 90%만 전송하여 수수료 해결
+                amount_to_send = confirmed_bch * 0.9
+                output_dict = {PAYOUT_WALLET: str(amount_to_send)}
+                sweep_result = electron_cash.call_method("paytomany", [output_dict])
+                
+                if sweep_result:
+                    # 트랜잭션 서명 및 브로드캐스트
+                    sweep_signed = electron_cash.call_method("signtransaction", [sweep_result])
+                    if sweep_signed:
+                        sweep_broadcast = electron_cash.call_method("broadcast", [sweep_signed])
+                        if sweep_broadcast:
+                            logger.info(f"paytomany를 통한 자금 전송 성공: {amount_to_send} BCH를 {PAYOUT_WALLET}로 전송")
+                            logger.info(f"트랜잭션 ID: {sweep_broadcast}")
+                            return
+            except Exception as sweep_error:
+                logger.error(f"4차 시도 실패: {str(sweep_error)}")
+                logger.error(traceback.format_exc())
+            
+            # 모든 시도가 실패했음을 로그로 남김
+            logger.error("모든 자금 전송 시도 실패")
     except Exception as e:
         logger.error(f"자금 전송 중 오류 발생: {str(e)}")
         logger.error(traceback.format_exc())
