@@ -1,5 +1,6 @@
 import hashlib
 import time
+import traceback
 from datetime import datetime
 from config import logger, MIN_CONFIRMATIONS
 import models
@@ -195,66 +196,6 @@ def process_payment(invoice_id):
         logger.error(f"ElectronCash를 통한 결제 확인 중 오류: {str(e)}")
     
     return invoice
-
-def verify_payment_pow(payment_id, user_token, nonce, claimed_hash):
-    """작업 증명을 통한 결제 검증"""
-    logger.info(f"작업 증명 검증 요청: 인보이스 {payment_id}, 토큰 {user_token}")
-    
-    # 1. 결제 ID 유효성 확인
-    invoice = models.get_invoice(payment_id)
-    if not invoice:
-        logger.warning(f"작업 증명 검증 실패: 인보이스 {payment_id} 없음")
-        return {
-            'verified': False, 
-            'reason': '인보이스를 찾을 수 없습니다'
-        }
-    
-    # 이미 완료된 경우
-    if invoice["status"] == "completed":
-        return {'verified': True}
-    
-    # 만료된 경우
-    if invoice["status"] == "expired":
-        logger.warning(f"작업 증명 검증 실패: 인보이스 {payment_id} 만료됨")
-        return {
-            'verified': False, 
-            'reason': '인보이스가 만료되었습니다'
-        }
-    
-    # 2. PoW 해시 검증
-    difficulty = 4  # 서버에서 설정한 난이도
-    target = '0' * difficulty
-    
-    # 해시 재계산하여 검증
-    data_string = f"{payment_id}:{user_token}:{nonce}"
-    computed_hash = hashlib.sha256(data_string.encode()).hexdigest()
-    
-    if computed_hash != claimed_hash or not computed_hash.startswith(target):
-        logger.warning(f"작업 증명 검증 실패: 유효하지 않은 해시 {computed_hash}")
-        return {
-            'verified': False, 
-            'reason': '유효하지 않은 작업 증명입니다'
-        }
-    
-    logger.info(f"작업 증명 해시 검증 성공: {computed_hash}")
-    
-    # 3. 블록체인 결제 확인 시도
-    invoice = process_payment(payment_id)
-    
-    # 결제가 확인된 경우
-    if invoice["status"] in ["paid", "completed"]:
-        logger.info(f"블록체인 결제 확인 성공: 인보이스 {payment_id}, 트랜잭션 {invoice['tx_hash']}")
-        return {'verified': True}
-    else:
-        # PoW는 성공했지만 실제 결제는 확인되지 않음
-        # 작업 증명 정보 저장
-        models.save_pow_verification(payment_id, nonce, computed_hash, user_token)
-        
-        logger.info(f"작업 증명은 성공했으나 블록체인 결제 미확인: 인보이스 {payment_id}")
-        return {
-            'verified': False, 
-            'reason': '결제가 아직 확인되지 않았습니다'
-        }
 
 def format_invoice_for_display(invoice):
     """인보이스 정보를 표시용으로 포맷팅"""

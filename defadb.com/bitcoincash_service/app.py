@@ -16,10 +16,20 @@ from routes.api import api_bp
 
 # 서비스 모듈 가져오기
 from services.background_tasks import start_background_tasks
+from services.electron_cash import electron_cash
 
 # Flask 애플리케이션 초기화
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
+
+# 외부에서 electron_cash를 참조할 수 있도록 전역으로 노출
+# 이를 통해 `from app import electron_cash` 구문이 동작합니다
+globals()['electron_cash'] = electron_cash
+
+# 외부에서 사용할 수 있는 함수들 노출
+def forward_to_payout_wallet():
+    """출금 지갑으로 자금을 전송하는 함수"""
+    return electron_cash.forward_to_payout_wallet()
 
 # Blueprint 등록
 app.register_blueprint(invoice_bp)
@@ -65,7 +75,6 @@ if __name__ == "__main__":
     
     # 주기적으로 자금을 출금 지갑으로 전송 (시작 시 한 번 실행)
     if FORWARD_PAYMENTS:
-        from services.electron_cash import electron_cash
         electron_cash.forward_to_payout_wallet()
     
     # 앱 실행

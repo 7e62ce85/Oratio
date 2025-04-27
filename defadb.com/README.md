@@ -63,7 +63,6 @@ The components communicate through Docker networking, with the payment service c
 - **QR Code Generation**: For easy mobile payments
 - **Transaction Monitoring**: Automatic checking for payment confirmations
 - **User Credit System**: Tracking of user credits and transactions
-- **Proof of Work Verification**: Optional PoW for payment verification
 - **Mock Mode**: Test functionality without actual BCH transactions
 - **Direct Payment Mode**: Simplified payment handling with centralized wallet
 - **Multiple Confirmation Levels**: Configurable confirmation requirements
@@ -168,12 +167,6 @@ The payment service uses SQLite with the following tables:
 - **transactions**: Records all transaction history
   - Fields: id, user_id, amount, type, description, created_at, invoice_id
 
-- **pow_verifications**: Stores proof-of-work verification data
-  - Fields: id, invoice_id, nonce, hash, verified, verified_at, user_token
-
-- **pow_credits**: Manages proof-of-work based credits
-  - Fields: id, invoice_id, user_id, amount, created_at, used
-
 ---
 
 ## API Endpoints
@@ -189,10 +182,6 @@ The payment service uses SQLite with the following tables:
 
 - **/check_payment/<invoice_id>**: Check payment status
   - Returns current status of the invoice: pending, paid, completed, expired
-
-- **/verify-payment**: Verify payment with proof of work
-  - Parameters: paymentId, userToken, nonce, hash
-  - Returns: Verification status
 
 - **/api/user_credit/<user_id>**: Get user credit balance
   - Requires API key authentication
@@ -366,5 +355,3 @@ echo "pattern_to_ignore" >> .gitignore
 git add .gitignore
 git commit -m "Update .gitignore to exclude new pattern"
 ```
-
----

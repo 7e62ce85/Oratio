@@ -58,32 +58,7 @@ def init_db():
         )
         ''')
         
-        # PoW 검증 테이블 추가
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS pow_verifications (
-            id TEXT PRIMARY KEY,
-            invoice_id TEXT NOT NULL,
-            nonce TEXT NOT NULL,
-            hash TEXT NOT NULL,
-            verified INTEGER DEFAULT 0,
-            verified_at INTEGER NOT NULL,
-            user_token TEXT NOT NULL,
-            FOREIGN KEY(invoice_id) REFERENCES invoices(id)
-        )
-        ''')
-        
-        # PoW 크레딧 테이블 추가
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS pow_credits (
-            id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-            invoice_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            amount REAL NOT NULL,
-            created_at INTEGER NOT NULL,
-            used BOOLEAN DEFAULT FALSE,
-            FOREIGN KEY(invoice_id) REFERENCES invoices(id)
-        )
-        ''')
+        # PoW related tables removed
         
         # 프라그마 설정 - 외래 키 활성화 및 저널 모드 WAL로 변경
         cursor.execute("PRAGMA foreign_keys = ON")
@@ -96,27 +71,6 @@ def init_db():
     except sqlite3.Error as e:
         logger.error(f"데이터베이스 초기화 오류: {e}")
         raise
-
-def add_verified_column():
-    """필요한 경우 verified 컬럼 추가"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # pow_verifications 테이블의 컬럼 확인
-        cursor.execute("PRAGMA table_info(pow_verifications)")
-        columns = [column[1] for column in cursor.fetchall()]
-        
-        # verified 컬럼이 없는 경우 추가
-        if 'verified' not in columns:
-            logger.info("pow_verifications 테이블에 verified 컬럼 추가 중...")
-            cursor.execute("ALTER TABLE pow_verifications ADD COLUMN verified INTEGER DEFAULT 1")
-            conn.commit()
-            logger.info("verified 컬럼이 성공적으로 추가되었습니다.")
-        
-        conn.close()
-    except Exception as e:
-        logger.error(f"verified 컬럼 추가 중 오류: {str(e)}")
 
 def get_db_connection():
     """데이터베이스 연결 생성"""
@@ -363,24 +317,5 @@ def get_user_transactions(user_id, limit=50):
     
     return transactions
 
-def save_pow_verification(invoice_id, nonce, hash_value, user_token):
-    """작업 증명 검증 결과 저장"""
-    pow_id = str(uuid.uuid4())
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(
-        """INSERT INTO pow_verifications 
-           (id, invoice_id, nonce, hash, verified_at, user_token) 
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (pow_id, invoice_id, nonce, hash_value, int(time.time()), user_token)
-    )
-    
-    conn.commit()
-    conn.close()
-    
-    return pow_id
-
 # 데이터베이스 초기화 함수 호출
 init_db()
-add_verified_column()

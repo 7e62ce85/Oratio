@@ -9,9 +9,12 @@ This script tests the critical components of the payment system:
 
 import logging
 import json
+import sys
+import time
 # Update imports to use the new refactored structure
 from services.electron_cash import electron_cash
 from config import logger
+
 try:
     from direct_payment import direct_payment_handler
 except ImportError:
@@ -32,14 +35,18 @@ logging.basicConfig(level=logging.INFO)
 def test_history_method():
     """Test the history method which replaced listtransactions"""
     print("\n=== Testing history method ===")
-    result = electron_cash.call_method("history")
-    print(f"History result type: {type(result)}")
-    print(f"Got {len(result) if result else 0} transactions")
-    if result:
-        # Print first transaction details
-        print("\nSample transaction:")
-        print(json.dumps(result[0], indent=2))
-    return result is not None
+    try:
+        result = electron_cash.call_method("history")
+        print(f"History result type: {type(result)}")
+        print(f"Got {len(result) if result else 0} transactions")
+        if result:
+            # Print first transaction details
+            print("\nSample transaction:")
+            print(json.dumps(result[0], indent=2))
+        return result is not None
+    except Exception as e:
+        print(f"Error in history method: {e}")
+        return False
 
 def test_address_balance(address=None):
     """Test the address balance checking function"""
@@ -59,48 +66,73 @@ def test_address_balance(address=None):
     else:
         formatted_address = address
     
-    balance = electron_cash.check_address_balance(formatted_address)
-    print(f"Balance result: {balance} BCH")
-    
-    # Try direct method call to compare
-    print("\n=== Testing direct getaddressbalance call ===")
-    direct_result = electron_cash.call_method("getaddressbalance", [formatted_address])
-    print(f"Direct balance API response: {direct_result}")
-    
-    return balance is not None
+    try:
+        balance = electron_cash.check_address_balance(formatted_address)
+        print(f"Balance result: {balance} BCH")
+        
+        # Try direct method call to compare
+        print("\n=== Testing direct getaddressbalance call ===")
+        try:
+            # Use clean_address (without prefix) to avoid recursion issues
+            clean_address = formatted_address.replace('bitcoincash:', '')
+            direct_result = electron_cash.call_method("getaddressbalance", [clean_address])
+            print(f"Direct balance API response: {direct_result}")
+        except Exception as e:
+            print(f"Direct API call failed: {e}")
+        
+        return balance is not None
+    except Exception as e:
+        print(f"Balance check failed: {e}")
+        return False
 
 def verify_wallet_status():
     """Check if the wallet is loaded and working"""
     print("\n=== Verifying wallet status ===")
-    info = electron_cash.call_method("getinfo")
-    print(f"Wallet info: {info}")
-    
-    # Try loading wallet if needed
-    if not info or 'error' in str(info).lower():
-        print("Attempting to load wallet...")
-        load_result = electron_cash.call_method("load_wallet")
-        print(f"Load wallet result: {load_result}")
-        
-        # Check again
+    try:
         info = electron_cash.call_method("getinfo")
-        print(f"Wallet info after load attempt: {info}")
-    
-    return info is not None
+        print(f"Wallet info: {info}")
+        
+        # Try loading wallet if needed
+        if not info or 'error' in str(info).lower():
+            print("Attempting to load wallet...")
+            load_result = electron_cash.call_method("load_wallet")
+            print(f"Load wallet result: {load_result}")
+            
+            # Check again
+            info = electron_cash.call_method("getinfo")
+            print(f"Wallet info after load attempt: {info}")
+        
+        return info is not None
+    except Exception as e:
+        print(f"Wallet verification failed: {e}")
+        return False
 
 def run_all_tests():
     """Run all tests and report results"""
     print("====== BITCOIN CASH PAYMENT SYSTEM TEST ======")
     
     # First check wallet status
-    wallet_ok = verify_wallet_status()
+    try:
+        wallet_ok = verify_wallet_status()
+    except Exception as e:
+        print(f"Error during wallet verification: {e}")
+        wallet_ok = False
     print(f"Wallet status: {'OK' if wallet_ok else 'FAILED'}")
     
     # Test history method
-    history_ok = test_history_method()
+    try:
+        history_ok = test_history_method()
+    except Exception as e:
+        print(f"Error during history test: {e}")
+        history_ok = False
     print(f"History method test: {'OK' if history_ok else 'FAILED'}")
     
     # Test balance checking
-    balance_ok = test_address_balance()
+    try:
+        balance_ok = test_address_balance()
+    except Exception as e:
+        print(f"Error during balance test: {e}")
+        balance_ok = False
     print(f"Balance check test: {'OK' if balance_ok else 'FAILED'}")
     
     print("\n====== TEST SUMMARY ======")
@@ -110,8 +142,15 @@ def run_all_tests():
     
     if wallet_ok and history_ok and balance_ok:
         print("\n✅ All tests PASSED")
+        return 0
     else:
         print("\n❌ Some tests FAILED")
+        return 1
 
 if __name__ == "__main__":
-    run_all_tests()
+    try:
+        exit_code = run_all_tests()
+        sys.exit(exit_code)
+    except Exception as e:
+        print(f"Unhandled exception in tests: {e}")
+        sys.exit(2)
