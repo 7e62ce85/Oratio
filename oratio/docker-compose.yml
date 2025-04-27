@@ -14,7 +14,7 @@ services:
     volumes:
       - ./nginx_internal.conf:/etc/nginx/nginx.conf:ro,Z
       - ./proxy_params:/etc/nginx/proxy_params:ro,Z
-      - /srv/lemmy/defadb.com/nginx/js:/etc/nginx/js:ro,Z
+      - /srv/lemmy/oratio/nginx/js:/etc/nginx/js:ro,Z
       - /etc/letsencrypt:/etc/letsencrypt:ro
     restart: always
     logging: *default-logging
