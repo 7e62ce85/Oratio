@@ -1,10 +1,10 @@
 # PostgreSQL 데이터 파일
 volumes/postgres/
-defadb.com/volumes/postgres/
+oratio/volumes/postgres/
 
 # pictrs 파일
 volumes/pictrs/
-defadb.com/volumes/pictrs/
+oratio/volumes/pictrs/
 
 # 로그 파일
 *.log
@@ -16,10 +16,10 @@ __pycache__/
 
 # 데이터베이스 파일
 *.db
-defadb.com/data/bitcoincash/
-defadb.com/data/electron_cash/
-defadb.com/data/electron-cash/
-defadb.com/electron-cash-data/
+oratio/data/bitcoincash/
+oratio/data/electron_cash/
+oratio/data/electron-cash/
+oratio/electron-cash-data/
 
 # 기타 캐시 및 임시 파일
 *.swp
