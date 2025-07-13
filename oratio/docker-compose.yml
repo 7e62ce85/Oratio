@@ -12,11 +12,11 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx_internal.conf:/etc/nginx/nginx.conf:ro,Z
+      - ./nginx_production.conf:/etc/nginx/nginx.conf:ro,Z
       - ./proxy_params:/etc/nginx/proxy_params:ro,Z
-      - ./nginx/js:/etc/nginx/js:ro,Z  # 경로 수정: 절대 경로에서 상대 경로로 변경
-      # 로컬 개발 환경에서는 SSL 인증서가 없을 수 있으므로 주석 처리
-      # - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./nginx/js:/etc/nginx/js:ro,Z
+      # 자체 서명 SSL 인증서 마운트
+      - ./ssl-certs:/etc/ssl/certs:ro,Z
     restart: always
     logging: *default-logging
     depends_on:
@@ -44,28 +44,26 @@ services:
       dockerfile: Dockerfile
       args:
         - LEMMY_API_KEY=${LEMMY_API_KEY}
-        - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-http://localhost:8081/api/user_credit}
-        - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-http://localhost:8081/}
+        - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://payments.defadb.com/api/user_credit}
+        - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://payments.defadb.com/}
         - COMMIT_HASH=latest
     container_name: oratio-lemmy-ui-1
     environment:
       - LEMMY_UI_LEMMY_INTERNAL_HOST=lemmy:8536
-      # 실 도메인으로 변경
-      # - LEMMY_UI_LEMMY_EXTERNAL_HOST=example.com
-      - LEMMY_UI_LEMMY_EXTERNAL_HOST=localhost
-      # 실 서버에서는 HTTPS 활성화
-      # - LEMMY_UI_HTTPS=True
-      - LEMMY_UI_HTTPS=False
+      # 실제 도메인으로 변경됨
+      - LEMMY_UI_LEMMY_EXTERNAL_HOST=defadb.com
+      # 실제 서버에서는 HTTPS 활성화
+      - LEMMY_UI_HTTPS=true
       - LEMMY_UI_DEBUG=false
       # 추가: PUBLIC_URL 및 NODE_ENV 설정
       - PUBLIC_URL=/
       - NODE_ENV=production
       # COMMIT_HASH 추가 (정적 파일 경로에 사용됨)
       - COMMIT_HASH=latest
-      # BCH API 설정 - .env 파일에서 가져오기 (명시적 설정으로 수정)
+      # BCH API 설정 - 실제 도메인으로 업데이트
       - LEMMY_API_KEY=${LEMMY_API_KEY}
-      - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-http://localhost:8081/api/user_credit}
-      - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-http://localhost:8081/}
+      - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://payments.defadb.com/api/user_credit}
+      - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://payments.defadb.com/}
     volumes:
       - ./volumes/lemmy-ui/extra_themes:/app/extra_themes:Z
     depends_on:

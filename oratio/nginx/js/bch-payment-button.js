@@ -45,7 +45,7 @@
             // Create the button
             const paymentButton = document.createElement('a');
             paymentButton.id = 'bch-payment-button';
-            paymentButton.href = 'http://localhost:8081/';
+            paymentButton.href = 'https://payments.defadb.com/';
             paymentButton.className = 'btn btn-sm btn-success ml-2';
             paymentButton.target = '_blank';
             paymentButton.style.marginLeft = '10px';

@@ -57,12 +57,12 @@ if (!envVars["process.env.COMMIT_HASH"]) {
   envVars["process.env.COMMIT_HASH"] = JSON.stringify("latest");
 }
 
-// BCH 관련 환경변수 기본값 설정 (하드코딩 제거)
+// BCH 관련 환경변수 기본값 설정 (실제 도메인으로 업데이트)
 if (!envVars["process.env.LEMMY_BCH_PAYMENT_URL"]) {
-  envVars["process.env.LEMMY_BCH_PAYMENT_URL"] = JSON.stringify("http://localhost:8081/");
+  envVars["process.env.LEMMY_BCH_PAYMENT_URL"] = JSON.stringify("https://payments.defadb.com/");
 }
 if (!envVars["process.env.LEMMY_BCH_API_URL"]) {
-  envVars["process.env.LEMMY_BCH_API_URL"] = JSON.stringify("http://localhost:8081/api/user_credit");
+  envVars["process.env.LEMMY_BCH_API_URL"] = JSON.stringify("https://payments.defadb.com/api/user_credit");
 }
 // API 키는 환경변수에서만 가져오도록 수정 (하드코딩 제거)
 if (!envVars["process.env.LEMMY_API_KEY"]) {
@@ -202,7 +202,7 @@ module.exports = (env, argv) => {
                 url: { pathname, host },
                 request: { method },
               }) =>
-                (sameOrigin || host.includes("localhost")) &&
+                (sameOrigin || host.includes("defadb.com")) &&
                 (!(
                   pathname.includes("pictrs") || pathname.includes("static")
                 ) ||
@@ -214,7 +214,7 @@ module.exports = (env, argv) => {
             },
             {
               urlPattern: ({ url: { pathname, host }, sameOrigin }) =>
-                (sameOrigin || host.includes("localhost")) &&
+                (sameOrigin || host.includes("defadb.com")) &&
                 pathname.includes("static"),
               handler: mode === "development" ? "NetworkFirst" : "CacheFirst",
               options: {
