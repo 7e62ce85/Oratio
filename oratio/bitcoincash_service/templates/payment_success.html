@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { font-family: sans-serif; padding-top: 50px; }
+        .success-container { text-align: center; max-width: 600px; margin: 0 auto; }
+        .success-icon { font-size: 4em; color: #28a745; margin-bottom: 20px; }
+        .message { margin-top: 20px; font-size: 1.5em; color: #28a745; font-weight: bold; }
+        .details { margin-top: 30px; color: #555; }
+        .btn-primary { margin-top: 30px; }
+        .credit-info { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 25px; border-left: 4px solid #28a745; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-container">
+            <div class="success-icon">✓</div>
+            <h1 class="message">결제가 완료되었습니다!</h1>
+            
+            <div class="details">
+                <p>인보이스 ID: <span id="invoice-id">{{ invoice_id }}</span></p>
+                {% if tx_hash %}
+                <p>트랜잭션 ID: 
+                    <a href="https://blockchair.com/bitcoin-cash/transaction/{{ tx_hash }}" target="_blank" 
+                       class="text-break" style="word-wrap: break-word; max-width: 500px; display: inline-block;">
+                       {{ tx_hash }}
+                    </a>
+                    <br>
+                    <small class="text-muted">(Blockchair에서 트랜잭션 상세 보기)</small>
+                </p>
+                {% endif %}
+                {% if amount %}
+                <p>결제 금액: {{ amount }} BCH</p>
+                {% endif %}
+            </div>
+            
+            {% if user_id and credit_added %}
+            <div class="credit-info">
+                <h3>계정에 크레딧이 추가되었습니다!</h3>
+                <p>{{ amount }} BCH가 사용자 계정에 성공적으로 추가되었습니다.</p>
+                <p>현재 보유 크레딧: {{ total_credit }} BCH</p>
+            </div>
+            {% endif %}
+            
+            <a href="/" class="btn btn-primary">홈으로 돌아가기</a>
+        </div>
+    </div>
+</body>
+</html>

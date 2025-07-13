@@ -1,0 +1,66 @@
+Attaching to electron-cash
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)
+[36melectron-cash          |[0m Starting Electron Cash Daemon...
+[36melectron-cash          |[0m === 신규 지갑 생성 ===
+[36melectron-cash          |[0m Traceback (most recent call last):
+[36melectron-cash          |[0m   File "<string>", line 3, in <module>
+[36melectron-cash          |[0m ImportError: cannot import name 'constants' from 'electroncash' (/usr/local/lib/python3.9/site-packages/electroncash/__init__.py)

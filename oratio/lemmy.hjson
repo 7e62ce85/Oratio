@@ -1,0 +1,38 @@
+{
+  # for more info about the config, check out the documentation
+  # https://join-lemmy.org/docs/en/administration/configuration.html
+
+  database: {
+    host: postgres
+    port: 5432
+    user: "lemmy"
+    password: "15JpMF0Xv1NfoJPsY9aG"
+    database: "lemmy"
+    pool_size: 5
+    # Alternative way:
+    #uri: "postgresql://lemmy:15JpMF0Xv1NfoJPsY9aG@postgres/lemmy"
+  }
+  hostname: "localhost"
+  # 실제 도메인으로 변경
+  # hostname: "example.com"
+  # 프로토콜 설정
+  bind: "0.0.0.0"
+  port: 8536
+  # 실제 운영 환경에서는 TLS 활성화 권장
+  # tls_enabled: true
+  # SSL 인증서 경로 (Let's Encrypt 등으로 발급받은 인증서)
+  cert_path: "/etc/letsencrypt/live/example.com/fullchain.pem"
+  key_path: "/etc/letsencrypt/live/example.com/privkey.pem"
+  pictrs: {
+    url: "http://pictrs:8080/"
+    api_key: "15JpMF0Xv1NfoJPsY9aG"
+  }
+  email: {
+    smtp_server: "postfix:25"
+    smtp_from_address: "noreply@localhost"
+    tls_type: "none"
+  }
+  federation: {
+    enabled: false
+  }
+}

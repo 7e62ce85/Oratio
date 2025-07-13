@@ -1,0 +1,51 @@
+# PostgreSQL 데이터 파일
+volumes/postgres/
+oratio/volumes/postgres/
+
+# pictrs 파일
+volumes/pictrs/
+oratio/volumes/pictrs/
+
+# 로그 파일
+*.log
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 데이터베이스 파일
+*.db
+oratio/data/bitcoincash/
+oratio/data/electron_cash/
+oratio/data/electron-cash/
+oratio/electron-cash-data/
+
+# 기타 캐시 및 임시 파일
+*.swp
+.DS_Store
+
+# 환경 변수 파일 (sensitive)
+.env
+.env.*
+*.env
+
+# 보안 관련 파일
+*password*
+*key*
+*secret*
+*certificate*
+*cert*
+*token*
+*seed*
+*wallet*
+*.pem
+*.key
+wallet_*.sh
+
+# 백업 파일
+*.bak
+*backup*
+
+# 백업 폴더
+backups/

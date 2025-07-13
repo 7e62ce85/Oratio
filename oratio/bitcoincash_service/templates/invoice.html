@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Cash 결제</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .verification-container {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .progress {
+            height: 25px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h3 class="card-title mb-0">Bitcoin Cash 결제</h3>
+                    </div>
+                    <div class="card-body">
+                        <h4>인보이스 정보</h4>
+                        <p><strong>인보이스 ID:</strong> <span id="invoice-id">{{ invoice.invoice_id }}</span></p>
+                        <p><strong>금액:</strong> {{ invoice.amount }} BCH</p>
+                        <p><strong>Status:</strong> <span id="payment-status">{{ invoice.status }}</span></p>
+                        {% if invoice.tx_hash %}
+                        <p><strong>Transaction Hash:</strong> <a
+                                href="https://blockchair.com/bitcoin-cash/transaction/{{ invoice.tx_hash }}"
+                                target="_blank">{{ invoice.tx_hash }}</a></p>
+                        {% endif %}
+                        {% if invoice.confirmations is not none %}
+                        <p><strong>Confirmations:</strong> <span id="confirmations">{{ invoice.confirmations }}</span> /
+                            {{ min_confirmations }}</p>
+                        {% endif %}
+                        <p><strong>만료 시간:</strong> {{ formatted_expiry }}</p>
+
+                        <div class="alert alert-info">
+                            아래 주소로 정확히 {{ invoice.amount }} BCH를 송금하세요.
+                        </div>
+
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" value="{{ invoice.payment_address }}"
+                                id="payment-address" readonly>
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyAddress()">복사</button>
+                        </div>
+
+                        <div class="qr-container">
+                            <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code" class="img-fluid">
+                        </div>
+
+                        <div id="payment-controls" class="d-grid gap-2 mt-4">
+                            <button id="check-button" class="btn btn-primary" onclick="checkPayment()">결제 확인</button>
+                            <button id="verify-button" class="btn btn-success" onclick="startVerification()"
+                                style="display:none;">결제 증명 시작</button>
+                        </div>
+
+                        <!-- 작업 증명 UI -->
+                        <div id="verification-container" class="verification-container">
+                            <h5 class="mt-4">결제 확인 작업</h5>
+                            <p class="text-muted">블록체인에서 결제가 확인되지 않은 경우, 브라우저에서 작업 증명을 통해 결제를 검증할 수 있습니다.</p>
+
+                            <div class="alert alert-secondary">
+                                <p id="verification-status">대기 중...</p>
+                            </div>
+
+                            <div class="progress">
+                                <div id="verification-progress"
+                                    class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                                    style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+
+                            <p class="text-muted mt-2">이 작업은 약 1분 정도 소요됩니다. 브라우저를 닫지 마세요.</p>
+                        </div>
+                        <p><a href="/">Back to Home</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/sha256.js"></script>
+    <script src="/static/js/payment-verifier.js"></script>
+    <script>
+        let verifier = null;
+        let checkCount = 0;
+
+        function copyAddress() {
+            const addressInput = document.getElementById('payment-address');
+            addressInput.select();
+            document.execCommand('copy');
+            alert('주소가 클립보드에 복사되었습니다');
+        }
+
+        async function checkPayment() {
+            const invoiceId = document.getElementById('invoice-id').textContent;
+            const checkButton = document.getElementById('check-button');
+            const verifyButton = document.getElementById('verify-button');
+            const statusElement = document.getElementById('payment-status');
+            const confirmationsElement = document.getElementById('confirmations');
+            const currentStatus = statusElement.textContent;
+
+            checkButton.disabled = true;
+            checkButton.textContent = '확인 중...';
+
+            try {
+                const response = await fetch(`/check_payment/${invoiceId}`);
+                const data = await response.json();
+
+                // 상태 및 확인 수 업데이트
+                if (data.status !== currentStatus) {
+                    // 상태가 변경되었으면 페이지 새로고침
+                    if ((currentStatus === 'pending' && data.status === 'paid') || 
+                        data.status === 'completed') {
+                        console.log(`상태 변경 감지: ${currentStatus} -> ${data.status}, 페이지 새로고침 중...`);
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1000);
+                    }
+                }
+                
+                statusElement.textContent = data.status;
+                if (data.confirmations !== undefined && confirmationsElement) {
+                    confirmationsElement.textContent = data.confirmations;
+                }
+
+                // 상태에 따른 처리
+                if (data.status === 'completed') {
+                    checkButton.textContent = '결제 완료!';
+                    // 결제 완료 페이지로 이동
+                    setTimeout(() => {
+                        window.location.href = `/payment_success/${invoiceId}`;
+                    }, 2000);
+                } else if (data.status === 'paid') {
+                    checkButton.textContent = '결제 확인됨, 승인 대기 중...';
+                    checkButton.disabled = false;
+                    // 확인 수가 충분하면 결제 완료 페이지로 이동
+                    if (data.confirmations >= {{ min_confirmations }}) {
+                        setTimeout(() => {
+                            window.location.href = `/payment_success/${invoiceId}`;
+                        }, 2000);
+                    }
+                } else if (data.status === 'expired') {
+                    checkButton.textContent = '결제 만료됨';
+                } else {
+                    // pending 상태
+                    checkButton.textContent = '다시 확인';
+                    checkButton.disabled = false;
+
+                    // 여러 번 확인 후에도 결제가 되지 않았다면 작업 증명 버튼 표시
+                    checkCount++;
+                    if (checkCount >= 3) {
+                        verifyButton.style.display = 'block';
+                    }
+                }
+            } catch (error) {
+                console.error('결제 확인 중 오류:', error);
+                checkButton.textContent = '확인 실패, 재시도';
+                checkButton.disabled = false;
+            }
+        }
+
+        function startVerification() {
+            const invoiceId = document.getElementById('invoice-id').textContent;
+            const userToken = Math.floor(Date.now() / 1000).toString();
+            const verificationContainer = document.getElementById('verification-container');
+
+            // UI 표시
+            verificationContainer.style.display = 'block';
+            document.getElementById('check-button').style.display = 'none';
+            document.getElementById('verify-button').style.display = 'none';
+
+            // 작업 증명 시작
+            verifier = new PaymentVerifier(invoiceId, userToken, 4); // 난이도 4
+            verifier.startProofOfWork();
+        }
+
+        // 페이지 로드 후 자동 상태 확인
+        window.onload = function () {
+            // 즉시 확인
+            checkPayment();
+
+            // 주기적으로 자동 확인
+            setInterval(checkPayment, 10000); // 10초마다 확인
+        };
+    </script>
+</body>
+
+</html>

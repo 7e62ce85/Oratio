@@ -1,0 +1,96 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Cash Payment Service</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 800px;
+            margin-top: 50px;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #4caf50;
+            color: white;
+            border-radius: 15px 15px 0 0!important;
+        }
+        .btn-primary {
+            background-color: #4caf50;
+            border-color: #4caf50;
+        }
+        .btn-primary:hover {
+            background-color: #388e3c;
+            border-color: #388e3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-center">Bitcoin Cash Payment Service</h2>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    This is the landing page for the Bitcoin Cash payment service. Use the /generate_invoice endpoint to create a new payment.
+                </div>
+                
+                <div class="text-center mb-4">
+                    <a href="https://defadb.com/" class="btn btn-lg btn-primary">Return to defadb.com</a>
+                </div>
+                
+                <h3>Generate Test Invoice</h3>
+                <form action="/generate_invoice" method="get" class="mb-3">
+                    <div class="mb-3">
+                        <label for="amount" class="form-label">Amount (BCH)</label>
+                        <input type="number" step="0.00001" min="0.00001" name="amount" id="amount" class="form-control" value="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="user_id" class="form-label">User ID (optional)</label>
+                        <input type="text" name="user_id" id="user_id" class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Generate Invoice</button>
+                </form>
+                
+                <h3>API Documentation</h3>
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Endpoint</th>
+                            <th>Method</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>/generate_invoice?amount=X&user_id=Y</td>
+                            <td>GET</td>
+                            <td>Generate a new invoice with the specified amount</td>
+                        </tr>
+                        <tr>
+                            <td>/invoice/{invoice_id}</td>
+                            <td>GET</td>
+                            <td>View an invoice with QR code</td>
+                        </tr>
+                        <tr>
+                            <td>/check_payment/{invoice_id}</td>
+                            <td>GET</td>
+                            <td>Check payment status</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
