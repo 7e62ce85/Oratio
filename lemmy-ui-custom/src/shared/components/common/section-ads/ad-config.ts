@@ -61,7 +61,7 @@ export const DEFAULT_AD_CONFIGS: Record<string, AdConfig> = {
     position: "sidebar",
     size: "large",
     section: "feed",
-    frequency: 3, // Show every 3 posts
+    frequency: 5, // Show every 5 posts
   },
   comments: {
     enabled: true,
@@ -75,8 +75,8 @@ export const DEFAULT_AD_CONFIGS: Record<string, AdConfig> = {
 // Advertisement content templates
 export const AD_TEMPLATES = {
   promotional: {
-    header: "🚀 특별 혜택!",
-    description: "지금 가입하고 무료 크레딧을 받아보세요!",
+    header: "🚀 ",
+    description: "존댓말을 버려야 대한민국이 산다",
     cta: "자세히 보기",
     colors: ["#667eea", "#764ba2"],
   },
@@ -94,7 +94,7 @@ export const AD_TEMPLATES = {
   },
   engagement: {
     header: "💬 토론 참여",
-    description: "의견을 나누고 소통하세요",
+    description: "의견을 나누고 소통하라",
     cta: "참여하기",
     colors: ["#ffecd2", "#fcb69f"],
   },

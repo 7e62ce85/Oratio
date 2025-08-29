@@ -9,29 +9,59 @@
     password: "15JpMF0Xv1NfoJPsY9aG"
     database: "lemmy"
     pool_size: 5
-    # Alternative way:
-    #uri: "postgresql://lemmy:15JpMF0Xv1NfoJPsY9aG@postgres/lemmy"
   }
   hostname: "defadb.com"
-  # 실제 도메인으로 변경됨
-  # 프로토콜 설정
   bind: "0.0.0.0"
   port: 8536
-  # 실제 운영 환경에서는 TLS 활성화 권장
-  # tls_enabled: true
-  # SSL 인증서 경로 (Let's Encrypt 등으로 발급받은 인증서)
   cert_path: "/etc/letsencrypt/live/defadb.com/fullchain.pem"
   key_path: "/etc/letsencrypt/live/defadb.com/privkey.pem"
+  
   pictrs: {
     url: "http://pictrs:8080/"
     api_key: "15JpMF0Xv1NfoJPsY9aG"
   }
+  
   email: {
-    smtp_server: "postfix:25"
+    smtp_server: "email-service:1025"
     smtp_from_address: "noreply@defadb.com"
     tls_type: "none"
   }
+  
+  setup: {
+    admin_username: "admin"
+    admin_password: "bA348CgffTnPg0L"
+    admin_email: "admin@defadb.com"
+    site_name: "DEFA DEBATE"
+  }
+  
+  # 이메일 인증 활성화
+  registration_mode: "RequireApplication"
+  require_email_verification: true
+  application_email_admins: true
+  
   federation: {
     enabled: false
+  }
+  
+  # 보안 설정
+  captcha: {
+    enabled: true
+    difficulty: "medium"
+  }
+  
+  # 추가 보안 설정
+  rate_limit: {
+    message: 180
+    message_per_second: 60
+    post: 6
+    post_per_second: 600
+    register: 3
+    register_per_second: 3600
+    image: 6
+    image_per_second: 3600
+    comment: 6
+    comment_per_second: 600
+    search: 60
+    search_per_second: 600
   }
 }

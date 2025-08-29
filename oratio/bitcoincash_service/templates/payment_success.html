@@ -3,50 +3,218 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Successful</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Payment Complete - defadb</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; padding-top: 50px; }
-        .success-container { text-align: center; max-width: 600px; margin: 0 auto; }
-        .success-icon { font-size: 4em; color: #28a745; margin-bottom: 20px; }
-        .message { margin-top: 20px; font-size: 1.5em; color: #28a745; font-weight: bold; }
-        .details { margin-top: 30px; color: #555; }
-        .btn-primary { margin-top: 30px; }
-        .credit-info { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 25px; border-left: 4px solid #28a745; }
+        :root {
+            --bs-primary: #007bff;
+            --bs-success: #28a745;
+            --bs-danger: #dc3545;
+            --bs-warning: #ffc107;
+            --bs-info: #17a2b8;
+            --bs-light: #f8f9fa;
+            --bs-dark: #343a40;
+            --bs-gray: #6c757d;
+        }
+        
+        body {
+            background-color: var(--bs-light);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow-y: scroll;
+        }
+        
+        .navbar-like {
+            background-color: var(--bs-success);
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .site-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+        }
+        
+        .success-container {
+            text-align: center;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .success-icon {
+            font-size: 5rem;
+            color: var(--bs-success);
+            margin-bottom: 1.5rem;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .card {
+            border: 1px solid rgba(0,0,0,.125);
+            border-radius: 0.5rem;
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-header {
+            background-color: var(--bs-success);
+            color: white;
+            border-bottom: 1px solid rgba(0,0,0,.125);
+            padding: 1.5rem;
+        }
+        
+        .message {
+            margin-top: 1rem;
+            font-size: 2rem;
+            color: var(--bs-success);
+            font-weight: 700;
+        }
+        
+        .details {
+            margin-top: 2rem;
+            text-align: left;
+        }
+        
+        .detail-item {
+            background-color: white;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            border: 1px solid #dee2e6;
+            margin-bottom: 1rem;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: var(--bs-dark);
+            margin-bottom: 0.5rem;
+        }
+        
+        .detail-value {
+            color: var(--bs-gray);
+            word-break: break-all;
+        }
+        
+        .btn-primary {
+            background-color: var(--bs-primary);
+            border-color: var(--bs-primary);
+            padding: 0.75rem 2rem;
+            font-size: 1.1rem;
+        }
+        
+        .btn-success {
+            background-color: var(--bs-success);
+            border-color: var(--bs-success);
+        }
+        
+        .credit-info {
+            background: linear-gradient(135deg, #e8f5e8 0%, #f0f9f0 100%);
+            padding: 2rem;
+            border-radius: 0.5rem;
+            margin-top: 2rem;
+            border-left: 4px solid var(--bs-success);
+        }
+        
+        .credit-info h3 {
+            color: var(--bs-success);
+            margin-bottom: 1rem;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
     </style>
 </head>
 <body>
+    <!-- 네비게이션 바 -->
+    <div class="navbar-like">
+        <div class="container">
+            <a href="https://defadb.com/" class="site-title">defadb</a>
+        </div>
+    </div>
+
     <div class="container">
         <div class="success-container">
-            <div class="success-icon">✓</div>
-            <h1 class="message">결제가 완료되었습니다!</h1>
-            
-            <div class="details">
-                <p>인보이스 ID: <span id="invoice-id">{{ invoice_id }}</span></p>
-                {% if tx_hash %}
-                <p>트랜잭션 ID: 
-                    <a href="https://blockchair.com/bitcoin-cash/transaction/{{ tx_hash }}" target="_blank" 
-                       class="text-break" style="word-wrap: break-word; max-width: 500px; display: inline-block;">
-                       {{ tx_hash }}
-                    </a>
-                    <br>
-                    <small class="text-muted">(Blockchair에서 트랜잭션 상세 보기)</small>
-                </p>
-                {% endif %}
-                {% if amount %}
-                <p>결제 금액: {{ amount }} BCH</p>
-                {% endif %}
+            <div class="card">
+                <div class="card-header">
+                    <div class="success-icon">✅</div>
+                    <h1 class="message mb-0">Payment Successfully Completed!</h1>
+                </div>
+                <div class="card-body">
+                    <!-- Non-Refundable Policy Reconfirmation -->
+                    <div class="alert alert-success mb-4">
+                        <h5 class="alert-heading">🎉 Payment Complete</h5>
+                        <p class="mb-0">Bitcoin Cash payment successfully confirmed on the blockchain.</p>
+                    </div>
+                    
+                    <div class="details">
+                        <div class="detail-item">
+                            <div class="detail-label">Invoice ID</div>
+                            <div class="detail-value">{{ invoice_id }}</div>
+                        </div>
+                        
+                        {% if tx_hash %}
+                        <div class="detail-item">
+                            <div class="detail-label">Transaction Hash</div>
+                            <div class="detail-value">
+                                <a href="https://blockchair.com/bitcoin-cash/transaction/{{ tx_hash }}" 
+                                   target="_blank" class="text-primary">
+                                   {{ tx_hash }}
+                                </a>
+                                <br>
+                                <small class="text-muted">View transaction details on Blockchair</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if amount %}
+                        <div class="detail-item">
+                            <div class="detail-label">Payment Amount</div>
+                            <div class="detail-value"><strong>{{ amount }} BCH</strong></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if user_id and credit_added %}
+                    <div class="credit-info">
+                        <h3>💰 Account Credit Added Successfully</h3>
+                        <p class="mb-2"><strong>{{ amount }} BCH</strong> has been successfully added to your account.</p>
+                        <p class="mb-0">Current credit balance: <strong>{{ total_credit }} BCH</strong></p>
+                        
+                        {% if total_credit >= 0.035 %}
+                        <div class="alert alert-success mt-3 mb-0">
+                            <h6 class="alert-heading">🎉 Premium Benefits Activated!</h6>
+                            <p class="mb-0 small">With 0.0003 BCH or more, ads are removed from the entire site. Enjoy clean browsing.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Non-Refundable Policy Reminder -->
+                    <div class="alert alert-warning mt-4">
+                        <small>
+                            <strong>📌 Important Notes:</strong><br>
+                            • This payment is non-refundable<br>
+                            • Keep the transaction hash as payment proof<br>
+                            • Ad removal benefits apply when holding 0.0003 BCH or more<br>
+                            • Contact defadb customer support for inquiries
+                        </small>
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <a href="https://defadb.com/" class="btn btn-primary btn-lg me-3">Go to defadb</a>
+                        <a href="/" class="btn btn-outline-secondary">Payment Service Home</a>
+                    </div>
+                </div>
             </div>
-            
-            {% if user_id and credit_added %}
-            <div class="credit-info">
-                <h3>계정에 크레딧이 추가되었습니다!</h3>
-                <p>{{ amount }} BCH가 사용자 계정에 성공적으로 추가되었습니다.</p>
-                <p>현재 보유 크레딧: {{ total_credit }} BCH</p>
-            </div>
-            {% endif %}
-            
-            <a href="/" class="btn btn-primary">홈으로 돌아가기</a>
         </div>
     </div>
 </body>

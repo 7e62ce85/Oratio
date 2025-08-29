@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Cash Payment - defadb</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bs-primary: #007bff;
+            --bs-success: #28a745;
+            --bs-danger: #dc3545;
+            --bs-warning: #ffc107;
+            --bs-info: #17a2b8;
+            --bs-light: #f8f9fa;
+            --bs-dark: #343a40;
+            --bs-gray: #6c757d;
+        }
+        
+        body {
+            background-color: var(--bs-light);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow-y: scroll;
+        }
+        
+        .navbar-like {
+            background-color: var(--bs-primary);
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .site-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+        }
+        
+        .container {
+            max-width: 900px;
+        }
+        
+        .card {
+            border: 1px solid rgba(0,0,0,.125);
+            border-radius: 0.375rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        
+        .card-header {
+            background-color: var(--bs-primary);
+            color: white;
+            border-bottom: 1px solid rgba(0,0,0,.125);
+            padding: 1rem 1.25rem;
+        }
+
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: white;
+            border-radius: 0.375rem;
+            border: 2px dashed #dee2e6;
+        }
+
+        .verification-container {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .progress {
+            height: 25px;
+        }
+        
+        .payment-address-container {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            border: 1px solid #dee2e6;
+        }
+        
+        .status-badge {
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+        }
+        
+        .alert-danger {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .alert-warning {
+            background-color: #fff3cd;
+            border-color: #ffecb5;
+            color: #856404;
+        }
+        
+        .alert-info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        
+        .invoice-details {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid #dee2e6;
+            margin-bottom: 1.5rem;
+        }
+        
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f1f3f4;
+        }
+        
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: var(--bs-dark);
+        }
+        
+        .detail-value {
+            color: var(--bs-gray);
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <!-- 네비게이션 바 -->
+    <div class="navbar-like">
+        <div class="container">
+            <a href="https://defadb.com/" class="site-title">defadb</a>
+        </div>
+    </div>
+
+    <div class="container mt-3">
+        <div class="row">
+            <div class="col-lg-8 offset-lg-2">
+                <!-- Non-Refundable Policy Warning -->
+                <div class="alert alert-danger mb-4">
+                    <h5 class="alert-heading"><strong>⚠️ Non-Refundable Policy</strong></h5>
+                    <p class="mb-1"><strong>All payments are non-refundable.</strong> Please verify the amount and address before payment.</p>
+                    <p class="mb-0">Due to blockchain characteristics, sent cryptocurrency cannot be reversed.</p>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">
+                            <span class="me-3">Bitcoin Cash Payment</span>
+                            <span class="badge status-badge 
+                                {% if invoice.status == 'completed' %}bg-success
+                                {% elif invoice.status == 'paid' %}bg-info
+                                {% elif invoice.status == 'expired' %}bg-danger
+                                {% else %}bg-warning{% endif %}">
+                                {% if invoice.status == 'completed' %}Payment Complete
+                                {% elif invoice.status == 'paid' %}Payment Confirmed
+                                {% elif invoice.status == 'expired' %}Expired
+                                {% else %}Awaiting Payment{% endif %}
+                            </span>
+                        </h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- Invoice Details -->
+                        <div class="invoice-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Invoice ID</span>
+                                <span class="detail-value" id="invoice-id">{{ invoice.invoice_id }}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Payment Amount</span>
+                                <span class="detail-value"><strong>{{ invoice.amount }} BCH</strong></span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status</span>
+                                <span class="detail-value" id="payment-status">
+                                    {% if invoice.status == 'completed' %}Payment Complete
+                                    {% elif invoice.status == 'paid' %}Payment Confirmed
+                                    {% elif invoice.status == 'expired' %}Expired
+                                    {% else %}Awaiting Payment{% endif %}
+                                </span>
+                            </div>
+                            {% if invoice.tx_hash %}
+                            <div class="detail-row">
+                                <span class="detail-label">Transaction Hash</span>
+                                <span class="detail-value">
+                                    <a href="https://blockchair.com/bitcoin-cash/transaction/{{ invoice.tx_hash }}" 
+                                       target="_blank" class="text-primary">{{ invoice.tx_hash[:16] }}...</a>
+                                </span>
+                            </div>
+                            {% endif %}
+                            {% if invoice.confirmations is not none %}
+                            <div class="detail-row">
+                                <span class="detail-label">Network Confirmations</span>
+                                <span class="detail-value">
+                                    <span id="confirmations">{{ invoice.confirmations }}</span> / {{ min_confirmations }} confirmations
+                                </span>
+                            </div>
+                            {% endif %}
+                            <div class="detail-row">
+                                <span class="detail-label">Expiry Time</span>
+                                <span class="detail-value">{{ formatted_expiry }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Payment Instructions -->
+                        <div class="alert alert-info">
+                            <strong>📱 Payment Method:</strong> Send exactly <strong>{{ invoice.amount }} BCH</strong> to the address below.
+                        </div>
+
+                        <!-- Payment Address -->
+                        <div class="payment-address-container mb-4">
+                            <label class="form-label fw-bold">Payment Address</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control font-monospace" value="{{ invoice.payment_address }}"
+                                    id="payment-address" readonly>
+                                <button class="btn btn-outline-primary" type="button" onclick="copyAddress()">
+                                    <span id="copy-text">Copy</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- QR Code -->
+                        <div class="qr-container">
+                            <h6 class="text-muted mb-3">Easy Payment with QR Code</h6>
+                            <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code" class="img-fluid" style="max-width: 300px;">
+                            <p class="text-muted mt-2 small">Scan the QR code with your wallet app to make payment</p>
+                        </div>
+
+                        <!-- Payment Confirmation Button -->
+                        <div id="payment-controls" class="d-grid gap-2 mt-4">
+                            <button id="check-button" class="btn btn-primary btn-lg" onclick="checkPayment()">
+                                🔄 Check Payment Status
+                            </button>
+                            <button id="verify-button" class="btn btn-info" onclick="startVerification()"
+                                style="display:none;">
+                                ⚡ Start Browser Payment Verification
+                            </button>
+                        </div>
+
+                        <!-- Additional Information -->
+                        <div class="mt-4">
+                            <div class="alert alert-warning">
+                                <small>
+                                    <strong>📌 Information:</strong><br>
+                                    • Payment confirmation may take 10-30 minutes<br>
+                                    • Network fees are paid by the sender<br>
+                                    • Payment will not be recognized if the exact amount is not sent
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Work Proof UI -->
+                        <div id="verification-container" class="verification-container">
+                            <div class="card mt-4">
+                                <div class="card-body">
+                                    <h6 class="card-title">🔐 Browser Payment Verification</h6>
+                                    <p class="text-muted small">If payment is not confirmed on the blockchain, you can verify payment through browser proof-of-work.</p>
+
+                                    <div class="alert alert-secondary">
+                                        <p id="verification-status" class="mb-0">Waiting...</p>
+                                    </div>
+
+                                    <div class="progress">
+                                        <div id="verification-progress"
+                                            class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                                            style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+
+                                    <p class="text-muted mt-2 small">This process takes about 1 minute. Please do not close your browser.</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Bottom Links -->
+                        <div class="text-center mt-4">
+                            <a href="/" class="btn btn-outline-secondary">Return to Main</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/sha256.js"></script>
+    <script src="/static/js/payment-verifier.js"></script>
+    <script>
+        let verifier = null;
+        let checkCount = 0;
+
+        function copyAddress() {
+            const addressInput = document.getElementById('payment-address');
+            const copyText = document.getElementById('copy-text');
+            
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(addressInput.value).then(function() {
+                    copyText.textContent = 'Copied!';
+                    setTimeout(() => {
+                        copyText.textContent = 'Copy';
+                    }, 2000);
+                }).catch(function() {
+                    fallbackCopy();
+                });
+            } else {
+                fallbackCopy();
+            }
+            
+            function fallbackCopy() {
+                addressInput.select();
+                document.execCommand('copy');
+                copyText.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyText.textContent = 'Copy';
+                }, 2000);
+            }
+        }
+
+        async function checkPayment() {
+            const invoiceId = document.getElementById('invoice-id').textContent;
+            const checkButton = document.getElementById('check-button');
+            const verifyButton = document.getElementById('verify-button');
+            const statusElement = document.getElementById('payment-status');
+            const confirmationsElement = document.getElementById('confirmations');
+            const currentStatus = statusElement.textContent;
+
+            checkButton.disabled = true;
+            checkButton.innerHTML = '🔄 Checking...';
+
+            try {
+                const response = await fetch(`/check_payment/${invoiceId}`);
+                const data = await response.json();
+
+                // Update status and confirmations
+                if (data.status !== currentStatus) {
+                    // Refresh page if status changed
+                    if ((currentStatus === 'pending' && data.status === 'paid') || 
+                        data.status === 'completed') {
+                        console.log(`Status change detected: ${currentStatus} -> ${data.status}, refreshing page...`);
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1000);
+                    }
+                }
+                
+                if (data.status === 'completed') {
+                    statusElement.textContent = 'Payment Complete';
+                } else if (data.status === 'paid') {
+                    statusElement.textContent = 'Payment Confirmed';
+                } else if (data.status === 'expired') {
+                    statusElement.textContent = 'Expired';
+                } else {
+                    statusElement.textContent = 'Awaiting Payment';
+                }
+                
+                if (data.confirmations !== undefined && confirmationsElement) {
+                    confirmationsElement.textContent = data.confirmations;
+                }
+
+                // Status-based processing
+                if (data.status === 'completed') {
+                    checkButton.innerHTML = '✅ Payment Complete!';
+                    checkButton.className = 'btn btn-success btn-lg';
+                    // Navigate to payment success page
+                    setTimeout(() => {
+                        window.location.href = `/payment_success/${invoiceId}`;
+                    }, 2000);
+                } else if (data.status === 'paid') {
+                    checkButton.innerHTML = '⏳ Waiting for Network Confirmation...';
+                    checkButton.className = 'btn btn-info btn-lg';
+                    checkButton.disabled = false;
+                    // Navigate to payment success page if enough confirmations
+                    if (data.confirmations >= {{ min_confirmations }}) {
+                        setTimeout(() => {
+                            window.location.href = `/payment_success/${invoiceId}`;
+                        }, 2000);
+                    }
+                } else if (data.status === 'expired') {
+                    checkButton.innerHTML = '❌ Payment Expired';
+                    checkButton.className = 'btn btn-danger btn-lg';
+                } else {
+                    // pending status
+                    checkButton.innerHTML = '🔄 Check Payment Status';
+                    checkButton.disabled = false;
+
+                    // Show proof of work button after multiple checks
+                    checkCount++;
+                    if (checkCount >= 3) {
+                        verifyButton.style.display = 'block';
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking payment:', error);
+                checkButton.innerHTML = '❌ Check Failed, Retry';
+                checkButton.disabled = false;
+            }
+        }
+
+        function startVerification() {
+            const invoiceId = document.getElementById('invoice-id').textContent;
+            const userToken = Math.floor(Date.now() / 1000).toString();
+            const verificationContainer = document.getElementById('verification-container');
+
+            // Show UI
+            verificationContainer.style.display = 'block';
+            document.getElementById('check-button').style.display = 'none';
+            document.getElementById('verify-button').style.display = 'none';
+
+            // Start proof of work
+            verifier = new PaymentVerifier(invoiceId, userToken, 4); // Difficulty 4
+            verifier.startProofOfWork();
+        }
+
+        // Auto status check after page load
+        window.onload = function () {
+            // Check immediately
+            checkPayment();
+
+            // Periodic auto check
+            setInterval(checkPayment, 10000); // Check every 10 seconds
+        };
+    </script>
+</body>
+</html>

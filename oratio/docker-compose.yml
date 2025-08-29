@@ -15,8 +15,8 @@ services:
       - ./nginx_production.conf:/etc/nginx/nginx.conf:ro,Z
       - ./proxy_params:/etc/nginx/proxy_params:ro,Z
       - ./nginx/js:/etc/nginx/js:ro,Z
-      # 자체 서명 SSL 인증서 마운트
-      - ./ssl-certs:/etc/ssl/certs:ro,Z
+      # Let's Encrypt SSL 인증서 마운트
+      - /etc/letsencrypt:/etc/letsencrypt:ro,Z
     restart: always
     logging: *default-logging
     depends_on:
@@ -35,6 +35,8 @@ services:
     depends_on:
       - postgres
       - pictrs
+    env_file:
+      - .env
 
   lemmy-ui:
     # Using our custom built image with thumbnail fix and debug
@@ -109,12 +111,18 @@ services:
   postfix:
     image: docker.io/mwader/postfix-relay
     environment:
-      # 로컬 개발 환경용
-      - POSTFIX_myhostname=localhost
-      # 실제 도메인용 (주석 처리)
-      # - POSTFIX_myhostname=defadb.com
+      # 실제 도메인으로 변경됨
+      - POSTFIX_myhostname=defadb.com
+      - POSTFIX_mydomain=defadb.com
+      - POSTFIX_myorigin=defadb.com
+      - POSTFIX_inet_interfaces=all
+      - POSTFIX_inet_protocols=ipv4
+      # SPF, DKIM 설정을 위한 추가 설정
+      - POSTFIX_message_size_limit=10240000
     restart: "always"
     logging: *default-logging
+    env_file:
+      - .env
 
   # BitcoinCash 결제 서비스
   bitcoincash-service:
@@ -153,6 +161,24 @@ services:
       - 8.8.4.4
     networks:
       - default
+
+  # 이메일 서비스 (SMTP 포트 차단 우회)
+  email-service:
+    build:
+      context: ./email-service
+      dockerfile: Dockerfile
+    container_name: email-service
+    restart: always
+    environment:
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - SMTP_FROM_ADDRESS=${SMTP_FROM_ADDRESS}
+    ports:
+      - "1025:1025"  # SMTP 프록시 포트
+      - "8025:8025"  # HTTP API 포트
+    networks:
+      - default
+    env_file:
+      - .env
 
   # Electron Cash 지갑 서비스
   electron-cash:

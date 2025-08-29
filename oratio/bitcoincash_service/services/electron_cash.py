@@ -828,32 +828,45 @@ def setup_electron_cash_auth():
 
 def init_electron_cash():
     """ElectronCash 초기화"""
-    
-    if not EC_AVAILABLE:
-        logger.warning("ElectronCash 모듈을 사용할 수 없어 초기화를 건너뜁니다.")
+    logger.info("ElectronCash 초기화 중...")
+    try:
+        # Mock 모드에서는 실제 초기화를 건너뜀
+        if MOCK_MODE:
+            logger.info("Mock 모드 활성화됨: ElectronCash 초기화 건너뜀")
+            return True
+            
+        try:
+            # ElectronCash Python 라이브러리 초기화 시도
+            from electroncash import SimpleConfig, Network, Wallet
+            logger.info("ElectronCash 모듈 로드 성공")
+        except ImportError as e:
+            logger.error(f"ElectronCash 초기화 오류: {e}")
+            logger.info("ElectronCash 클라이언트를 사용한 RPC 호출을 시도합니다.")
+        
+        # 지갑 연결 테스트 - 더 안정적인 방법으로 수정
+        logger.info("ElectronCash 연결 테스트 중...")
+        
+        # 간단한 연결 테스트부터 시작
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = electron_cash.call_method("getbalance")
+                if result is not None:
+                    logger.info(f"ElectronCash 연결 성공 (시도 {attempt + 1}): 잔액 {result}")
+                    return True
+                else:
+                    logger.warning(f"ElectronCash 연결 시도 {attempt + 1} 실패, 재시도 중...")
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+            except Exception as e:
+                logger.warning(f"ElectronCash 연결 시도 {attempt + 1} 오류: {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+        
+        logger.error("ElectronCash 연결 실패")
         return False
         
-    try:
-        logger.info("ElectronCash 초기화 중...")
-        # 환경 설정
-        from electroncash.simple_config import SimpleConfig
-        from electroncash.daemon import Daemon
-        from electroncash.wallet import Wallet
-        
-        config = SimpleConfig()
-        config.set_key('server', ELECTRON_CASH_URL)
-        config.set_key('rpcuser', ELECTRON_CASH_USER)
-        config.set_key('rpcpassword', ELECTRON_CASH_PASSWORD)
-        
-        # 데몬 초기화
-        electron_cash_instance = Daemon(config)
-        
-        # 지갑 로드
-        wallet_path = config.get('wallet_path', 'default_wallet')
-        electron_cash_wallet = Wallet(wallet_path, config)
-        
-        logger.info("ElectronCash 초기화 완료")
-        return True
     except Exception as e:
         logger.error(f"ElectronCash 초기화 오류: {str(e)}")
         return False

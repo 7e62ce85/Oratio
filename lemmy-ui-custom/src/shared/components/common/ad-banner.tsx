@@ -172,7 +172,7 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
     return `
       <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 15px; border-radius: 8px; text-align: center; color: white; font-family: Arial, sans-serif;">
         <h3 style="margin: 0 0 10px 0; font-size: 18px;">🏠 환영합니다!</h3>
-        <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">오라티오 커뮤니티에서 다양한 정보를 공유하세요</p>
+        <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">대파토론 커뮤니티에서 다양한 정보를 공유해</p>
         <a href="#" target="_blank" rel="noopener" onclick="console.log('Home ad clicked')" 
            style="background: #fff; color: #4facfe; padding: 8px 20px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block;">
           더 알아보기
@@ -211,7 +211,7 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
     return `
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; text-align: center; color: white; font-family: Arial, sans-serif;">
         <h3 style="margin: 0 0 10px 0; font-size: 18px;">📰 피드 추천</h3>
-        <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">더 많은 흥미로운 콘텐츠를 발견하세요</p>
+        <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">더 많은 흥미로운 콘텐츠를 발견해</p>
         <a href="#" target="_blank" rel="noopener" onclick="console.log('Feed ad clicked')" 
            style="background: #fff; color: #667eea; padding: 8px 20px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block;">
           콘텐츠 탐색
@@ -224,7 +224,7 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
     return `
       <div style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); padding: 12px; border-radius: 8px; text-align: center; color: #333; font-family: Arial, sans-serif;">
         <h3 style="margin: 0 0 8px 0; font-size: 16px;">💬 토론 참여</h3>
-        <p style="margin: 0 0 12px 0; font-size: 13px; opacity: 0.8;">의견을 나누고 소통하세요</p>
+        <p style="margin: 0 0 12px 0; font-size: 13px; opacity: 0.8;">의견을 나누고 소통해</p>
         <a href="#" target="_blank" rel="noopener" onclick="console.log('Comments ad clicked')" 
            style="background: #333; color: #fff; padding: 6px 16px; border-radius: 4px; text-decoration: none; font-weight: bold; display: inline-block; font-size: 12px;">
           참여하기
@@ -237,7 +237,7 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
     return `
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; text-align: center; color: white; font-family: Arial, sans-serif;">
         <h3 style="margin: 0 0 10px 0; font-size: 18px;">🚀 특별 혜택!</h3>
-        <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">지금 가입하고 무료 크레딧을 받아보세요!</p>
+        <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">지금 가입하고 무료 크레딧을 받아!</p>
         <a href="#" target="_blank" rel="noopener" onclick="console.log('General ad clicked')" 
            style="background: #fff; color: #667eea; padding: 8px 20px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block;">
           자세히 보기
@@ -267,18 +267,24 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
     if (!this.state.adContent || !this.state.showAd) {
       console.log("[AdBanner] Not rendering - showAd:", this.state.showAd, "adContent:", !!this.state.adContent);
       
-      // 크레딧이 충분해서 광고가 숨겨진 경우 사용자에게 안내
+      // 크레딧이 충분해서 광고가 숨겨진 경우 완전히 사라지게 함 (새로운 방식)
       if (this.state.creditBalance !== null && this.state.creditBalance >= 0.0003) {
-        console.log("[AdBanner] Ad hidden due to sufficient BCH credits:", this.state.creditBalance);
-        return (
-          <div className={`ad-container ad-${position} ad-${size} ${className}`} 
-               style={{ padding: "10px", "text-align": "center", background: "#f8f9fa", border: "1px solid #e9ecef", "border-radius": "6px" }}>
-            <span style={{ color: "#28a745", "font-size": "14px" }} title={`현재 크레딧: ${this.state.creditBalance} BCH`}>
-              ✅ 광고 없는 환경을 즐기고 계십니다! (BCH 크레딧 보유)
-            </span>
-          </div>
-        );
+        console.log("[AdBanner] Ad completely hidden due to sufficient BCH credits:", this.state.creditBalance);
+        return null; // 완전히 사라지게 함
       }
+      
+      // 기존 방식 (주석처리) - 광고 대신 메시지 표시
+      // if (this.state.creditBalance !== null && this.state.creditBalance >= 0.0003) {
+      //   console.log("[AdBanner] Ad hidden due to sufficient BCH credits:", this.state.creditBalance);
+      //   return (
+      //     <div className={`ad-container ad-${position} ad-${size} ${className}`} 
+      //          style={{ padding: "10px", "text-align": "center", background: "#f8f9fa", border: "1px solid #e9ecef", "border-radius": "6px" }}>
+      //       <span style={{ color: "#28a745", "font-size": "14px" }} title={`현재 크레딧: ${this.state.creditBalance} BCH`}>
+      //         ✅ 광고 없는 환경을 즐기고 계십니다! (BCH 크레딧 보유)
+      //       </span>
+      //     </div>
+      //   );
+      // }
       
       return null;
     }
