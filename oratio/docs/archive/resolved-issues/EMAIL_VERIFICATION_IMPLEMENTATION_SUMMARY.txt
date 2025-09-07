@@ -32,7 +32,7 @@ Oratio Forum - 이메일 인증 시스템 구현 완료 보고서
 
 [⚙️ 핵심 설정]
 환경변수 (.env):
-   - RESEND_API_KEY=re_ZKD2wAGP_JK7JSCijcmRw4nQN7jghunYE
+   - RESEND_API_KEY=
    - SMTP_FROM_ADDRESS=noreply@defadb.com
    - SMTP_SERVER=email-service:1025
 

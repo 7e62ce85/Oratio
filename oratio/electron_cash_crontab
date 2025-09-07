@@ -1,6 +1,6 @@
 # ElectronCash 자동 헬스 체크 및 재시작
-# 매 5분마다 실행하여 연결 상태 확인 및 자동 복구
-*/5 * * * * /opt/khankorean/oratio/health_check_and_restart.sh
+# 매 60분마다 실행하여 연결 상태 확인 및 자동 복구
+*/60 * * * * /opt/khankorean/oratio/health_check_and_restart.sh
 
 # 매일 오전 3시에 예방적 재시작 (시스템 부하가 적은 시간)
 0 3 * * * cd /opt/khankorean/oratio && docker compose restart electron-cash && sleep 15 && docker compose restart bitcoincash-service

@@ -37,7 +37,7 @@ test_electron_cash_connection() {
 # BCH 서비스 워커 타임아웃 체크
 check_worker_timeout() {
     # 최근 5분간 워커 타임아웃 오류 확인
-    timeout_count=$(docker compose logs --since="5m" bitcoincash-service 2>/dev/null | grep -c "WORKER TIMEOUT" 2>/dev/null || echo "0")
+    timeout_count=$(docker compose logs --since="60m" bitcoincash-service 2>/dev/null | grep -c "WORKER TIMEOUT" 2>/dev/null || echo "0")
     
     # 숫자 검증
     if ! [[ "$timeout_count" =~ ^[0-9]+$ ]]; then
