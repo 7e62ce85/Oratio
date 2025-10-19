@@ -1,12 +1,12 @@
-# defadb.com 프로덕션 배포 가이드
+# oratio.space 프로덕션 배포 가이드
 
 ## 📋 개요
-이 문서는 Rust-Lemmy + BCH Payment 시스템을 `defadb.com` 도메인으로 프로덕션 배포하는 완전한 가이드입니다.
+이 문서는 Rust-Lemmy + BCH Payment 시스템을 `oratio.space` 도메인으로 프로덕션 배포하는 완전한 가이드입니다.
 
 ## 🎯 배포 완료 현황 (2025-07-13)
 
 ### ✅ 성공적으로 완료된 항목
-- **도메인 전환**: `khankorean.com` → `defadb.com`
+- **도메인 전환**: `khankorean.com` → `oratio.space`
 - **SSL 인증서**: Let's Encrypt 정식 인증서 적용
 - **서비스 안정화**: 7개 컨테이너 모두 정상 동작
 - **BCH 결제 시스템**: 실제 거래 처리 중
@@ -14,9 +14,9 @@
 ### 🌐 서비스 URL
 | 서비스 | URL | 상태 |
 |--------|-----|------|
-| 메인 사이트 | https://defadb.com | ✅ 운영 중 |
-| WWW 리다이렉션 | https://www.defadb.com | ✅ 정상 |
-| 결제 서비스 | https://payments.defadb.com | ✅ 정상 |
+| 메인 사이트 | https://oratio.space | ✅ 운영 중 |
+| WWW 리다이렉션 | https://www.oratio.space | ✅ 정상 |
+| 결제 서비스 | https://payments.oratio.space | ✅ 정상 |
 
 ## 🏗️ 시스템 아키텍처
 
@@ -52,11 +52,11 @@
 ## 🔧 주요 변경사항
 
 ### 1. 도메인 및 URL 변경
-| 기존 (localhost) | 변경 후 (defadb.com) |
+| 기존 (localhost) | 변경 후 (oratio.space) |
 |------------------|----------------------|
-| http://localhost | https://defadb.com |
-| http://localhost:8081 | https://payments.defadb.com |
-| localhost:8081/api/user_credit | payments.defadb.com/api/user_credit |
+| http://localhost | https://oratio.space |
+| http://localhost:8081 | https://payments.oratio.space |
+| localhost:8081/api/user_credit | payments.oratio.space/api/user_credit |
 
 ### 2. SSL/HTTPS 활성화
 - HTTP에서 HTTPS로 자동 리다이렉션
@@ -66,21 +66,21 @@
 ### 3. 환경변수 업데이트
 ```bash
 # 주요 환경변수 변경
-LEMMY_UI_LEMMY_EXTERNAL_HOST=defadb.com
+LEMMY_UI_LEMMY_EXTERNAL_HOST=oratio.space
 LEMMY_UI_HTTPS=true
-LEMMY_BCH_API_URL=https://payments.defadb.com/api/user_credit
-LEMMY_BCH_PAYMENT_URL=https://payments.defadb.com/
+LEMMY_BCH_API_URL=https://payments.oratio.space/api/user_credit
+LEMMY_BCH_PAYMENT_URL=https://payments.oratio.space/
 ```
 
 ## 📁 변경된 파일들
 
 ### 1. 핵심 설정 파일
-- `lemmy.hjson`: hostname을 defadb.com으로 변경, 이메일 주소 업데이트
+- `lemmy.hjson`: hostname을 oratio.space으로 변경, 이메일 주소 업데이트
 - `docker-compose.yml`: 환경변수를 실제 도메인으로 업데이트, SSL 인증서 마운트 활성화
 - `nginx_production.conf`: 프로덕션용 nginx 설정 (SSL 지원)
 
 ### 2. 빌드 및 스크립트
-- `webpack.config.js`: BCH 서비스 URL을 https://payments.defadb.com으로 변경
+- `webpack.config.js`: BCH 서비스 URL을 https://payments.oratio.space으로 변경
 - `refresh_passwords.sh`: BCH API URL 업데이트
 - `nginx/js/bch-payment-button.js`: 결제 버튼 URL을 실제 도메인으로 변경
 
@@ -102,9 +102,9 @@ LEMMY_BCH_PAYMENT_URL=https://payments.defadb.com/
 #### 도메인 DNS 설정
 ```bash
 # DNS 레코드 설정 (도메인 관리 패널에서)
-defadb.com           A    [서버 IP]
-www.defadb.com       A    [서버 IP]
-payments.defadb.com  A    [서버 IP]
+oratio.space           A    [서버 IP]
+www.oratio.space       A    [서버 IP]
+payments.oratio.space  A    [서버 IP]
 ```
 
 ### 2. 배포 실행
@@ -161,13 +161,13 @@ docker-compose ps
 #### 웹사이트 접속 테스트
 ```bash
 # SSL 인증서 확인
-curl -I https://defadb.com
+curl -I https://oratio.space
 
 # 결제 서비스 확인
-curl -I https://payments.defadb.com
+curl -I https://payments.oratio.space
 
 # BCH API 테스트
-curl https://payments.defadb.com/health
+curl https://payments.oratio.space/health
 ```
 
 ## 🔧 문제 해결
@@ -184,7 +184,7 @@ curl https://payments.defadb.com/health
 sudo chown -R 991:991 volumes/pictrs
 
 # 2. SSL 인증서 확인
-ls -la /etc/letsencrypt/live/defadb.com/
+ls -la /etc/letsencrypt/live/oratio.space/
 
 # 3. nginx 설정 검증
 docker-compose exec proxy nginx -t
@@ -314,8 +314,8 @@ docker-compose start bitcoincash-service
 - [ ] 서비스 상태 확인
 
 ### 배포 후 검증 ✅
-- [ ] https://defadb.com 접속 확인
-- [ ] https://payments.defadb.com 접속 확인
+- [ ] https://oratio.space 접속 확인
+- [ ] https://payments.oratio.space 접속 확인
 - [ ] BCH 결제 기능 테스트
 - [ ] 이메일 발송 기능 테스트
 - [ ] SSL 인증서 브라우저 확인
@@ -333,7 +333,7 @@ docker-compose start bitcoincash-service
 ### 기술 지원
 - **GitHub Issues**: 버그 리포트 및 기능 요청
 - **Discord**: 실시간 기술 지원
-- **Email**: admin@defadb.com
+- **Email**: admin@oratio.space
 
 ### 긴급 상황 대응
 1. **서비스 장애**: 즉시 롤백 프로세스 실행
@@ -344,5 +344,5 @@ docker-compose start bitcoincash-service
 
 **마지막 업데이트**: 2025-09-07  
 **문서 버전**: v2.0  
-**배포 환경**: Production (defadb.com)  
+**배포 환경**: Production (oratio.space)  
 **SSL 만료일**: 2025-10-11

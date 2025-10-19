@@ -16,7 +16,7 @@ Permission denied (os error 13): /mnt/sled-repo
 
 ### 2. nginx proxy 서비스 재시작 문제
 ```
-nginx: [emerg] cannot load certificate "/etc/letsencrypt/live/defadb.com/fullchain.pem"
+nginx: [emerg] cannot load certificate "/etc/letsencrypt/live/oratio.space/fullchain.pem"
 ```
 - SSL 인증서 파일을 찾을 수 없음
 - HTTPS 접속 불가
@@ -47,17 +47,17 @@ ls -la volumes/pictrs/
 # SSL 인증서 디렉토리 생성
 mkdir -p ssl-certs
 
-# defadb.com용 자체 서명 인증서
+# oratio.space용 자체 서명 인증서
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout ssl-certs/privkey.pem \
   -out ssl-certs/fullchain.pem \
-  -subj "/C=KR/ST=Seoul/L=Seoul/O=DefaDB/CN=defadb.com"
+  -subj "/C=KR/ST=Seoul/L=Seoul/O=oratio/CN=oratio.space"
 
-# payments.defadb.com용 자체 서명 인증서
+# payments.oratio.space용 자체 서명 인증서
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout ssl-certs/payments-privkey.pem \
   -out ssl-certs/payments-fullchain.pem \
-  -subj "/C=KR/ST=Seoul/L=Seoul/O=DefaDB/CN=payments.defadb.com"
+  -subj "/C=KR/ST=Seoul/L=Seoul/O=oratio/CN=payments.oratio.space"
 ```
 
 ### 5단계: nginx 설정 수정
@@ -85,12 +85,12 @@ ssl_certificate_key /etc/ssl/certs/payments-privkey.pem;
 ```bash
 # Let's Encrypt 인증서 발급
 sudo certbot certonly --standalone --agree-tos \
-  --email admin@defadb.com --no-eff-email \
-  -d defadb.com -d www.defadb.com
+  --email admin@oratio.space --no-eff-email \
+  -d oratio.space -d www.oratio.space
 
 sudo certbot certonly --standalone --agree-tos \
-  --email admin@defadb.com --no-eff-email \
-  -d payments.defadb.com
+  --email admin@oratio.space --no-eff-email \
+  -d payments.oratio.space
 
 # nginx 설정을 Let's Encrypt 경로로 변경
 # docker-compose.yml 볼륨 마운트:
@@ -98,8 +98,8 @@ volumes:
   - /etc/letsencrypt:/etc/letsencrypt:ro,Z
 
 # nginx_production.conf 경로:
-ssl_certificate /etc/letsencrypt/live/defadb.com/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/defadb.com/privkey.pem;
+ssl_certificate /etc/letsencrypt/live/oratio.space/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/oratio.space/privkey.pem;
 ```
 
 ### 7단계: 불필요한 파일 정리
@@ -172,20 +172,20 @@ echo "권한 수정 완료"
 # check_ssl.sh - SSL 인증서 상태 확인
 
 echo "=== SSL 인증서 확인 ==="
-if [ -f "/etc/letsencrypt/live/defadb.com/fullchain.pem" ]; then
-    echo "✅ defadb.com 인증서 존재"
-    openssl x509 -in /etc/letsencrypt/live/defadb.com/fullchain.pem -noout -dates
+if [ -f "/etc/letsencrypt/live/oratio.space/fullchain.pem" ]; then
+    echo "✅ oratio.space 인증서 존재"
+    openssl x509 -in /etc/letsencrypt/live/oratio.space/fullchain.pem -noout -dates
 else
-    echo "❌ defadb.com 인증서 없음"
-    echo "sudo certbot certonly --standalone -d defadb.com 실행 필요"
+    echo "❌ oratio.space 인증서 없음"
+    echo "sudo certbot certonly --standalone -d oratio.space 실행 필요"
 fi
 
-if [ -f "/etc/letsencrypt/live/payments.defadb.com/fullchain.pem" ]; then
-    echo "✅ payments.defadb.com 인증서 존재"
-    openssl x509 -in /etc/letsencrypt/live/payments.defadb.com/fullchain.pem -noout -dates
+if [ -f "/etc/letsencrypt/live/payments.oratio.space/fullchain.pem" ]; then
+    echo "✅ payments.oratio.space 인증서 존재"
+    openssl x509 -in /etc/letsencrypt/live/payments.oratio.space/fullchain.pem -noout -dates
 else
-    echo "❌ payments.defadb.com 인증서 없음"
-    echo "sudo certbot certonly --standalone -d payments.defadb.com 실행 필요"
+    echo "❌ payments.oratio.space 인증서 없음"
+    echo "sudo certbot certonly --standalone -d payments.oratio.space 실행 필요"
 fi
 ```
 
@@ -269,10 +269,10 @@ df -h
 ### 서비스 응답 시간 측정
 ```bash
 # 메인 사이트 응답 시간
-curl -w "@curl-format.txt" -o /dev/null -s https://defadb.com
+curl -w "@curl-format.txt" -o /dev/null -s https://oratio.space
 
 # 결제 서비스 응답 시간
-curl -w "@curl-format.txt" -o /dev/null -s https://payments.defadb.com/health
+curl -w "@curl-format.txt" -o /dev/null -s https://payments.oratio.space/health
 ```
 
 ## 📝 핵심 학습 포인트

@@ -846,26 +846,55 @@ def init_electron_cash():
         # 지갑 연결 테스트 - 더 안정적인 방법으로 수정
         logger.info("ElectronCash 연결 테스트 중...")
         
-        # 간단한 연결 테스트부터 시작
-        import time
+        # 먼저 지갑이 로드되어 있는지 확인하고, 필요시 로드
         max_retries = 3
+        wallet_loaded = False
+        
         for attempt in range(max_retries):
             try:
-                result = electron_cash.call_method("getbalance")
-                if result is not None:
-                    logger.info(f"ElectronCash 연결 성공 (시도 {attempt + 1}): 잔액 {result}")
-                    return True
-                else:
-                    logger.warning(f"ElectronCash 연결 시도 {attempt + 1} 실패, 재시도 중...")
-                    if attempt < max_retries - 1:
+                # getinfo로 데몬 상태 확인
+                info_result = electron_cash.call_method("getinfo")
+                if info_result is not None:
+                    logger.info(f"ElectronCash 데몬 연결 성공 (시도 {attempt + 1})")
+                    
+                    # 지갑 상태 확인 - getbalance로 지갑 로드 여부 확인
+                    balance_result = electron_cash.call_method("getbalance")
+                    if balance_result is not None:
+                        logger.info(f"지갑이 이미 로드됨. 잔액: {balance_result}")
+                        wallet_loaded = True
+                        break
+                    else:
+                        # 지갑이 로드되지 않음 - 로드 시도
+                        logger.info("지갑이 로드되지 않음. 지갑 로드 시도 중...")
+                        load_result = electron_cash.call_method("load_wallet")
+                        logger.info(f"지갑 로드 시도 결과: {load_result}")
+                        
+                        # 로드 후 다시 확인
                         time.sleep(2)
+                        balance_result = electron_cash.call_method("getbalance")
+                        if balance_result is not None:
+                            logger.info(f"지갑 로드 성공! 잔액: {balance_result}")
+                            wallet_loaded = True
+                            break
+                        else:
+                            logger.warning(f"지갑 로드 실패 (시도 {attempt + 1})")
+                else:
+                    logger.warning(f"ElectronCash 데몬 연결 실패 (시도 {attempt + 1})")
+                    
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                    
             except Exception as e:
                 logger.warning(f"ElectronCash 연결 시도 {attempt + 1} 오류: {str(e)}")
                 if attempt < max_retries - 1:
                     time.sleep(2)
         
-        logger.error("ElectronCash 연결 실패")
-        return False
+        if wallet_loaded:
+            logger.info("ElectronCash 초기화 완료 - 지갑 로드됨")
+            return True
+        else:
+            logger.error("ElectronCash 지갑 로드 실패")
+            return False
         
     except Exception as e:
         logger.error(f"ElectronCash 초기화 오류: {str(e)}")

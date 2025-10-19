@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# 프로덕션 배포 스크립트 - defadb.com
+# 프로덕션 배포 스크립트 - oratio.space
 # 로컬호스트에서 실제 도메인으로 전환하는 스크립트
 
-echo "=== defadb.com 프로덕션 배포 시작 ==="
+echo "=== oratio.space 프로덕션 배포 시작 ==="
 
 # 현재 디렉토리 확인
 if [ ! -f "docker-compose.yml" ]; then
@@ -33,7 +33,7 @@ else
 fi
 
 # SSL 인증서 확인
-if [ ! -d "/etc/letsencrypt/live/defadb.com" ]; then
+if [ ! -d "/etc/letsencrypt/live/oratio.space" ]; then
     echo "경고: SSL 인증서가 없습니다."
     echo "먼저 './setup_ssl.sh' 스크립트를 실행하여 SSL 인증서를 발급받으세요."
     echo "또는 HTTP만으로 테스트하려면 nginx 설정에서 SSL 부분을 주석 처리하세요."
@@ -53,8 +53,8 @@ docker-compose ps
 
 echo ""
 echo "=== 배포 완료 ==="
-echo "웹사이트: https://defadb.com"
-echo "결제 서비스: https://payments.defadb.com"
+echo "웹사이트: https://oratio.space"
+echo "결제 서비스: https://payments.oratio.space"
 echo ""
 echo "주의사항:"
 echo "1. DNS 설정이 올바른지 확인하세요."

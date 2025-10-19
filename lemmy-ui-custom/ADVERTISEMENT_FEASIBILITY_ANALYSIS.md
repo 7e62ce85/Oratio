@@ -47,7 +47,7 @@
   - BCH 크레딧 기반 광고 숨김 시스템
   - 위치별 광고 배치 (header, sidebar, footer)
   - 크기별 광고 지원 (large, medium, small)
-  - 0.001 BCH 임계값으로 광고 제거
+  - 0.0003 BCH 임계값으로 광고 제거
 
 - **헤더 광고**: 이미 app.tsx에 통합
   - 728x90 (large) 배너 형태

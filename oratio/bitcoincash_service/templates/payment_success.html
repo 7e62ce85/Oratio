@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Complete - defadb</title>
+    <title>Payment Complete - oratio</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
-            --bs-primary: #007bff;
+            --bs-primary: #667eea;
             --bs-success: #28a745;
             --bs-danger: #dc3545;
             --bs-warning: #ffc107;
@@ -18,63 +18,80 @@
         }
         
         body {
-            background-color: var(--bs-light);
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             overflow-y: scroll;
+            min-height: 100vh;
         }
         
         .navbar-like {
-            background-color: var(--bs-success);
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
             color: white;
-            padding: 1rem 0;
-            margin-bottom: 2rem;
+            padding: 1.5rem 0;
+            margin-bottom: 0;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
         }
         
         .site-title {
-            font-size: 1.5rem;
-            font-weight: 600;
+            font-size: 2rem;
+            font-weight: 700;
             color: white;
             text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+        
+        .site-title:hover {
+            color: #ffecd2;
         }
         
         .success-container {
             text-align: center;
-            max-width: 700px;
+            max-width: 800px;
             margin: 0 auto;
             padding: 2rem;
         }
         
         .success-icon {
-            font-size: 5rem;
-            color: var(--bs-success);
+            font-size: 6rem;
             margin-bottom: 1.5rem;
-            animation: pulse 2s infinite;
+            animation: pulse 2s infinite, bounce 1s ease-out;
         }
         
         @keyframes pulse {
-            0% { transform: scale(1); }
+            0%, 100% { transform: scale(1); }
             50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+        }
+        
+        @keyframes bounce {
+            0% { transform: translateY(-100px); opacity: 0; }
+            50% { transform: translateY(10px); }
+            100% { transform: translateY(0); opacity: 1; }
         }
         
         .card {
-            border: 1px solid rgba(0,0,0,.125);
-            border-radius: 0.5rem;
-            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+            background: white;
+            overflow: hidden;
         }
         
         .card-header {
-            background-color: var(--bs-success);
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
             color: white;
-            border-bottom: 1px solid rgba(0,0,0,.125);
-            padding: 1.5rem;
+            border-bottom: none;
+            padding: 2.5rem 1.5rem;
         }
         
         .message {
             margin-top: 1rem;
             font-size: 2rem;
-            color: var(--bs-success);
+            color: white;
             font-weight: 700;
+        }
+        
+        .card-body {
+            padding: 2rem;
         }
         
         .details {
@@ -83,61 +100,124 @@
         }
         
         .detail-item {
-            background-color: white;
-            padding: 1rem;
-            border-radius: 0.375rem;
-            border: 1px solid #dee2e6;
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            border: none;
             margin-bottom: 1rem;
+            transition: transform 0.2s;
+        }
+        
+        .detail-item:hover {
+            transform: translateX(5px);
         }
         
         .detail-label {
-            font-weight: 600;
+            font-weight: 700;
             color: var(--bs-dark);
             margin-bottom: 0.5rem;
+            font-size: 0.95rem;
         }
         
         .detail-value {
-            color: var(--bs-gray);
+            color: #333;
             word-break: break-all;
+            font-family: monospace;
+            font-size: 0.9rem;
         }
         
         .btn-primary {
-            background-color: var(--bs-primary);
-            border-color: var(--bs-primary);
-            padding: 0.75rem 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 1rem 2.5rem;
             font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1rem rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-lg {
+            padding: 1rem 2.5rem;
         }
         
         .btn-success {
-            background-color: var(--bs-success);
-            border-color: var(--bs-success);
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            border: none;
+        }
+        
+        .btn-outline-secondary {
+            border: 2px solid #6c757d;
+            color: #6c757d;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            padding: 1rem 2rem;
+        }
+        
+        .btn-outline-secondary:hover {
+            background: #6c757d;
+            color: white;
         }
         
         .credit-info {
-            background: linear-gradient(135deg, #e8f5e8 0%, #f0f9f0 100%);
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
             padding: 2rem;
-            border-radius: 0.5rem;
+            border-radius: 1rem;
             margin-top: 2rem;
-            border-left: 4px solid var(--bs-success);
+            border-left: 5px solid var(--bs-success);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
         }
         
         .credit-info h3 {
             color: var(--bs-success);
             margin-bottom: 1rem;
+            font-weight: 700;
+        }
+        
+        .alert {
+            border-radius: 0.75rem;
+            border: none;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
         }
         
         .alert-success {
-            background-color: #d4edda;
-            border-color: #c3e6cb;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-left: 5px solid #28a745;
             color: #155724;
+        }
+        
+        .alert-warning {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            color: #856404;
+        }
+        
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background: #f0f;
+            position: fixed;
+            animation: confetti-fall 3s linear infinite;
+        }
+        
+        @keyframes confetti-fall {
+            to {
+                transform: translateY(100vh) rotate(360deg);
+                opacity: 0;
+            }
         }
     </style>
 </head>
 <body>
-    <!-- 네비게이션 바 -->
+    <!-- Navigation Bar -->
     <div class="navbar-like">
-        <div class="container">
-            <a href="https://defadb.com/" class="site-title">defadb</a>
+        <div class="container text-center">
+            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
         </div>
     </div>
 
@@ -145,53 +225,53 @@
         <div class="success-container">
             <div class="card">
                 <div class="card-header">
-                    <div class="success-icon">✅</div>
+                    <div class="success-icon">🎉</div>
                     <h1 class="message mb-0">Payment Successfully Completed!</h1>
                 </div>
                 <div class="card-body">
                     <!-- Non-Refundable Policy Reconfirmation -->
-                    <div class="alert alert-success mb-4">
-                        <h5 class="alert-heading">🎉 Payment Complete</h5>
+                    <div class="alert alert-success mb-4 text-center">
+                        <h5 class="alert-heading"><span style="font-size: 1.5rem; margin-right: 0.5rem;">✅</span>Payment Confirmed</h5>
                         <p class="mb-0">Bitcoin Cash payment successfully confirmed on the blockchain.</p>
                     </div>
                     
                     <div class="details">
                         <div class="detail-item">
-                            <div class="detail-label">Invoice ID</div>
+                            <div class="detail-label">📋 Invoice ID</div>
                             <div class="detail-value">{{ invoice_id }}</div>
                         </div>
                         
                         {% if tx_hash %}
                         <div class="detail-item">
-                            <div class="detail-label">Transaction Hash</div>
+                            <div class="detail-label">🔗 Transaction Hash</div>
                             <div class="detail-value">
                                 <a href="https://blockchair.com/bitcoin-cash/transaction/{{ tx_hash }}" 
-                                   target="_blank" class="text-primary">
+                                   target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">
                                    {{ tx_hash }}
                                 </a>
                                 <br>
-                                <small class="text-muted">View transaction details on Blockchair</small>
+                                <small style="color: #666;">Click to view transaction details on Blockchair</small>
                             </div>
                         </div>
                         {% endif %}
                         
                         {% if amount %}
                         <div class="detail-item">
-                            <div class="detail-label">Payment Amount</div>
-                            <div class="detail-value"><strong>{{ amount }} BCH</strong></div>
+                            <div class="detail-label">💰 Payment Amount</div>
+                            <div class="detail-value"><strong style="font-size: 1.2rem; color: #28a745;">{{ amount }} BCH</strong></div>
                         </div>
                         {% endif %}
                     </div>
                     
                     {% if user_id and credit_added %}
                     <div class="credit-info">
-                        <h3>💰 Account Credit Added Successfully</h3>
-                        <p class="mb-2"><strong>{{ amount }} BCH</strong> has been successfully added to your account.</p>
-                        <p class="mb-0">Current credit balance: <strong>{{ total_credit }} BCH</strong></p>
+                        <h3><span style="font-size: 1.5rem; margin-right: 0.5rem;">💰</span>Account Credit Added Successfully</h3>
+                        <p class="mb-2"><strong style="color: #28a745; font-size: 1.2rem;">{{ amount }} BCH</strong> has been successfully added to your account.</p>
+                        <p class="mb-0">Current credit balance: <strong style="color: #667eea; font-size: 1.1rem;">{{ total_credit }} BCH</strong></p>
                         
                         {% if total_credit >= 0.035 %}
                         <div class="alert alert-success mt-3 mb-0">
-                            <h6 class="alert-heading">🎉 Premium Benefits Activated!</h6>
+                            <h6 class="alert-heading"><span style="font-size: 1.2rem; margin-right: 0.5rem;">�</span>Premium Benefits Activated!</h6>
                             <p class="mb-0 small">With 0.0003 BCH or more, ads are removed from the entire site. Enjoy clean browsing.</p>
                         </div>
                         {% endif %}
@@ -200,18 +280,18 @@
                     
                     <!-- Non-Refundable Policy Reminder -->
                     <div class="alert alert-warning mt-4">
+                        <h6 class="fw-bold mb-2"><span style="font-size: 1.2rem; margin-right: 0.5rem;">📌</span>Important Notes:</h6>
                         <small>
-                            <strong>📌 Important Notes:</strong><br>
                             • This payment is non-refundable<br>
                             • Keep the transaction hash as payment proof<br>
                             • Ad removal benefits apply when holding 0.0003 BCH or more<br>
-                            • Contact defadb customer support for inquiries
+                            • Contact oratio customer support for inquiries
                         </small>
                     </div>
                     
                     <div class="text-center mt-4">
-                        <a href="https://defadb.com/" class="btn btn-primary btn-lg me-3">Go to defadb</a>
-                        <a href="/" class="btn btn-outline-secondary">Payment Service Home</a>
+                        <a href="https://oratio.space/" class="btn btn-primary btn-lg me-3">🏠 Go to oratio</a>
+                        <a href="/" class="btn btn-outline-secondary">💳 Payment Service Home</a>
                     </div>
                 </div>
             </div>

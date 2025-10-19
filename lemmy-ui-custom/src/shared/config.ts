@@ -3,7 +3,7 @@ import { getStaticDir } from "@utils/env";
 export const favIconUrl = `${getStaticDir()}/assets/icons/favicon.svg`;
 export const favIconPngUrl = `${getStaticDir()}/assets/icons/apple-touch-icon.png`;
 
-export const repoUrl = "https://github.com/LemmyNet";
+export const repoUrl = "https://github.com/7e62ce85/Oratio";
 export const joinLemmyUrl = "https://join-lemmy.org";
 export const donateLemmyUrl = `${joinLemmyUrl}/donate`;
 export const docsUrl = `${joinLemmyUrl}/docs/en/index.html`;

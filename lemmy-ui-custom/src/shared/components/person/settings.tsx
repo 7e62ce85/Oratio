@@ -831,13 +831,13 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
                 onChange={linkEvent(this, this.handleInterfaceLangChange)}
                 className="form-select d-inline-block w-auto"
               >
-                <option disabled aria-hidden="true" selected>
+                <option disabled selected>
                   {I18NextService.i18n.t("interface_language")}
                 </option>
                 <option value="browser">
                   {I18NextService.i18n.t("browser_default")}
                 </option>
-                <option disabled aria-hidden="true">
+                <option disabled>
                   ──
                 </option>
                 {languages
@@ -871,7 +871,7 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
                 onChange={linkEvent(this, this.handleThemeChange)}
                 className="form-select d-inline-block w-auto"
               >
-                <option disabled aria-hidden="true">
+                <option disabled>
                   {I18NextService.i18n.t("theme")}
                 </option>
                 <option value="browser">

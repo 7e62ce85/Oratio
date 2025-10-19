@@ -248,9 +248,25 @@ def expire_pending_invoices():
     return count
 
 def credit_user(user_id, amount, invoice_id):
-    """사용자 계정에 크레딧 추가"""
+    """사용자 계정에 크레딧 추가 - username 기반으로 저장"""
     if not user_id:
         return False
+    
+    # person_id를 username으로 변환
+    username = user_id  # 기본값
+    try:
+        user_id_int = int(user_id)
+        # person_id인 경우 username으로 변환
+        from lemmy_integration import setup_lemmy_integration
+        lemmy_api = setup_lemmy_integration()
+        if lemmy_api:
+            username_from_api = lemmy_api.get_username_by_id(user_id_int)
+            if username_from_api:
+                username = username_from_api
+                logger.info(f"person_id {user_id}를 username {username}으로 변환")
+    except (ValueError, TypeError):
+        # 이미 username 형식인 경우
+        pass
         
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -258,54 +274,57 @@ def credit_user(user_id, amount, invoice_id):
     # 현재 시간
     now = int(time.time())
     
-    # 사용자 크레딧 업데이트
+    # 사용자 크레딧 업데이트 (username으로 저장)
     cursor.execute(
         "INSERT INTO user_credits (user_id, credit_balance, last_updated) VALUES (?, ?, ?) "
         "ON CONFLICT(user_id) DO UPDATE SET credit_balance = credit_balance + ?, last_updated = ?",
-        (user_id, amount, now, amount, now)
+        (username, amount, now, amount, now)
     )
     
-    # 트랜잭션 기록 저장
+    # 트랜잭션 기록 저장 (username으로 저장)
     transaction_id = str(uuid.uuid4())
     cursor.execute(
         "INSERT INTO transactions (id, user_id, amount, type, description, created_at, invoice_id) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (transaction_id, user_id, amount, "credit", "Bitcoin Cash 충전", now, invoice_id)
+        (transaction_id, username, amount, "credit", "Bitcoin Cash 충전", now, invoice_id)
     )
     
     conn.commit()
     conn.close()
     
-    logger.info(f"사용자 {user_id}에게 {amount} BCH 크레딧 추가됨, 인보이스: {invoice_id}")
+    logger.info(f"사용자 {username} (원본 ID: {user_id})에게 {amount} BCH 크레딧 추가됨, 인보이스: {invoice_id}")
     return True
 
 def get_user_credit(user_id):
-    """사용자 크레딧 조회 (사용자 ID 기반)"""
-    # 먼저 사용자 ID가 숫자인지 확인
+    """사용자 크레딧 조회 - person_id를 username으로 변환하여 조회"""
+    username = user_id  # 기본값
+    
+    # person_id인 경우 username으로 변환
     try:
         user_id_int = int(user_id)
-        # 사용자 ID를 사용자명으로 변환
         from lemmy_integration import setup_lemmy_integration
         lemmy_api = setup_lemmy_integration()
         if lemmy_api:
-            username = lemmy_api.get_username_by_id(user_id_int)
-            if username:
-                # 사용자명으로 크레딧 조회
-                return get_user_credit_by_username(username)
+            username_from_api = lemmy_api.get_username_by_id(user_id_int)
+            if username_from_api:
+                username = username_from_api
+                logger.info(f"크레딧 조회: person_id {user_id}를 username {username}으로 변환")
     except (ValueError, TypeError):
-        # 숫자가 아닌 경우 사용자명으로 간주하고 직접 조회
+        # 이미 username 형식인 경우
         pass
     
-    # 기존 로직: user_id를 사용자명으로 간주
+    # username으로 크레딧 조회
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT credit_balance FROM user_credits WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT credit_balance FROM user_credits WHERE user_id = ?", (username,))
     result = cursor.fetchone()
     conn.close()
     
     if not result:
+        logger.info(f"사용자 {username}의 크레딧 정보 없음 (조회된 잔액: 0)")
         return 0
     
+    logger.info(f"사용자 {username}의 크레딧 조회: {result[0]} BCH")
     return result[0]
 
 def get_user_transactions(user_id, limit=50):
@@ -370,6 +389,41 @@ def get_user_transactions_by_username(username, limit=50):
     ]
     
     return transactions
+
+def has_user_made_payment(user_id):
+    """사용자가 결제한 적이 있는지 확인"""
+    try:
+        # 직접 user_id로 결제 내역 확인 (Lemmy API 호출 없이)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM transactions WHERE user_id = ? AND type = 'credit' AND amount > 0", 
+            (user_id,)
+        )
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result[0] > 0 if result else False
+    except Exception as e:
+        logger.error(f"사용자 {user_id}의 결제 내역 확인 중 오류: {str(e)}")
+        return False
+
+def has_user_made_payment_by_username(username):
+    """사용자명으로 결제한 적이 있는지 확인"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM transactions WHERE user_id = ? AND type = 'credit' AND amount > 0", 
+            (username,)
+        )
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result[0] > 0 if result else False
+    except Exception as e:
+        logger.error(f"사용자 {username}의 결제 내역 확인 중 오류: {str(e)}")
+        return False
 
 # 데이터베이스 초기화 함수 호출
 init_db()

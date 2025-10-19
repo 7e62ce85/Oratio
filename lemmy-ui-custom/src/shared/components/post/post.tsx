@@ -24,6 +24,11 @@ import {
   resourcesSettled,
   bareRoutePush,
 } from "@utils/helpers";
+import { 
+  isPremiumCommunity, 
+  canAccessPremiumCommunitySync,
+  checkUserHasGoldBadge
+} from "@utils/bch-payment";
 import { scrollMixin } from "../mixins/scroll-mixin";
 import { isImage } from "@utils/media";
 import { QueryParams, RouteDataResponse } from "@utils/types";
@@ -104,6 +109,7 @@ import { Icon, Spinner } from "../common/icon";
 import { Sidebar } from "../community/sidebar";
 import { PostListing } from "./post-listing";
 import { getHttpBaseInternal } from "../../utils/env";
+import { Link } from "inferno-router";
 import { RouteComponentProps } from "inferno-router/dist/Route";
 import { IRoutePropsWithFetch } from "../../routes";
 import { compareAsc, compareDesc } from "date-fns";
@@ -214,6 +220,7 @@ export class Post extends Component<PostRouteProps, PostState> {
   private commentScrollDebounced: () => void;
   private shouldScrollToComments: boolean = false;
   private commentSectionRef = createRef<HTMLDivElement>();
+  private creditUpdateListener?: () => void;
   state: PostState = {
     postRes: EMPTY_REQUEST,
     commentsRes: EMPTY_REQUEST,
@@ -390,6 +397,11 @@ export class Post extends Component<PostRouteProps, PostState> {
 
   componentWillUnmount() {
     document.removeEventListener("scroll", this.commentScrollDebounced);
+    
+    // Remove credit update listener
+    if (typeof window !== 'undefined' && this.creditUpdateListener) {
+      window.removeEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+    }
   }
 
   async componentWillMount() {
@@ -401,6 +413,14 @@ export class Post extends Component<PostRouteProps, PostState> {
           this.fetchComments(this.props),
         ]);
       }
+      
+      // Pre-fetch credit for logged-in users to populate cache
+      const currentUser = UserService.Instance.myUserInfo?.local_user_view.person;
+      if (currentUser) {
+        checkUserHasGoldBadge(currentUser).catch(err => {
+          console.error("[BCH] Error pre-fetching gold badge status:", err);
+        });
+      }
     }
   }
 
@@ -410,6 +430,15 @@ export class Post extends Component<PostRouteProps, PostState> {
 
     if (this.state.isIsomorphic) {
       this.maybeScrollToComments();
+    }
+    
+    // Listen for credit cache updates to refresh premium access check
+    this.creditUpdateListener = () => {
+      this.forceUpdate();
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('bch-credit-cache-updated', this.creditUpdateListener);
     }
   }
 
@@ -536,6 +565,53 @@ export class Post extends Component<PostRouteProps, PostState> {
       case "success": {
         const res = this.state.postRes.data;
         const siteRes = this.state.siteRes;
+        const communityName = res.post_view.community.name;
+        const currentUser = UserService.Instance.myUserInfo?.local_user_view.person;
+        
+        // Check if this is a premium community and if user has access
+        const isPremium = isPremiumCommunity(communityName);
+        const hasAccess = canAccessPremiumCommunitySync(communityName, currentUser);
+        
+        // If it's a premium community and user doesn't have access, show access denied
+        if (isPremium && !hasAccess) {
+          return (
+            <div className="row">
+              <main className="col-12">
+                <div className="alert alert-warning" role="alert">
+                  <h4 className="alert-heading">
+                    <Icon icon="lock" classes="icon-inline me-2" />
+                    {I18NextService.i18n.t("premium_community_access_required")}
+                  </h4>
+                  <p>
+                    This post belongs to the gold member-only community '{communityName}'.
+                    A minimum of 0.0001 BCH credit is required to become a gold member.
+                  </p>
+                  <hr />
+                  <p className="mb-0">
+                    {!currentUser ? (
+                      <>
+                        Please <Link to="/login">login</Link> first, then add BCH credits.
+                      </>
+                    ) : (
+                      <>
+                        To add BCH credits, please visit the{" "}
+                        <a 
+                          href={typeof window !== 'undefined' && window.__BCH_CONFIG__?.PAYMENT_URL || "http://localhost:8081/"} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                        >
+                          payment page
+                        </a>
+                        .
+                      </>
+                    )}
+                  </p>
+                </div>
+              </main>
+            </div>
+          );
+        }
+        
         return (
           <div className="row">
             <main className="col-12 col-md-8 col-lg-9 mb-3">

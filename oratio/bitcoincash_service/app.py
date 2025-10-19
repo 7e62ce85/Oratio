@@ -10,6 +10,9 @@ from config import (
     FORWARD_PAYMENTS, DB_PATH
 )
 
+# JWT 유틸리티 가져오기
+from jwt_utils import extract_user_info_from_jwt
+
 # 라우트 모듈 가져오기
 from routes.invoice import invoice_bp
 from routes.api import api_bp
@@ -25,6 +28,14 @@ app.secret_key = FLASK_SECRET_KEY
 # 외부에서 electron_cash를 참조할 수 있도록 전역으로 노출
 # 이를 통해 `from app import electron_cash` 구문이 동작합니다
 globals()['electron_cash'] = electron_cash
+
+# 백그라운드 태스크 시작 (gunicorn 워커에서도 실행되도록)
+# 한 번만 실행되도록 플래그 사용
+import os
+if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('FLASK_ENV') != 'development':
+    # gunicorn 환경에서 워커당 한 번씩 실행됨
+    # 이는 정상이며, 각 워커가 독립적으로 백그라운드 체크를 수행
+    start_background_tasks()
 
 # 외부에서 사용할 수 있는 함수들 노출
 def forward_to_payout_wallet():
@@ -44,7 +55,16 @@ def serve_static(path):
 @app.route('/')
 def index():
     """메인 페이지"""
-    return render_template('index.html')
+    # JWT에서 사용자 정보 추출
+    user_info = extract_user_info_from_jwt()
+    
+    # 템플릿에 사용자 정보 전달
+    if user_info:
+        return render_template('index.html', 
+                             user_id=user_info['person_id'],
+                             username=user_info['username'])
+    else:
+        return render_template('index.html', user_id='', username='')
 
 # 전역 예외 처리
 @app.errorhandler(Exception)

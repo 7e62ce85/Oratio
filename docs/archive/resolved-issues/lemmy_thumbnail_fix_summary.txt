@@ -3,7 +3,7 @@
 ## 문제 상황
 - 현상: 메인페이지에서 이미지 게시물의 썸네일이 검은색 바로가기 아이콘으로만 표시
 - 예상 동작: 이미지 미리보기 썸네일 + '펼쳐보기' 기능
-- URL 패턴: https://defadb.com/pictrs/image/이미지넘버.jpeg (thumbnail 파라미터 없음)
+- URL 패턴: https://oratio.space/pictrs/image/이미지넘버.jpeg (thumbnail 파라미터 없음)
 
 ## 핵심 문제 분석
 

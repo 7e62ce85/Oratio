@@ -4,11 +4,13 @@
 # 작성일: 2025년 8월 3일
 # 목적: "Connection to electron-cash timed out" 오류 자동 해결
 
-LOG_FILE="/opt/khankorean/oratio/logs/health_check.log"
-RESTART_LOG="/opt/khankorean/oratio/logs/restart_history.log"
+LOG_FILE="/home/user/Oratio/oratio/logs/health_check.log"
+RESTART_LOG="/home/user/Oratio/oratio/logs/restart_history.log"
+MEMORY_THRESHOLD_MB=500  # Alert if electron-cash uses more than 500MB
+PROCESS_THRESHOLD=10     # Alert if more than 10 python processes in electron-cash
 
 # 로그 디렉토리 생성
-mkdir -p /opt/khankorean/oratio/logs
+mkdir -p /home/user/Oratio/oratio/logs
 
 # 로그 함수
 log_message() {
@@ -37,7 +39,7 @@ test_electron_cash_connection() {
 # BCH 서비스 워커 타임아웃 체크
 check_worker_timeout() {
     # 최근 5분간 워커 타임아웃 오류 확인
-    timeout_count=$(docker compose logs --since="60m" bitcoincash-service 2>/dev/null | grep -c "WORKER TIMEOUT" 2>/dev/null || echo "0")
+    timeout_count=$(docker-compose logs --since="60m" bitcoincash-service 2>/dev/null | grep -c "WORKER TIMEOUT" 2>/dev/null || echo "0")
     
     # 숫자 검증
     if ! [[ "$timeout_count" =~ ^[0-9]+$ ]]; then
@@ -52,15 +54,50 @@ check_worker_timeout() {
     return 0
 }
 
+# 메모리 및 프로세스 체크 (memory leak 방지)
+check_memory_and_processes() {
+    log_message "메모리 및 프로세스 상태 확인 중..."
+    
+    # Get memory usage in MB
+    local mem_usage=$(docker stats --no-stream --format "{{.MemUsage}}" electron-cash 2>/dev/null | awk '{print $1}' | sed 's/MiB//' | cut -d'.' -f1)
+    
+    # Get process count
+    local process_count=$(docker top electron-cash 2>/dev/null | grep -c python || echo "0")
+    
+    # 숫자 검증
+    if ! [[ "$mem_usage" =~ ^[0-9]+$ ]]; then
+        mem_usage=0
+    fi
+    if ! [[ "$process_count" =~ ^[0-9]+$ ]]; then
+        process_count=0
+    fi
+    
+    log_message "ElectronCash - 메모리: ${mem_usage}MB, 프로세스: ${process_count}개"
+    
+    # Check thresholds
+    if [ "$mem_usage" -gt "$MEMORY_THRESHOLD_MB" ]; then
+        log_message "⚠️  메모리 임계값 초과: ${mem_usage}MB > ${MEMORY_THRESHOLD_MB}MB"
+        return 1
+    fi
+    
+    if [ "$process_count" -gt "$PROCESS_THRESHOLD" ]; then
+        log_message "⚠️  프로세스 수 임계값 초과: ${process_count} > ${PROCESS_THRESHOLD}"
+        docker top electron-cash >> "$LOG_FILE"
+        return 1
+    fi
+    
+    return 0
+}
+
 # 컨테이너 재시작 함수
 restart_containers() {
     log_message "===== 컨테이너 재시작 시작 ====="
-    restart_log "자동 재시작 실행 - ElectronCash 연결 실패"
+    restart_log "자동 재시작 실행 - ElectronCash 연결 실패 또는 메모리/프로세스 이상"
     
     # ElectronCash 재시작
     log_message "ElectronCash 컨테이너 재시작 중..."
-    cd /opt/khankorean/oratio
-    docker compose restart electron-cash
+    cd /home/user/Oratio/oratio
+    docker-compose restart electron-cash
     
     if [ $? -eq 0 ]; then
         log_message "ElectronCash 재시작 성공"
@@ -68,7 +105,7 @@ restart_containers() {
         
         # BCH 서비스 재시작
         log_message "BCH 서비스 컨테이너 재시작 중..."
-        docker compose restart bitcoincash-service
+        docker-compose restart bitcoincash-service
         
         if [ $? -eq 0 ]; then
             log_message "BCH 서비스 재시작 성공"
@@ -104,13 +141,20 @@ main() {
     if test_electron_cash_connection; then
         log_message "✅ ElectronCash 연결 정상"
         
-        # 2. 워커 타임아웃 체크
-        if check_worker_timeout; then
-            log_message "✅ BCH 서비스 정상"
-            log_message "===== 모든 서비스 정상 ====="
-            exit 0
+        # 2. 메모리 및 프로세스 체크
+        if check_memory_and_processes; then
+            log_message "✅ 메모리 및 프로세스 정상"
+            
+            # 3. 워커 타임아웃 체크
+            if check_worker_timeout; then
+                log_message "✅ BCH 서비스 정상"
+                log_message "===== 모든 서비스 정상 ====="
+                exit 0
+            else
+                log_message "⚠️  워커 타임아웃 감지 - 재시작 필요"
+            fi
         else
-            log_message "⚠️  워커 타임아웃 감지 - 재시작 필요"
+            log_message "⚠️  메모리 또는 프로세스 이상 - 재시작 필요"
         fi
     else
         log_message "❌ ElectronCash 연결 실패 - 재시작 필요"

@@ -15,13 +15,22 @@ services:
       - ./nginx_production.conf:/etc/nginx/nginx.conf:ro,Z
       - ./proxy_params:/etc/nginx/proxy_params:ro,Z
       - ./nginx/js:/etc/nginx/js:ro,Z
-      # Let's Encrypt SSL 인증서 마운트
-      - /etc/letsencrypt:/etc/letsencrypt:ro,Z
+      # Let's Encrypt certificates and webroot
+      - ./data/certbot/conf:/etc/letsencrypt:ro,Z
+      - ./data/certbot/www:/var/www/certbot:ro,Z
     restart: always
     logging: *default-logging
     depends_on:
       - pictrs
       - lemmy-ui
+
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
   lemmy:
     image: dessalines/lemmy:0.19.8
@@ -46,16 +55,16 @@ services:
       dockerfile: Dockerfile
       args:
         - LEMMY_API_KEY=${LEMMY_API_KEY}
-        - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://payments.defadb.com/api/user_credit}
-        - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://payments.defadb.com/}
+        - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://payments.oratio.space/api/user_credit}
+        - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://payments.oratio.space/}
         - COMMIT_HASH=latest
     container_name: oratio-lemmy-ui-1
     environment:
       - LEMMY_UI_LEMMY_INTERNAL_HOST=lemmy:8536
-      # 실제 도메인으로 변경됨
-      - LEMMY_UI_LEMMY_EXTERNAL_HOST=defadb.com
-      # 실제 서버에서는 HTTPS 활성화
-      - LEMMY_UI_HTTPS=true
+      # 로컬호스트로 변경
+      - LEMMY_UI_LEMMY_EXTERNAL_HOST=localhost
+      # 로컬에서는 HTTPS 비활성화
+      - LEMMY_UI_HTTPS=false
       - LEMMY_UI_DEBUG=false
       # 추가: PUBLIC_URL 및 NODE_ENV 설정
       - PUBLIC_URL=/
@@ -64,8 +73,8 @@ services:
       - COMMIT_HASH=latest
       # BCH API 설정 - 실제 도메인으로 업데이트
       - LEMMY_API_KEY=${LEMMY_API_KEY}
-      - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://payments.defadb.com/api/user_credit}
-      - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://payments.defadb.com/}
+      - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://payments.oratio.space/api/user_credit}
+      - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://payments.oratio.space/}
     volumes:
       - ./volumes/lemmy-ui/extra_themes:/app/extra_themes:Z
     depends_on:
@@ -111,10 +120,10 @@ services:
   postfix:
     image: docker.io/mwader/postfix-relay
     environment:
-      # 실제 도메인으로 변경됨
-      - POSTFIX_myhostname=defadb.com
-      - POSTFIX_mydomain=defadb.com
-      - POSTFIX_myorigin=defadb.com
+      # 로컬호스트로 변경
+      - POSTFIX_myhostname=localhost
+      - POSTFIX_mydomain=localhost
+      - POSTFIX_myorigin=localhost
       - POSTFIX_inet_interfaces=all
       - POSTFIX_inet_protocols=ipv4
       # SPF, DKIM 설정을 위한 추가 설정
@@ -123,6 +132,23 @@ services:
     logging: *default-logging
     env_file:
       - .env
+
+  # Proof of Work 검증 서비스 (회원가입 봇 방지)
+  pow-validator:
+    build:
+      context: ./pow_validator_service
+      dockerfile: Dockerfile
+    container_name: oratio-pow-validator-1
+    restart: always
+    environment:
+      - POW_DIFFICULTY=20
+      - POW_MAX_AGE_SECONDS=600
+      - LEMMY_BACKEND_URL=http://lemmy:8536
+    depends_on:
+      - lemmy
+    logging: *default-logging
+    networks:
+      - default
 
   # BitcoinCash 결제 서비스
   bitcoincash-service:
@@ -195,6 +221,15 @@ services:
       - RPC_PASSWORD=${ELECTRON_CASH_PASSWORD} # Use generated password from .env
     ports:
       - "7777:7777"
+    # Memory limits to prevent memory leaks from consuming all system RAM
+    mem_limit: 2g
+    mem_reservation: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+        reservations:
+          memory: 512m
 
 volumes:
   electron_cash_data:

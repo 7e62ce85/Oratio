@@ -8,6 +8,7 @@ from config import logger, TESTNET, MIN_CONFIRMATIONS
 import models
 from services.electron_cash import electron_cash
 from services.payment import process_payment, format_invoice_for_display
+from jwt_utils import get_user_id_from_request
 
 # Blueprint 생성
 invoice_bp = Blueprint('invoice', __name__)
@@ -15,12 +16,16 @@ invoice_bp = Blueprint('invoice', __name__)
 @invoice_bp.route('/generate_invoice', methods=['GET'])
 def generate_invoice():
     """새 인보이스 생성"""
-    # 파라미터 가져오기
+    # 파라미터 가져오기 (JWT에서 자동으로 추출하거나 URL 파라미터 사용)
     amount = request.args.get('amount', type=float)
-    user_id = request.args.get('user_id', '')
+    user_id = get_user_id_from_request()
     
     if not amount or amount <= 0:
         return jsonify({"error": "Invalid amount"}), 400
+    
+    # 사용자 ID 검증
+    if not user_id:
+        return jsonify({"error": "User ID is required. Please login first."}), 400
     
     # 최소 금액 확인 (실제 구현 시 조정)
     min_amount = 0.0001  # BCH

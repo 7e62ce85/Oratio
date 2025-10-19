@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCH 버튼 테마 테스트</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* BCH Button Responsive Theme Styles */
+
+        /* Light theme hover/focus styles */
+        .bch-button-light:hover,
+        .bch-button-light:focus {
+          background-color: #1B5E20 !important;
+          border-color: #1B5E20 !important;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(27, 94, 32, 0.4) !important;
+        }
+
+        .bch-button-light:focus {
+          outline: 2px solid #4CAF50;
+          outline-offset: 2px;
+        }
+
+        .bch-button-light:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 4px rgba(27, 94, 32, 0.3) !important;
+        }
+
+        /* Dark theme hover/focus styles */
+        .bch-button-dark:hover,
+        .bch-button-dark:focus {
+          background-color: #66BB6A !important;
+          border-color: #66BB6A !important;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(102, 187, 106, 0.4) !important;
+        }
+
+        .bch-button-dark:focus {
+          outline: 2px solid #81C784;
+          outline-offset: 2px;
+        }
+
+        .bch-button-dark:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 4px rgba(102, 187, 106, 0.3) !important;
+        }
+
+        /* Automatic theme detection using CSS media queries */
+        @media (prefers-color-scheme: dark) {
+          .bch-button-auto {
+            background-color: #4CAF50 !important;
+            border-color: #4CAF50 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3) !important;
+          }
+          
+          .bch-button-auto:hover,
+          .bch-button-auto:focus {
+            background-color: #66BB6A !important;
+            border-color: #66BB6A !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(102, 187, 106, 0.4) !important;
+          }
+          
+          .bch-button-auto:focus {
+            outline: 2px solid #81C784;
+            outline-offset: 2px;
+          }
+        }
+
+        @media (prefers-color-scheme: light) {
+          .bch-button-auto {
+            background-color: #2E7D32 !important;
+            border-color: #2E7D32 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 4px rgba(46, 125, 50, 0.3) !important;
+          }
+          
+          .bch-button-auto:hover,
+          .bch-button-auto:focus {
+            background-color: #1B5E20 !important;
+            border-color: #1B5E20 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(27, 94, 32, 0.4) !important;
+          }
+          
+          .bch-button-auto:focus {
+            outline: 2px solid #4CAF50;
+            outline-offset: 2px;
+          }
+        }
+
+        /* Base styles for all BCH buttons */
+        .bch-button-base {
+          padding: 5px 10px !important;
+          border-radius: 6px !important;
+          font-weight: bold !important;
+          margin-left: 10px !important;
+          transition: all 0.3s ease !important;
+          border: 2px solid !important;
+          text-decoration: none !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          cursor: pointer !important;
+          outline: none !important;
+        }
+
+        /* Accessibility improvements */
+        .bch-button-base:focus-visible {
+          outline: 2px solid currentColor !important;
+          outline-offset: 2px !important;
+        }
+
+        /* High contrast mode support */
+        @media (prefers-contrast: high) {
+          .bch-button-base {
+            border-width: 3px !important;
+            font-weight: 900 !important;
+          }
+          
+          .bch-button-light,
+          .bch-button-auto {
+            background-color: #000000 !important;
+            border-color: #000000 !important;
+            color: #ffffff !important;
+          }
+          
+          .bch-button-dark {
+            background-color: #ffffff !important;
+            border-color: #ffffff !important;
+            color: #000000 !important;
+          }
+        }
+
+        /* Reduced motion support */
+        @media (prefers-reduced-motion: reduce) {
+          .bch-button-base {
+            transition: none !important;
+          }
+          
+          .bch-button-light:hover,
+          .bch-button-light:focus,
+          .bch-button-dark:hover,
+          .bch-button-dark:focus,
+          .bch-button-auto:hover,
+          .bch-button-auto:focus {
+            transform: none !important;
+          }
+        }
+
+        /* Manual light/dark mode styles for testing */
+        .light-theme .bch-button-light {
+            background-color: #2E7D32;
+            border-color: #2E7D32;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(46, 125, 50, 0.3);
+        }
+
+        .dark-theme {
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        .dark-theme .bch-button-dark {
+            background-color: #4CAF50;
+            border-color: #4CAF50;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+        }
+
+        .light-theme {
+            background-color: #ffffff;
+            color: #000000;
+        }
+
+        .card {
+            margin-bottom: 20px;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="theme-toggle">
+        <button class="btn btn-secondary" onclick="toggleTheme()">테마 변경</button>
+    </div>
+
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center mb-5">BCH 결제 버튼 반응형 테마 테스트</h1>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h3>자동 테마 감지 버튼 (권장)</h3>
+                        <p class="mb-0">브라우저의 prefers-color-scheme을 자동으로 감지하여 테마 변경</p>
+                    </div>
+                    <div class="card-body">
+                        <a href="#" class="bch-button-base bch-button-auto" tabindex="0">
+                            <svg width="18" height="18" viewBox="0 0 16 16" class="me-1" style="fill: currentColor;">
+                                <path d="M8 0C3.59 0 0 3.59 0 8s3.59 8 8 8 8-3.59 8-8-3.59-8-8-8zm1.4 11.8c-.16.59-.82.85-1.39.58-.38-.18-.74-.58-.74-1.03 0-.19.05-.38.14-.55.09-.18.22-.33.38-.44.37-.27.88-.29 1.28-.07.4.22.64.65.63 1.09.01.15-.03.29-.09.42h.24zm-4.01-3.26c-.26-.13-.35-.5-.21-.76.14-.26.5-.37.76-.23.26.14.36.5.22.76-.14.26-.51.37-.77.23zm3.47-3.98c-.42-.15-.88-.08-1.26.14-.38.22-.66.6-.77 1.03l-.1.42h2.85l-.1-.42c-.11-.43-.4-.8-.78-1.03l.16-.14zm1.46 1.68h-4.55c-.25 0-.41.26-.32.49l.69 1.7c.14.33.41.66.77.89.43.27.94.37 1.43.27l.39-.08-1.11-2.54h2.28l-1.14 2.49.41.09c.5.1 1-.01 1.43-.28.35-.22.63-.55.76-.88l.69-1.7c.1-.23-.06-.46-.31-.46zm-4.4 4.58c.18-.11.39-.18.61-.19-.08-.21-.05-.45.07-.63.12-.18.32-.29.53-.29s.41.11.53.29c.12.18.16.42.07.63.22.01.43.08.61.19.18.11.33.27.41.47.08.2.09.41.03.61-.13.43-.58.72-1.05.67-.22-.02-.43-.11-.6-.26s-.28-.35-.3-.57c-.04-.47.27-.91.7-1.03.16-.05.33-.06.5-.02-.03-.1-.1-.17-.2-.21-.1-.04-.2-.04-.3 0-.1.04-.17.12-.2.21-.03.1-.03.2 0 .3.03.09.01.19-.06.25-.07.06-.17.08-.25.04s-.14-.12-.14-.21c0-.09.05-.17.13-.22z"/>
+                            </svg>
+                            Add BCH
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>라이트 테마 버튼</h3>
+                        <p class="mb-0">밝은 배경에서 잘 보이도록 설계된 버튼</p>
+                    </div>
+                    <div class="card-body">
+                        <a href="#" class="bch-button-base bch-button-light" tabindex="0">
+                            <svg width="18" height="18" viewBox="0 0 16 16" class="me-1" style="fill: currentColor;">
+                                <path d="M8 0C3.59 0 0 3.59 0 8s3.59 8 8 8 8-3.59 8-8-3.59-8-8-8zm1.4 11.8c-.16.59-.82.85-1.39.58-.38-.18-.74-.58-.74-1.03 0-.19.05-.38.14-.55.09-.18.22-.33.38-.44.37-.27.88-.29 1.28-.07.4.22.64.65.63 1.09.01.15-.03.29-.09.42h.24zm-4.01-3.26c-.26-.13-.35-.5-.21-.76.14-.26.5-.37.76-.23.26.14.36.5.22.76-.14.26-.51.37-.77.23zm3.47-3.98c-.42-.15-.88-.08-1.26.14-.38.22-.66.6-.77 1.03l-.1.42h2.85l-.1-.42c-.11-.43-.4-.8-.78-1.03l.16-.14zm1.46 1.68h-4.55c-.25 0-.41.26-.32.49l.69 1.7c.14.33.41.66.77.89.43.27.94.37 1.43.27l.39-.08-1.11-2.54h2.28l-1.14 2.49.41.09c.5.1 1-.01 1.43-.28.35-.22.63-.55.76-.88l.69-1.7c.1-.23-.06-.46-.31-.46zm-4.4 4.58c.18-.11.39-.18.61-.19-.08-.21-.05-.45.07-.63.12-.18.32-.29.53-.29s.41.11.53.29c.12.18.16.42.07.63.22.01.43.08.61.19.18.11.33.27.41.47.08.2.09.41.03.61-.13.43-.58.72-1.05.67-.22-.02-.43-.11-.6-.26s-.28-.35-.3-.57c-.04-.47.27-.91.7-1.03.16-.05.33-.06.5-.02-.03-.1-.1-.17-.2-.21-.1-.04-.2-.04-.3 0-.1.04-.17.12-.2.21-.03.1-.03.2 0 .3.03.09.01.19-.06.25-.07.06-.17.08-.25.04s-.14-.12-.14-.21c0-.09.05-.17.13-.22z"/>
+                            </svg>
+                            Add BCH
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>다크 테마 버튼</h3>
+                        <p class="mb-0">어두운 배경에서 잘 보이도록 설계된 버튼</p>
+                    </div>
+                    <div class="card-body">
+                        <a href="#" class="bch-button-base bch-button-dark" tabindex="0">
+                            <svg width="18" height="18" viewBox="0 0 16 16" class="me-1" style="fill: currentColor;">
+                                <path d="M8 0C3.59 0 0 3.59 0 8s3.59 8 8 8 8-3.59 8-8-3.59-8-8-8zm1.4 11.8c-.16.59-.82.85-1.39.58-.38-.18-.74-.58-.74-1.03 0-.19.05-.38.14-.55.09-.18.22-.33.38-.44.37-.27.88-.29 1.28-.07.4.22.64.65.63 1.09.01.15-.03.29-.09.42h.24zm-4.01-3.26c-.26-.13-.35-.5-.21-.76.14-.26.5-.37.76-.23.26.14.36.5.22.76-.14.26-.51.37-.77.23zm3.47-3.98c-.42-.15-.88-.08-1.26.14-.38.22-.66.6-.77 1.03l-.1.42h2.85l-.1-.42c-.11-.43-.4-.8-.78-1.03l.16-.14zm1.46 1.68h-4.55c-.25 0-.41.26-.32.49l.69 1.7c.14.33.41.66.77.89.43.27.94.37 1.43.27l.39-.08-1.11-2.54h2.28l-1.14 2.49.41.09c.5.1 1-.01 1.43-.28.35-.22.63-.55.76-.88l.69-1.7c.1-.23-.06-.46-.31-.46zm-4.4 4.58c.18-.11.39-.18.61-.19-.08-.21-.05-.45.07-.63.12-.18.32-.29.53-.29s.41.11.53.29c.12.18.16.42.07.63.22.01.43.08.61.19.18.11.33.27.41.47.08.2.09.41.03.61-.13.43-.58.72-1.05.67-.22-.02-.43-.11-.6-.26s-.28-.35-.3-.57c-.04-.47.27-.91.7-1.03.16-.05.33-.06.5-.02-.03-.1-.1-.17-.2-.21-.1-.04-.2-.04-.3 0-.1.04-.17.12-.2.21-.03.1-.03.2 0 .3.03.09.01.19-.06.25-.07.06-.17.08-.25.04s-.14-.12-.14-.21c0-.09.05-.17.13-.22z"/>
+                            </svg>
+                            Add BCH
+                        </a>
+                    </div>
+                </div>
+
+                <div class="alert alert-info">
+                    <h4>테스트 방법:</h4>
+                    <ul>
+                        <li><strong>자동 테마 감지:</strong> 브라우저 설정에서 다크 모드를 켜고 끄면서 첫 번째 버튼의 색상 변화를 확인하세요.</li>
+                        <li><strong>호버 효과:</strong> 각 버튼에 마우스를 올려보세요.</li>
+                        <li><strong>포커스 효과:</strong> Tab 키를 사용하여 버튼에 포커스를 맞춰보세요.</li>
+                        <li><strong>접근성:</strong> 스크린 리더나 키보드 내비게이션을 테스트해보세요.</li>
+                        <li><strong>고대비 모드:</strong> 브라우저의 고대비 모드에서 버튼이 잘 보이는지 확인하세요.</li>
+                    </ul>
+                </div>
+
+                <div class="alert alert-success">
+                    <h4>구현된 기능:</h4>
+                    <ul>
+                        <li>✅ 브라우저 테마 자동 감지 (prefers-color-scheme)</li>
+                        <li>✅ 다크/라이트 모드에 최적화된 색상</li>
+                        <li>✅ 부드러운 호버 및 포커스 애니메이션</li>
+                        <li>✅ WCAG 가이드라인을 준수한 접근성</li>
+                        <li>✅ 고대비 모드 지원</li>
+                        <li>✅ 모션 감소 모드 지원 (prefers-reduced-motion)</li>
+                        <li>✅ 키보드 내비게이션 지원</li>
+                        <li>✅ 반응형 디자인</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isDark = false;
+        
+        function toggleTheme() {
+            const body = document.body;
+            if (isDark) {
+                body.className = 'light-theme';
+                isDark = false;
+            } else {
+                body.className = 'dark-theme';
+                isDark = true;
+            }
+        }
+
+        // 페이지 로드 시 브라우저의 테마 설정을 감지
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.body.className = 'dark-theme';
+            isDark = true;
+        } else {
+            document.body.className = 'light-theme';
+            isDark = false;
+        }
+
+        // 브라우저 테마 변경 감지
+        if (window.matchMedia) {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            mediaQuery.addEventListener('change', function(e) {
+                if (e.matches) {
+                    document.body.className = 'dark-theme';
+                    isDark = true;
+                } else {
+                    document.body.className = 'light-theme';
+                    isDark = false;
+                }
+            });
+        }
+    </script>
+</body>
+</html>

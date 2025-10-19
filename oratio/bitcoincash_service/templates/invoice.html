@@ -3,40 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Cash Payment - defadb</title>
+    <title>Bitcoin Cash Payment - oratio</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
-            background-color: #f8f9fa;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
         }
         .navbar-like {
-            background-color: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 1rem 0;
-            margin-bottom: 2rem;
+            padding: 1.5rem 0;
+            margin-bottom: 0;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
         }
         .site-title {
-            font-size: 1.5rem;
-            font-weight: 600;
+            font-size: 2rem;
+            font-weight: 700;
             color: white;
             text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+        .site-title:hover {
+            color: #ffecd2;
+        }
+        .container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        .card {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+            background: white;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom: none;
+            padding: 1.5rem;
+            border-radius: 1rem 1rem 0 0 !important;
+        }
+        .card-header h3 {
+            font-weight: 700;
+            font-size: 1.75rem;
+        }
+        .card-body {
+            padding: 2rem;
         }
         .qr-container {
             text-align: center;
-            margin: 20px 0;
-            padding: 20px;
-            background-color: white;
-            border-radius: 0.375rem;
-            border: 2px dashed #dee2e6;
+            margin: 2rem 0;
+            padding: 2rem;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-radius: 1rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+        }
+        .qr-container img {
+            max-width: 100%;
+            border-radius: 0.5rem;
+            background: white;
+            padding: 1rem;
+        }
+        .alert {
+            border-radius: 0.75rem;
+            border: none;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+        }
+        .alert-danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .alert-info {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-left: 5px solid #17a2b8;
+            color: #0c5460;
+        }
+        .input-group {
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .form-control {
+            border: 2px solid #e0e0e0;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 0.75rem 2rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1rem rgba(102, 126, 234, 0.4);
+        }
+        .btn-outline-primary {
+            border: 2px solid #667eea;
+            color: #667eea;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-outline-primary:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+            color: white;
+        }
+        .btn-outline-secondary {
+            border: 2px solid #6c757d;
+            color: #6c757d;
+            font-weight: 600;
+            border-radius: 0.5rem;
+        }
+        .btn-outline-secondary:hover {
+            background: #6c757d;
+            color: white;
+        }
+        .info-section {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .info-section strong {
+            color: #333;
         }
     </style>
 </head>
 <body>
     <!-- Navigation -->
     <div class="navbar-like">
-        <div class="container">
-            <a href="https://defadb.com/" class="site-title">defadb</a>
+        <div class="container text-center">
+            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
         </div>
     </div>
 
@@ -44,63 +147,66 @@
         <div class="row">
             <div class="col-lg-8 offset-lg-2">
                 <!-- Non-refundable Warning -->
-                <div class="alert alert-danger mb-4">
-                    <h5><strong>⚠️ Non-Refundable Policy</strong></h5>
+                <div class="alert alert-danger mb-4 text-center">
+                    <h5><span style="font-size: 1.5rem; margin-right: 0.5rem;">⚠️</span><strong>Non-Refundable Policy</strong></h5>
                     <p class="mb-0">All payments are non-refundable. Please verify the amount and address before payment.</p>
                 </div>
                 
                 <!-- Premium Benefits Information -->
-                <div class="alert alert-info mb-4">
-                    <h6><strong>💎 Ad Removal Benefits for 0.0003 BCH+ Payments</strong></h6>
+                <div class="alert alert-info mb-4 text-center">
+                    <h6><span style="font-size: 1.2rem; margin-right: 0.5rem;">💎</span><strong>Ad Removal Benefits for 0.0003 BCH+ Payments</strong></h6>
                     <p class="mb-0 small">After payment completion, ad banners will be removed from the entire site for a cleaner experience.</p>
                 </div>
                 
                 <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h3 class="mb-0">Bitcoin Cash Payment</h3>
+                    <div class="card-header text-center">
+                        <h3 class="mb-0">💳 Bitcoin Cash Payment</h3>
                     </div>
                     <div class="card-body">
                         <!-- Invoice Information -->
-                        <div class="mb-3">
-                            <strong>Invoice ID:</strong> <span id="invoice-id">{{ invoice.invoice_id }}</span>
+                        <div class="info-section">
+                            <div class="mb-3">
+                                <strong>📋 Invoice ID:</strong> <span id="invoice-id" style="font-family: monospace;">{{ invoice.invoice_id }}</span>
+                            </div>
+                            <div class="mb-3">
+                                <strong>💰 Payment Amount:</strong> <span style="font-size: 1.2rem; color: #667eea;">{{ invoice.amount }} BCH</span>
+                            </div>
+                            <div class="mb-3">
+                                <strong>📊 Status:</strong> <span id="payment-status" class="badge bg-warning text-dark">{{ invoice.status }}</span>
+                            </div>
+                            {% if invoice.tx_hash %}
+                            <div class="mb-0">
+                                <strong>🔗 Transaction:</strong> 
+                                <a href="https://blockchair.com/bitcoin-cash/transaction/{{ invoice.tx_hash }}" target="_blank" style="color: #667eea;">
+                                    {{ invoice.tx_hash[:16] }}...
+                                </a>
+                            </div>
+                            {% endif %}
                         </div>
-                        <div class="mb-3">
-                            <strong>Payment Amount:</strong> {{ invoice.amount }} BCH
-                        </div>
-                        <div class="mb-3">
-                            <strong>Status:</strong> <span id="payment-status">{{ invoice.status }}</span>
-                        </div>
-                        {% if invoice.tx_hash %}
-                        <div class="mb-3">
-                            <strong>Transaction:</strong> 
-                            <a href="https://blockchair.com/bitcoin-cash/transaction/{{ invoice.tx_hash }}" target="_blank">
-                                {{ invoice.tx_hash[:16] }}...
-                            </a>
-                        </div>
-                        {% endif %}
 
                         <!-- Payment Address -->
-                        <div class="alert alert-info">
-                            Send exactly <strong>{{ invoice.amount }} BCH</strong> to the address below.
+                        <div class="text-center mb-3">
+                            <p class="mb-2" style="font-size: 1.1rem;"><strong>Send exactly <span style="color: #667eea;">{{ invoice.amount }} BCH</span> to:</strong></p>
                         </div>
 
-                        <div class="input-group mb-3">
+                        <div class="input-group mb-4">
                             <input type="text" class="form-control" value="{{ invoice.payment_address }}" id="payment-address" readonly>
-                            <button class="btn btn-outline-primary" type="button" onclick="copyAddress()">Copy</button>
+                            <button class="btn btn-outline-primary" type="button" onclick="copyAddress()">📋 Copy</button>
                         </div>
 
                         <!-- QR Code -->
                         <div class="qr-container">
+                            <h5 class="mb-3" style="color: #333;">📱 Scan QR Code to Pay</h5>
                             <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code" class="img-fluid">
                         </div>
 
                         <!-- Payment Confirmation Button -->
-                        <div class="d-grid gap-2">
-                            <button id="check-button" class="btn btn-primary" onclick="checkPayment()">Check Payment</button>
+                        <div class="d-grid gap-2 mb-3">
+                            <button id="check-button" class="btn btn-primary btn-lg" onclick="checkPayment()">🔍 Check Payment Status</button>
                         </div>
 
                         <div class="text-center mt-3">
-                            <a href="/" class="btn btn-outline-secondary">Back to Main</a>
+                            <a href="/" class="btn btn-outline-secondary">🏠 Back to Main</a>
                         </div>
                     </div>
                 </div>
@@ -124,18 +230,25 @@
             checkButton.textContent = 'Checking...';
 
             try {
-                const response = await fetch(`/check_payment/${invoiceId}`);
+                // 절대 경로 사용 또는 현재 위치 기준 상대 경로
+                const currentPath = window.location.pathname; // /payments/invoice/xxx
+                const basePath = currentPath.substring(0, currentPath.lastIndexOf('/')); // /payments/invoice
+                const checkUrl = basePath.replace('/invoice', '/check_payment') + '/' + invoiceId;
+                
+                const response = await fetch(checkUrl);
                 const data = await response.json();
                 
                 document.getElementById('payment-status').textContent = data.status;
 
                 if (data.status === 'completed') {
-                    window.location.href = `/payment_success/${invoiceId}`;
+                    // 현재 위치의 상위 경로에서 payment_success로 이동
+                    window.location.href = `../payment_success/${invoiceId}`;
                 } else {
                     checkButton.textContent = 'Check Again';
                     checkButton.disabled = false;
                 }
             } catch (error) {
+                console.error('Payment check error:', error);
                 checkButton.textContent = 'Check Failed';
                 checkButton.disabled = false;
             }

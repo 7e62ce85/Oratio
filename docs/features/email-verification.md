@@ -62,7 +62,7 @@ class SMTPToHTTPProxy:
     
     def send_email(self, to, subject, content):
         payload = {
-            "from": "noreply@defadb.com",
+            "from": "noreply@oratio.space",
             "to": [to],
             "subject": subject,
             "html": content
@@ -89,7 +89,7 @@ services:
       - "8025:8025"
     environment:
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - SMTP_FROM_ADDRESS=noreply@defadb.com
+      - SMTP_FROM_ADDRESS=noreply@oratio.space
     networks:
       - lemmy-network
 ```
@@ -98,14 +98,14 @@ services:
 ```bash
 # Resend API 설정
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-SMTP_FROM_ADDRESS=noreply@defadb.com
+SMTP_FROM_ADDRESS=noreply@oratio.space
 SMTP_SERVER=email-service:1025
 
 # Lemmy 관리자 설정
-ADMIN_EMAIL=admin@defadb.com
+ADMIN_EMAIL=admin@oratio.space
 SITE_NAME=Oratio Forum
 SITE_DESCRIPTION=A forum for meaningful discussions
-DOMAIN=defadb.com
+DOMAIN=oratio.space
 ```
 
 ### 3. Lemmy 통합
@@ -116,7 +116,7 @@ DOMAIN=defadb.com
   # 이메일 설정
   email: {
     smtp_server: "email-service:1025"
-    smtp_from_address: "noreply@defadb.com"
+    smtp_from_address: "noreply@oratio.space"
     tls_type: "none"
   }
   
@@ -126,10 +126,10 @@ DOMAIN=defadb.com
   application_email_admins: true
   
   # 관리자 설정
-  admin_email: "admin@defadb.com"
+  admin_email: "admin@oratio.space"
   
   # 사이트 정보
-  hostname: "defadb.com"
+  hostname: "oratio.space"
   site_name: "Oratio Forum"
   site_description: "A forum for meaningful discussions"
 }
@@ -179,7 +179,7 @@ CMD ["python", "app.py"]
 #### Resend 계정 설정
 1. [Resend.com](https://resend.com) 회원가입
 2. API 키 발급
-3. 도메인 인증 (defadb.com)
+3. 도메인 인증 (oratio.space)
 4. DNS 설정 (SPF, DKIM 레코드)
 
 #### 환경변수 설정
@@ -271,7 +271,7 @@ curl -X POST http://localhost:8025/send-test-email \
 ```
 
 #### 회원가입 플로우 테스트
-1. https://defadb.com 접속
+1. https://oratio.space 접속
 2. 회원가입 시도
 3. 이메일 인증 메일 수신 확인
 4. 인증 링크 클릭
@@ -455,7 +455,7 @@ docker-compose up -d email-service
 ### 기술 지원
 - **GitHub Issues**: 버그 리포트 및 기능 요청
 - **Discord**: 실시간 기술 지원
-- **Email**: admin@defadb.com
+- **Email**: admin@oratio.space
 
 ### 유용한 링크
 - [Resend 문서](https://resend.com/docs)
@@ -467,5 +467,5 @@ docker-compose up -d email-service
 **구현 완료일**: 2025-08-03  
 **마지막 업데이트**: 2025-09-07  
 **문서 버전**: v2.0  
-**운영 상태**: ✅ Production (defadb.com)  
-**개발팀**: defadb Team
+**운영 상태**: ✅ Production (oratio.space)  
+**개발팀**: oratio Team

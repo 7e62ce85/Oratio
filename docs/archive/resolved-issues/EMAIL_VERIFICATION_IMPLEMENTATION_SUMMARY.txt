@@ -33,14 +33,14 @@ Oratio Forum - 이메일 인증 시스템 구현 완료 보고서
 [⚙️ 핵심 설정]
 환경변수 (.env):
    - RESEND_API_KEY=
-   - SMTP_FROM_ADDRESS=noreply@defadb.com
+   - SMTP_FROM_ADDRESS=noreply@oratio.space
    - SMTP_SERVER=email-service:1025
 
 Lemmy 설정 (lemmy.hjson):
    - smtp_server: "email-service:1025"
-   - smtp_from_address: "noreply@defadb.com"
+   - smtp_from_address: "noreply@oratio.space"
    - require_email_verification: true
-   - admin_email: "admin@defadb.com"
+   - admin_email: "admin@oratio.space"
 
 [🔧 기술 스택]
 - Resend API: 이메일 발송 서비스
@@ -50,7 +50,7 @@ Lemmy 설정 (lemmy.hjson):
 
 [🎉 구현 결과]
 ✅ 회원가입 시 자동 이메일 인증 발송
-✅ noreply@defadb.com 발신자 주소
+✅ noreply@oratio.space 발신자 주소
 ✅ DigitalOcean SMTP 차단 우회 성공
 ✅ Resend 무료 플랜 활용 (월 3,000통)
 ✅ 안정적인 이메일 전송 시스템

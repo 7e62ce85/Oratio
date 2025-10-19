@@ -24,6 +24,7 @@ import { fetchLimit } from "../../../config";
 import { PersonListing } from "../../person/person-listing";
 import { modalMixin } from "../../mixins/modal-mixin";
 import { UserBadges } from "../user-badges";
+import { checkUserHasGoldBadgeSync } from "../../../utils/bch-payment";
 import { isBrowser } from "@utils/browser";
 
 interface ViewVotesModalProps {
@@ -54,6 +55,7 @@ function voteViewTable(votes: VoteView[]) {
                   isBot={v.creator.bot_account}
                   isDeleted={v.creator.deleted}
                   isBanned={v.creator.banned || v.creator_banned_from_community}
+                  isPremium={checkUserHasGoldBadgeSync(v.creator)}
                 />
               </td>
               <td className="text-end">{scoreToIcon(v.score)}</td>
@@ -86,6 +88,8 @@ export default class ViewVotesModal extends Component<
     commentLikesRes: EMPTY_REQUEST,
     page: 1,
   };
+  
+  creditUpdateListener?: () => void;
 
   constructor(props: ViewVotesModalProps, context: any) {
     super(props, context);
@@ -100,6 +104,22 @@ export default class ViewVotesModal extends Component<
   async componentWillMount() {
     if (this.props.show && isBrowser()) {
       await this.refetch();
+    }
+    
+    // Listen for credit cache updates to refresh gold badge display
+    this.creditUpdateListener = () => {
+      this.forceUpdate();
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+    }
+  }
+  
+  componentWillUnmount(): void {
+    // Remove credit update listener
+    if (typeof window !== 'undefined' && this.creditUpdateListener) {
+      window.removeEventListener('bch-credit-cache-updated', this.creditUpdateListener);
     }
   }
 

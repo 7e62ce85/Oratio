@@ -48,7 +48,7 @@ Lemmy UI의 디자인 시스템을 참조하여 Bitcoin Cash 결제 서비스의
 - **반응형 디자인**: 모바일 우선 접근법으로 다양한 화면 크기 지원
 
 #### 1.2 네비게이션 개선
-- **상단 네비게이션 바**: 모든 페이지에 defadb 브랜딩 일관성 유지
+- **상단 네비게이션 바**: 모든 페이지에 oratio 브랜딩 일관성 유지
 - **브레드크럼**: 사용자 위치 파악 및 네비게이션 향상
 - **명확한 CTA 버튼**: 주요 액션 버튼 시각적 강조
 
@@ -225,7 +225,7 @@ def add_user_credit(user_id, amount):
 const bchPaymentButton = () => {
     return (
         <a 
-            href="https://payments.defadb.com"
+            href="https://payments.oratio.space"
             className="btn btn-outline-warning btn-sm ms-2"
             target="_blank"
             rel="noopener noreferrer"
@@ -244,7 +244,7 @@ const userCreditDisplay = (userId) => {
     const [credit, setCredit] = useState(0);
     
     useEffect(() => {
-        fetch(`https://payments.defadb.com/api/user_credit/${userId}`)
+        fetch(`https://payments.oratio.space/api/user_credit/${userId}`)
             .then(res => res.json())
             .then(data => setCredit(data.total_credit));
     }, [userId]);
@@ -300,7 +300,7 @@ def get_user_credit(user_id):
 from flask_cors import CORS
 
 # Lemmy UI 도메인만 허용
-CORS(app, origins=['https://defadb.com'])
+CORS(app, origins=['https://oratio.space'])
 ```
 
 ### 3. 입력 검증
@@ -507,5 +507,5 @@ def health_check():
 **프로젝트 시작일**: 2025-07-01  
 **현재 버전**: v2.0  
 **마지막 업데이트**: 2025-09-07  
-**운영 상태**: ✅ Production (defadb.com)  
-**개발자**: defadb Team
+**운영 상태**: ✅ Production (oratio.space)  
+**개발자**: oratio Team

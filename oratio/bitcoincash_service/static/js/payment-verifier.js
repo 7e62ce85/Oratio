@@ -11,21 +11,21 @@ class PaymentVerifier {
   
   // PoW 계산 시작
   startProofOfWork() {
-    this.updateStatus('계산 시작 중...');
+    this.updateStatus('Starting calculation...');
     
     // Web Worker 사용하여 브라우저 차단 방지
     this.worker = new Worker('/static/js/proof-of-work-worker.js');
     
     this.worker.onmessage = (e) => {
       if (e.data.success) {
-        this.updateStatus(`작업 증명 완료! (${e.data.timeMs/1000}초 소요)`);
+        this.updateStatus(`Proof of work completed! (${e.data.timeMs/1000} seconds elapsed)`);
         // 서버에 결과 제출
         this.submitProof(e.data.nonce, e.data.hash);
       } else if (e.data.status === 'working') {
         // 진행 상황 업데이트
         const percent = Math.min(100, e.data.timeMs / (60 * 1000) * 100).toFixed(1);
         this.updateProgress(percent);
-        this.updateStatus(`결제 검증 중... 약 ${percent}% 완료`);
+        this.updateStatus(`Verifying payment... approximately ${percent}% complete`);
       }
     };
     
@@ -40,7 +40,7 @@ class PaymentVerifier {
   // 서버에 증명 제출
   async submitProof(nonce, hash) {
     try {
-      this.updateStatus('서버에 증명 제출 중...');
+      this.updateStatus('Submitting proof to server...');
       
       const response = await fetch('/verify-payment', {
         method: 'POST',
@@ -57,21 +57,21 @@ class PaymentVerifier {
       
       if (result.verified) {
         // 결제 확인 성공
-        this.updateStatus('결제가 확인되었습니다! 페이지 이동 중...');
+        this.updateStatus('Payment verified! Redirecting...');
         setTimeout(() => {
           window.location.href = `/payment-success?id=${this.paymentId}`;
         }, 2000);
       } else if (result.powVerified) {
         // PoW는 확인됐지만 블록체인 확인은 안 됨
-        this.updateStatus('작업 증명은 확인되었으나 블록체인에서 결제가 아직 확인되지 않았습니다. 잠시 후 다시 확인합니다...');
+        this.updateStatus('Proof of work verified, but payment not yet confirmed on blockchain. Will check again shortly...');
         setTimeout(() => this.checkPaymentStatus(), 10000);
       } else {
         // 결제 확인 실패
-        this.updateStatus(`결제 확인 실패: ${result.reason || '알 수 없는 오류'}`);
+        this.updateStatus(`Payment verification failed: ${result.reason || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('결제 확인 중 오류 발생:', error);
-      this.updateStatus('서버 연결 중 오류가 발생했습니다. 잠시 후 다시 시도합니다.');
+      this.updateStatus('Error occurred while connecting to server. Will retry shortly.');
       setTimeout(() => this.checkPaymentStatus(), 5000);
     }
   }
@@ -83,15 +83,15 @@ class PaymentVerifier {
       const result = await response.json();
       
       if (result.status === 'completed') {
-        this.updateStatus('결제가 확인되었습니다! 페이지 이동 중...');
+        this.updateStatus('Payment verified! Redirecting...');
         setTimeout(() => {
           window.location.href = `/payment-success?id=${this.paymentId}`;
         }, 2000);
       } else if (result.status === 'paid' || result.status === 'pending') {
-        this.updateStatus('결제 확인 대기 중...');
+        this.updateStatus('Waiting for payment confirmation...');
         setTimeout(() => this.checkPaymentStatus(), 10000);
       } else {
-        this.updateStatus(`결제 상태: ${result.status}`);
+        this.updateStatus(`Payment status: ${result.status}`);
       }
     } catch (error) {
       console.error('결제 상태 확인 중 오류 발생:', error);

@@ -84,9 +84,9 @@ export async function createSsrHtml(
 
   // 환경변수 안전하게 가져오기 (우선순위: Docker > .env > 기본값)
   const bchConfig = {
-    API_KEY: process.env.LEMMY_API_KEY || "",
-    API_URL: process.env.LEMMY_BCH_API_URL || "http://localhost:8081/api/user_credit",
-    PAYMENT_URL: process.env.LEMMY_BCH_PAYMENT_URL || "http://localhost:8081/"
+    API_KEY: process.env.LEMMY_BCH_API_KEY || process.env.LEMMY_API_KEY || "",
+    API_URL: process.env.LEMMY_BCH_API_URL || "https://oratio.space/payments/api/user_credit",
+    PAYMENT_URL: process.env.LEMMY_BCH_PAYMENT_URL || "https://oratio.space/payments/"
   };
 
   // 디버깅을 위한 로그 (운영환경에서는 제거 가능)

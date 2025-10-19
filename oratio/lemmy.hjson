@@ -10,11 +10,12 @@
     database: "lemmy"
     pool_size: 5
   }
-  hostname: "defadb.com"
+  hostname: "oratio.space"
+  
   bind: "0.0.0.0"
   port: 8536
-  cert_path: "/etc/letsencrypt/live/defadb.com/fullchain.pem"
-  key_path: "/etc/letsencrypt/live/defadb.com/privkey.pem"
+  cert_path: "/etc/letsencrypt/live/oratio.space/fullchain.pem"
+  key_path: "/etc/letsencrypt/live/oratio.space/privkey.pem"
   
   pictrs: {
     url: "http://pictrs:8080/"
@@ -23,15 +24,8 @@
   
   email: {
     smtp_server: "email-service:1025"
-    smtp_from_address: "noreply@defadb.com"
+    smtp_from_address: "noreply@oratio.com"
     tls_type: "none"
-  }
-  
-  setup: {
-    admin_username: "admin"
-    admin_password: "bA348CgffTnPg0L"
-    admin_email: "admin@defadb.com"
-    site_name: "DEFA DEBATE"
   }
   
   # 이메일 인증 활성화

@@ -6,3 +6,4 @@ Pillow==9.4.0
 psycopg2-binary==2.9.5  # PostgreSQL 직접 연결 시 필요
 python-dotenv==1.0.0  # .env 파일 로드
 flask_cors==4.0.0  # CORS 지원
+PyJWT==2.8.0  # JWT 토큰 파싱

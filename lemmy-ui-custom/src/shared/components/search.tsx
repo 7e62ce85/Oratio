@@ -653,7 +653,7 @@ export class Search extends Component<SearchRouteProps, SearchState> {
               className="form-select d-inline-block w-auto"
               aria-label={I18NextService.i18n.t("type")}
             >
-              <option disabled aria-hidden="true">
+              <option disabled>
                 {I18NextService.i18n.t("type")}
               </option>
               {searchTypes.map(option => (

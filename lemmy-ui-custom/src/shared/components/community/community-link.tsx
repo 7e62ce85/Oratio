@@ -1,10 +1,12 @@
 import { showAvatars } from "@utils/app";
 import { hostname } from "@utils/helpers";
+import { isPremiumCommunity } from "@utils/bch-payment";
 import { Component } from "inferno";
 import { Link } from "inferno-router";
 import { Community } from "lemmy-js-client";
 import { relTags } from "../../config";
 import { PictrsImage } from "../common/pictrs-image";
+import { Icon } from "../common/icon";
 
 interface CommunityLinkProps {
   community: Community;
@@ -54,6 +56,7 @@ export class CommunityLink extends Component<CommunityLinkProps, any> {
   avatarAndName(title: string, serverStr?: string) {
     const icon = this.props.community.icon;
     const nsfw = this.props.community.nsfw;
+    const isPremium = isPremiumCommunity(this.props.community.name);
 
     return (
       <>
@@ -63,6 +66,13 @@ export class CommunityLink extends Component<CommunityLinkProps, any> {
           icon && <PictrsImage src={icon} icon nsfw={nsfw} />}
         <span className="overflow-wrap-anywhere">
           {title}
+          {isPremium && (
+            <Icon 
+              icon="lock" 
+              classes="icon-inline ms-1 text-warning" 
+              inline
+            />
+          )}
           {serverStr && <small className="text-muted">{serverStr}</small>}
         </span>
       </>

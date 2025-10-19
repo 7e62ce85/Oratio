@@ -10,6 +10,7 @@ interface UserBadgesProps {
   isMod?: boolean;
   isAdmin?: boolean;
   isBot?: boolean;
+  isPremium?: boolean;
   classNames?: string;
 }
 
@@ -43,13 +44,24 @@ export class UserBadges extends Component<UserBadgesProps> {
         this.props.isPostCreator ||
         this.props.isMod ||
         this.props.isAdmin ||
-        this.props.isBot) && (
+        this.props.isBot ||
+        this.props.isPremium) && (
         <span
           className={classNames(
             "row d-inline-flex gx-1",
             this.props.classNames,
           )}
         >
+          {this.props.isPremium && (
+            <span className="col">
+              {getRoleLabelPill({
+                label: "🥇",
+                tooltip: "Gold Member - Has 0.0001 BCH or more credit",
+                classes: "text-warning border border-warning",
+                shrink: false,
+              })}
+            </span>
+          )}
           {this.props.isBanned && (
             <span className="col">
               {getRoleLabelPill({

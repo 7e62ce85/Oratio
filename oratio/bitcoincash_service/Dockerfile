@@ -1,7 +1,7 @@
 FROM python:3.9-slim
 
 # 컨테이너 메타데이터 추가
-LABEL maintainer="admin@defadb.com"
+LABEL maintainer="admin@oratio.space"
 LABEL version="1.0"
 LABEL description="Bitcoin Cash 결제 서비스"
 

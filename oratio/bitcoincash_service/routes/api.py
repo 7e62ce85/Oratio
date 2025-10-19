@@ -57,6 +57,20 @@ def get_user_transactions(username):
     
     return jsonify({"username": username, "transactions": transactions})
 
+@api_bp.route('/api/has_payment/<int:user_id>', methods=['GET'])
+@require_api_key
+def has_user_payment_by_id(user_id):
+    """사용자가 결제한 적이 있는지 확인 API (사용자 ID 기반)"""
+    has_payment = models.has_user_made_payment(str(user_id))
+    return jsonify({"user_id": str(user_id), "has_payment": has_payment})
+
+@api_bp.route('/api/has_payment/<username>', methods=['GET'])
+@require_api_key
+def has_user_payment(username):
+    """사용자가 결제한 적이 있는지 확인 API (사용자명 기반)"""
+    has_payment = models.has_user_made_payment_by_username(username)
+    return jsonify({"username": username, "has_payment": has_payment})
+
 @api_bp.route('/health')
 def health_check():
     """서비스 상태 확인 API"""

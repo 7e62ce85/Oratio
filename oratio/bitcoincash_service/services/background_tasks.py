@@ -49,8 +49,8 @@ def run_background_tasks():
         except Exception as e:
             logger.error(f"백그라운드 작업 오류: {str(e)}")
         
-        # 5분마다 실행
-        time.sleep(300)
+        # 30초마다 실행 (실시간 결제 확인을 위해)
+        time.sleep(30)
 
 def start_background_tasks():
     """백그라운드 작업 시작"""

@@ -16,11 +16,11 @@ export class CommunityAd extends Component<CommunityAdProps, any> {
     if (!adContent && communityName) {
       adContent = `
         <div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); padding: 15px; border-radius: 8px; text-align: center; color: white; font-family: Arial, sans-serif;">
-          <h3 style="margin: 0 0 10px 0; font-size: 18px;">👥 ${communityName} 커뮤니티</h3>
-          <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">이 커뮤니티의 멤버를 위한 특별 제안</p>
+          <h3 style="margin: 0 0 10px 0; font-size: 18px;">👥 ${communityName} Community</h3>
+          <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">Special offer for members of this community</p>
           <a href="#" target="_blank" rel="noopener" onclick="console.log('Community ${communityName} ad clicked')" 
              style="background: #fff; color: #fa709a; padding: 8px 20px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block;">
-            혜택 확인
+            Check Benefits
           </a>
         </div>
       `;

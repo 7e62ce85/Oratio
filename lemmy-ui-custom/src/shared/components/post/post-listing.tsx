@@ -43,6 +43,7 @@ import { Icon } from "../common/icon";
 import { MomentTime } from "../common/moment-time";
 import { PictrsImage } from "../common/pictrs-image";
 import { UserBadges } from "../common/user-badges";
+import { checkUserHasGoldBadgeSync, isPremiumCommunity, canAccessPremiumCommunitySync } from "../../utils/bch-payment";
 import { VoteButtons, VoteButtonsCompact } from "../common/vote-buttons";
 import { CommunityLink } from "../community/community-link";
 import { PersonListing } from "../person/person-listing";
@@ -142,6 +143,7 @@ export class PostListing extends Component<PostListingProps, PostListingState> {
   }
 
   unlisten = () => {};
+  creditUpdateListener?: () => void;
 
   componentWillMount(): void {
     if (
@@ -161,10 +163,24 @@ export class PostListing extends Component<PostListingProps, PostListingState> {
         this.setState({ showEdit: false });
       }
     });
+    
+    // Listen for credit cache updates to refresh gold badge display
+    this.creditUpdateListener = () => {
+      this.forceUpdate();
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+    }
   }
 
   componentWillUnmount(): void {
     this.unlisten();
+    
+    // Remove credit update listener
+    if (typeof window !== 'undefined' && this.creditUpdateListener) {
+      window.removeEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+    }
   }
 
   get postView(): PostView {
@@ -452,6 +468,7 @@ export class PostListing extends Component<PostListingProps, PostListingState> {
           isMod={pv.creator_is_moderator}
           isAdmin={pv.creator_is_admin}
           isBot={pv.creator.bot_account}
+          isPremium={checkUserHasGoldBadgeSync(pv.creator)}
         />
         {this.props.showCommunity && (
           <>
@@ -1122,6 +1139,20 @@ export class PostListing extends Component<PostListingProps, PostListingState> {
   }
 
   handleShowBody(i: PostListing) {
+    // Check if this is a premium community post
+    const communityName = i.postView.community.name;
+    const currentUser = UserService.Instance.myUserInfo?.local_user_view.person;
+    
+    // If trying to expand (show) and it's a premium community, check access
+    if (!i.state.showBody && isPremiumCommunity(communityName)) {
+      const hasAccess = canAccessPremiumCommunitySync(communityName, currentUser);
+      if (!hasAccess) {
+        // Don't allow expansion - show toast notification
+        toast(I18NextService.i18n.t("premium_community_access_required"), "danger");
+        return;
+      }
+    }
+    
     i.setState({ showBody: !i.state.showBody });
   }
 

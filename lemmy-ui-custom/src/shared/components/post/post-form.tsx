@@ -23,6 +23,10 @@ import {
   SearchResponse,
 } from "lemmy-js-client";
 import {
+  computeProofOfWork,
+  POW_DIFFICULTY_PRESETS
+} from "../../utils/proof-of-work";
+import {
   archiveTodayUrl,
   ghostArchiveUrl,
   postMarkdownFieldCharacterLimit,
@@ -98,10 +102,27 @@ interface PostFormState {
   previewMode: boolean;
   submitted: boolean;
   bypassNavWarning: boolean;
+  // Proof of Work 관련 상태
+  powChallenge?: string;
+  powNonce?: number;
+  powHash?: string;
+  powComputing: boolean;
+  powProgress: number;
+  powAttempts: number;
+  powDifficulty: number;
 }
 
 function handlePostSubmit(i: PostForm, event: any) {
   event.preventDefault();
+  
+  // PoW 검증 (새 게시글 작성 시에만, 수정 시에는 필요 없음)
+  if (!i.props.post_view) {
+    if (!i.state.powHash || !i.state.powNonce || !i.state.powChallenge) {
+      toast("Please complete the bot verification first.", "danger");
+      return;
+    }
+  }
+  
   // Coerce empty url string to undefined
   if ((i.state.form.url ?? "") === "") {
     i.setState(s => ((s.form.url = undefined), s));
@@ -141,6 +162,10 @@ function handlePostSubmit(i: PostForm, event: any) {
         honeypot: pForm.honeypot,
         custom_thumbnail: pForm.custom_thumbnail,
         alt_text: pForm.alt_text,
+        // POW 데이터 추가
+        pow_challenge: i.state.powChallenge,
+        pow_nonce: i.state.powNonce,
+        pow_hash: i.state.powHash,
       },
       () => {
         i.setState({ bypassNavWarning: true });
@@ -302,6 +327,11 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
     communitySearchOptions: [],
     submitted: false,
     bypassNavWarning: false,
+    // Proof of Work 초기값
+    powComputing: false,
+    powProgress: 0,
+    powAttempts: 0,
+    powDifficulty: 20, // 기본 난이도 (약 3-10초)
   };
 
   postTitleRef = createRef<HTMLTextAreaElement>();
@@ -694,6 +724,8 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
           value={this.state.form.honeypot}
           onInput={linkEvent(this, handleHoneyPotChange)}
         />
+        {/* Proof of Work */}
+        {!this.props.post_view && this.renderProofOfWork()}
         <div className="mb-3 row">
           <div className="col-sm-10">
             <button
@@ -893,5 +925,109 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
     this.setState({ bypassNavWarning: true });
     update();
     this.setState({ bypassNavWarning: false });
+  }
+
+  renderProofOfWork() {
+    return (
+      <div className="mb-3 row">
+        <label className="col-sm-2 col-form-label">
+          �️ Bot Verification
+        </label>
+        <div className="col-sm-10">
+          {this.state.powComputing ? (
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center mb-2">
+                  <Spinner />
+                  <span className="ms-2">
+                    🤖 Verifying you're human... ({this.state.powProgress.toFixed(0)}%)
+                  </span>
+                </div>
+                <div className="progress">
+                  <div
+                    className="progress-bar progress-bar-striped progress-bar-animated"
+                    role="progressbar"
+                    style={`width: ${this.state.powProgress}%`}
+                    aria-valuenow={this.state.powProgress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+                <small className="text-muted mt-2 d-block">
+                  Attempts: {this.state.powAttempts.toLocaleString()}
+                </small>
+              </div>
+            </div>
+          ) : this.state.powHash ? (
+            <div className="alert alert-success mb-0" role="alert">
+              <Icon icon="check-circle" classes="icon-inline me-2" />
+              ✓ Verification Complete!
+              <small className="d-block text-muted mt-1">
+                Completed in {this.state.powAttempts.toLocaleString()} attempts
+              </small>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-outline-secondary"
+              onClick={linkEvent(this, this.handleComputePoW)}
+            >
+              <Icon icon="shield" classes="icon-inline me-2" />
+              Verify I'm Not a Bot
+            </button>
+          )}
+          <small className="form-text text-muted d-block mt-2">
+            To prevent spam posts, we perform an automatic verification check.
+            This runs in your browser and takes about 10 seconds.
+          </small>
+        </div>
+      </div>
+    );
+  }
+
+  async handleComputePoW(i: PostForm) {
+    try {
+      // 챌린지 생성 (타임스탬프 + 랜덤값)
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2);
+      const challenge = `${timestamp}-${random}`;
+      
+      i.setState({ 
+        powChallenge: challenge,
+        powComputing: true,
+        powProgress: 0,
+        powAttempts: 0
+      });
+
+      // PoW 계산 (진행률 콜백 포함)
+      const result = await computeProofOfWork(
+        challenge,
+        i.state.powDifficulty,
+        (progress, attempts) => {
+          i.setState({ 
+            powProgress: progress,
+            powAttempts: attempts
+          });
+        }
+      );
+
+      // 계산 완료
+      i.setState({
+        powNonce: result.nonce,
+        powHash: result.hash,
+        powAttempts: result.attempts,
+        powComputing: false,
+        powProgress: 100
+      });
+
+      toast("✓ Verification complete!", "success");
+    } catch (error) {
+      console.error('PoW computation failed:', error);
+      toast("Verification failed. Please try again.", "danger");
+      i.setState({ 
+        powComputing: false,
+        powProgress: 0
+      });
+    }
   }
 }

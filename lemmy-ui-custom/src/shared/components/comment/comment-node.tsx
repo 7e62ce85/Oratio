@@ -46,6 +46,7 @@ import { tippyMixin } from "../mixins/tippy-mixin";
 import { Icon, Spinner } from "../common/icon";
 import { MomentTime } from "../common/moment-time";
 import { UserBadges } from "../common/user-badges";
+import { checkUserHasGoldBadgeSync } from "../../utils/bch-payment";
 import { VoteButtonsCompact } from "../common/vote-buttons";
 import { CommunityLink } from "../community/community-link";
 import { PersonListing } from "../person/person-listing";
@@ -132,6 +133,8 @@ export class CommentNode extends Component<CommentNodeProps, CommentNodeState> {
     readLoading: false,
     fetchChildrenLoading: false,
   };
+  
+  creditUpdateListener?: () => void;
 
   constructor(props: any, context: any) {
     super(props, context);
@@ -154,6 +157,24 @@ export class CommentNode extends Component<CommentNodeProps, CommentNodeState> {
     this.handlePurgePerson = this.handlePurgePerson.bind(this);
     this.handlePurgeComment = this.handlePurgeComment.bind(this);
     this.handleTransferCommunity = this.handleTransferCommunity.bind(this);
+  }
+  
+  componentWillMount(): void {
+    // Listen for credit cache updates to refresh gold badge display
+    this.creditUpdateListener = () => {
+      this.forceUpdate();
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+    }
+  }
+  
+  componentWillUnmount(): void {
+    // Remove credit update listener
+    if (typeof window !== 'undefined' && this.creditUpdateListener) {
+      window.removeEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+    }
   }
 
   get commentView(): CommentNodeView {
@@ -224,6 +245,7 @@ export class CommentNode extends Component<CommentNodeProps, CommentNodeState> {
                 isMod={creator_is_moderator}
                 isAdmin={creator_is_admin}
                 isBot={cv.creator.bot_account}
+                isPremium={checkUserHasGoldBadgeSync(creator)}
               />
 
               {this.props.showCommunity && (

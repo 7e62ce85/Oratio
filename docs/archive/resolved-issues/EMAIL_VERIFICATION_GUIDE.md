@@ -22,11 +22,11 @@
 ```bash
 # Email Configuration
 SMTP_SERVER=postfix:25
-SMTP_FROM_ADDRESS=noreply@defadb.com
-ADMIN_EMAIL=admin@defadb.com
+SMTP_FROM_ADDRESS=noreply@oratio.space
+ADMIN_EMAIL=admin@oratio.space
 SITE_NAME=Oratio Forum
 SITE_DESCRIPTION=A forum for meaningful discussions
-DOMAIN=defadb.com
+DOMAIN=oratio.space
 ```
 
 ### 2. Lemmy 설정 (lemmy.hjson)
@@ -86,18 +86,18 @@ TXT 레코드: v=spf1 ip4:YOUR_SERVER_IP include:_spf.google.com ~all
 ### 2. DKIM 설정 (권장)
 ```bash
 # DKIM 키 생성
-docker-compose exec postfix opendkim-genkey -t -s mail -d defadb.com
+docker-compose exec postfix opendkim-genkey -t -s mail -d oratio.space
 
 # 생성된 키를 DNS에 추가
 ```
 
 ### 3. DMARC 설정 (권장)
 ```
-TXT 레코드 (_dmarc.defadb.com): v=DMARC1; p=none; rua=mailto:admin@defadb.com
+TXT 레코드 (_dmarc.oratio.space): v=DMARC1; p=none; rua=mailto:admin@oratio.space
 ```
 
 ### 4. PTR 레코드 (역방향 DNS)
-서버 IP에 대한 PTR 레코드를 defadb.com으로 설정
+서버 IP에 대한 PTR 레코드를 oratio.space으로 설정
 
 ## 사용자 가입 프로세스
 

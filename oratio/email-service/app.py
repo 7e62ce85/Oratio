@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Resend API 키 (환경변수에서 가져옴)
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
-FROM_EMAIL = os.environ.get('SMTP_FROM_ADDRESS', 'noreply@defadb.com')
+FROM_EMAIL = os.environ.get('SMTP_FROM_ADDRESS', 'noreply@oratio.space')
 
 def send_email_via_resend(to_email, subject, content_text, content_html=None):
     """Resend API를 사용해서 이메일 발송"""

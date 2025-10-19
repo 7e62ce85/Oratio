@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Cash Payment - defadb</title>
+    <title>Bitcoin Cash Payment - oratio</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
-            --bs-primary: #007bff;
+            --bs-primary: #667eea;
             --bs-success: #28a745;
             --bs-danger: #dc3545;
             --bs-warning: #ffc107;
@@ -18,49 +18,71 @@
         }
         
         body {
-            background-color: var(--bs-light);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             overflow-y: scroll;
+            min-height: 100vh;
         }
         
         .navbar-like {
-            background-color: var(--bs-primary);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 1rem 0;
-            margin-bottom: 2rem;
+            padding: 1.5rem 0;
+            margin-bottom: 0;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
         }
         
         .site-title {
-            font-size: 1.5rem;
-            font-weight: 600;
+            font-size: 2rem;
+            font-weight: 700;
             color: white;
             text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+        
+        .site-title:hover {
+            color: #ffecd2;
         }
         
         .container {
             max-width: 900px;
+            padding-top: 2rem;
+            padding-bottom: 2rem;
         }
         
         .card {
-            border: 1px solid rgba(0,0,0,.125);
-            border-radius: 0.375rem;
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+            background: white;
         }
         
         .card-header {
-            background-color: var(--bs-primary);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border-bottom: 1px solid rgba(0,0,0,.125);
-            padding: 1rem 1.25rem;
+            border-bottom: none;
+            padding: 1.5rem;
+            border-radius: 1rem 1rem 0 0 !important;
+        }
+        
+        .card-body {
+            padding: 2rem;
         }
 
         .qr-container {
             text-align: center;
-            margin: 20px 0;
-            padding: 20px;
-            background-color: white;
-            border-radius: 0.375rem;
-            border: 2px dashed #dee2e6;
+            margin: 2rem 0;
+            padding: 2rem;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-radius: 1rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+        }
+        
+        .qr-container img {
+            max-width: 300px;
+            border-radius: 0.5rem;
+            background: white;
+            padding: 1rem;
         }
 
         .verification-container {
@@ -70,43 +92,57 @@
 
         .progress {
             height: 25px;
+            border-radius: 0.5rem;
+            overflow: hidden;
         }
         
         .payment-address-container {
-            background-color: #f8f9fa;
-            padding: 1rem;
-            border-radius: 0.375rem;
-            border: 1px solid #dee2e6;
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            border: none;
         }
         
         .status-badge {
             font-size: 0.9rem;
             padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+        }
+        
+        .alert {
+            border-radius: 0.75rem;
+            border: none;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
         }
         
         .alert-danger {
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
         }
         
         .alert-warning {
-            background-color: #fff3cd;
-            border-color: #ffecb5;
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
             color: #856404;
         }
         
         .alert-info {
-            background-color: #d1ecf1;
-            border-color: #bee5eb;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-left: 5px solid #17a2b8;
             color: #0c5460;
         }
         
+        .alert-secondary {
+            background-color: #e2e3e5;
+            border-color: #d6d8db;
+            color: #383d41;
+        }
+        
         .invoice-details {
-            background-color: white;
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
             padding: 1.5rem;
-            border-radius: 0.375rem;
-            border: 1px solid #dee2e6;
+            border-radius: 0.75rem;
+            border: none;
             margin-bottom: 1.5rem;
         }
         
@@ -114,8 +150,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #f1f3f4;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.5);
         }
         
         .detail-row:last-child {
@@ -123,21 +159,100 @@
         }
         
         .detail-label {
-            font-weight: 600;
+            font-weight: 700;
             color: var(--bs-dark);
         }
         
         .detail-value {
-            color: var(--bs-gray);
+            color: #333;
             word-break: break-all;
+            text-align: right;
+            font-family: monospace;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 0.75rem 2rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1rem rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-lg {
+            padding: 1rem 2.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            border: none;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .btn-info:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1rem rgba(23, 162, 184, 0.4);
+        }
+        
+        .btn-outline-primary {
+            border: 2px solid #667eea;
+            color: #667eea;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .btn-outline-primary:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+            color: white;
+        }
+        
+        .btn-outline-secondary {
+            border: 2px solid #6c757d;
+            color: #6c757d;
+            font-weight: 600;
+            border-radius: 0.5rem;
+        }
+        
+        .btn-outline-secondary:hover {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .input-group {
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        
+        .form-control {
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            background: white;
+        }
+        
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .font-monospace {
+            font-family: monospace;
+            font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
-    <!-- 네비게이션 바 -->
+    <!-- Navigation Bar -->
     <div class="navbar-like">
-        <div class="container">
-            <a href="https://defadb.com/" class="site-title">defadb</a>
+        <div class="container text-center">
+            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
         </div>
     </div>
 
@@ -145,99 +260,99 @@
         <div class="row">
             <div class="col-lg-8 offset-lg-2">
                 <!-- Non-Refundable Policy Warning -->
-                <div class="alert alert-danger mb-4">
-                    <h5 class="alert-heading"><strong>⚠️ Non-Refundable Policy</strong></h5>
+                <div class="alert alert-danger mb-4 text-center">
+                    <h5 class="alert-heading"><span style="font-size: 1.5rem; margin-right: 0.5rem;">⚠️</span><strong>Non-Refundable Policy</strong></h5>
                     <p class="mb-1"><strong>All payments are non-refundable.</strong> Please verify the amount and address before payment.</p>
                     <p class="mb-0">Due to blockchain characteristics, sent cryptocurrency cannot be reversed.</p>
                 </div>
                 
                 <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title mb-0">
-                            <span class="me-3">Bitcoin Cash Payment</span>
-                            <span class="badge status-badge 
-                                {% if invoice.status == 'completed' %}bg-success
-                                {% elif invoice.status == 'paid' %}bg-info
-                                {% elif invoice.status == 'expired' %}bg-danger
-                                {% else %}bg-warning{% endif %}">
-                                {% if invoice.status == 'completed' %}Payment Complete
-                                {% elif invoice.status == 'paid' %}Payment Confirmed
-                                {% elif invoice.status == 'expired' %}Expired
-                                {% else %}Awaiting Payment{% endif %}
-                            </span>
+                    <div class="card-header text-center">
+                        <h3 class="card-title mb-3">
+                            💳 Bitcoin Cash Payment
                         </h3>
+                        <span class="badge status-badge 
+                            {% if invoice.status == 'completed' %}bg-success
+                            {% elif invoice.status == 'paid' %}bg-info
+                            {% elif invoice.status == 'expired' %}bg-danger
+                            {% else %}bg-warning text-dark{% endif %}">
+                            {% if invoice.status == 'completed' %}✅ Payment Complete
+                            {% elif invoice.status == 'paid' %}⏳ Payment Confirmed
+                            {% elif invoice.status == 'expired' %}❌ Expired
+                            {% else %}🕒 Awaiting Payment{% endif %}
+                        </span>
                     </div>
                     <div class="card-body">
                         <!-- Invoice Details -->
                         <div class="invoice-details">
                             <div class="detail-row">
-                                <span class="detail-label">Invoice ID</span>
+                                <span class="detail-label">📋 Invoice ID</span>
                                 <span class="detail-value" id="invoice-id">{{ invoice.invoice_id }}</span>
                             </div>
                             <div class="detail-row">
-                                <span class="detail-label">Payment Amount</span>
-                                <span class="detail-value"><strong>{{ invoice.amount }} BCH</strong></span>
+                                <span class="detail-label">💰 Payment Amount</span>
+                                <span class="detail-value"><strong style="font-size: 1.2rem; color: #667eea;">{{ invoice.amount }} BCH</strong></span>
                             </div>
                             <div class="detail-row">
-                                <span class="detail-label">Status</span>
+                                <span class="detail-label">📊 Status</span>
                                 <span class="detail-value" id="payment-status">
-                                    {% if invoice.status == 'completed' %}Payment Complete
-                                    {% elif invoice.status == 'paid' %}Payment Confirmed
-                                    {% elif invoice.status == 'expired' %}Expired
-                                    {% else %}Awaiting Payment{% endif %}
+                                    {% if invoice.status == 'completed' %}✅ Payment Complete
+                                    {% elif invoice.status == 'paid' %}⏳ Payment Confirmed
+                                    {% elif invoice.status == 'expired' %}❌ Expired
+                                    {% else %}🕒 Awaiting Payment{% endif %}
                                 </span>
                             </div>
                             {% if invoice.tx_hash %}
                             <div class="detail-row">
-                                <span class="detail-label">Transaction Hash</span>
+                                <span class="detail-label">🔗 Transaction Hash</span>
                                 <span class="detail-value">
                                     <a href="https://blockchair.com/bitcoin-cash/transaction/{{ invoice.tx_hash }}" 
-                                       target="_blank" class="text-primary">{{ invoice.tx_hash[:16] }}...</a>
+                                       target="_blank" class="text-primary" style="text-decoration: none;">{{ invoice.tx_hash[:16] }}...</a>
                                 </span>
                             </div>
                             {% endif %}
                             {% if invoice.confirmations is not none %}
                             <div class="detail-row">
-                                <span class="detail-label">Network Confirmations</span>
+                                <span class="detail-label">📡 Network Confirmations</span>
                                 <span class="detail-value">
                                     <span id="confirmations">{{ invoice.confirmations }}</span> / {{ min_confirmations }} confirmations
                                 </span>
                             </div>
                             {% endif %}
                             <div class="detail-row">
-                                <span class="detail-label">Expiry Time</span>
+                                <span class="detail-label">⏰ Expiry Time</span>
                                 <span class="detail-value">{{ formatted_expiry }}</span>
                             </div>
                         </div>
 
                         <!-- Payment Instructions -->
-                        <div class="alert alert-info">
-                            <strong>📱 Payment Method:</strong> Send exactly <strong>{{ invoice.amount }} BCH</strong> to the address below.
+                        <div class="alert alert-info text-center">
+                            <p class="mb-0"><strong>📱 Payment Method:</strong> Send exactly <strong style="color: #667eea;">{{ invoice.amount }} BCH</strong> to the address below.</p>
                         </div>
 
                         <!-- Payment Address -->
                         <div class="payment-address-container mb-4">
-                            <label class="form-label fw-bold">Payment Address</label>
+                            <label class="form-label fw-bold" style="color: #333;">💳 Payment Address</label>
                             <div class="input-group">
                                 <input type="text" class="form-control font-monospace" value="{{ invoice.payment_address }}"
                                     id="payment-address" readonly>
                                 <button class="btn btn-outline-primary" type="button" onclick="copyAddress()">
-                                    <span id="copy-text">Copy</span>
+                                    <span id="copy-text">📋 Copy</span>
                                 </button>
                             </div>
                         </div>
 
                         <!-- QR Code -->
                         <div class="qr-container">
-                            <h6 class="text-muted mb-3">Easy Payment with QR Code</h6>
+                            <h6 style="color: #333; font-weight: 700;">📱 Scan QR Code for Easy Payment</h6>
                             <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code" class="img-fluid" style="max-width: 300px;">
-                            <p class="text-muted mt-2 small">Scan the QR code with your wallet app to make payment</p>
+                            <p class="mt-3 mb-0 small" style="color: #555;">Scan the QR code with your wallet app to make payment</p>
                         </div>
 
                         <!-- Payment Confirmation Button -->
                         <div id="payment-controls" class="d-grid gap-2 mt-4">
                             <button id="check-button" class="btn btn-primary btn-lg" onclick="checkPayment()">
-                                🔄 Check Payment Status
+                                � Check Payment Status
                             </button>
                             <button id="verify-button" class="btn btn-info" onclick="startVerification()"
                                 style="display:none;">
@@ -248,8 +363,8 @@
                         <!-- Additional Information -->
                         <div class="mt-4">
                             <div class="alert alert-warning">
+                                <h6 class="fw-bold mb-2">📌 Important Information:</h6>
                                 <small>
-                                    <strong>📌 Information:</strong><br>
                                     • Payment confirmation may take 10-30 minutes<br>
                                     • Network fees are paid by the sender<br>
                                     • Payment will not be recognized if the exact amount is not sent
@@ -259,9 +374,9 @@
 
                         <!-- Work Proof UI -->
                         <div id="verification-container" class="verification-container">
-                            <div class="card mt-4">
+                            <div class="card mt-4" style="background: white; border-radius: 0.75rem; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);">
                                 <div class="card-body">
-                                    <h6 class="card-title">🔐 Browser Payment Verification</h6>
+                                    <h6 class="card-title"><span style="font-size: 1.2rem; margin-right: 0.5rem;">🔐</span>Browser Payment Verification</h6>
                                     <p class="text-muted small">If payment is not confirmed on the blockchain, you can verify payment through browser proof-of-work.</p>
 
                                     <div class="alert alert-secondary">
@@ -271,7 +386,7 @@
                                     <div class="progress">
                                         <div id="verification-progress"
                                             class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
-                                            style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                            style="width: 0%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                                     </div>
 
                                     <p class="text-muted mt-2 small">This process takes about 1 minute. Please do not close your browser.</p>
@@ -281,7 +396,7 @@
                         
                         <!-- Bottom Links -->
                         <div class="text-center mt-4">
-                            <a href="/" class="btn btn-outline-secondary">Return to Main</a>
+                            <a href="/" class="btn btn-outline-secondary">🏠 Return to Main</a>
                         </div>
                     </div>
                 </div>
@@ -335,7 +450,12 @@
             checkButton.innerHTML = '🔄 Checking...';
 
             try {
-                const response = await fetch(`/check_payment/${invoiceId}`);
+                // 절대 경로 사용 또는 현재 위치 기준 상대 경로
+                const currentPath = window.location.pathname; // /payments/invoice/xxx
+                const basePath = currentPath.substring(0, currentPath.lastIndexOf('/')); // /payments/invoice
+                const checkUrl = basePath.replace('/invoice', '/check_payment') + '/' + invoiceId;
+                
+                const response = await fetch(checkUrl);
                 const data = await response.json();
 
                 // Update status and confirmations
@@ -370,7 +490,7 @@
                     checkButton.className = 'btn btn-success btn-lg';
                     // Navigate to payment success page
                     setTimeout(() => {
-                        window.location.href = `/payment_success/${invoiceId}`;
+                        window.location.href = `../payment_success/${invoiceId}`;
                     }, 2000);
                 } else if (data.status === 'paid') {
                     checkButton.innerHTML = '⏳ Waiting for Network Confirmation...';
@@ -379,7 +499,7 @@
                     // Navigate to payment success page if enough confirmations
                     if (data.confirmations >= {{ min_confirmations }}) {
                         setTimeout(() => {
-                            window.location.href = `/payment_success/${invoiceId}`;
+                            window.location.href = `../payment_success/${invoiceId}`;
                         }, 2000);
                     }
                 } else if (data.status === 'expired') {

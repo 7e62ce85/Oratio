@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Cash Payment Service - defadb</title>
+    <title>Bitcoin Cash Payment Service - oratio</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
@@ -18,135 +18,239 @@
         }
         
         body {
-            background-color: var(--bs-light);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             overflow-y: scroll;
+            min-height: 100vh;
         }
         
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin-top: 2rem;
-        }
-        
-        .card {
-            border: 1px solid rgba(0,0,0,.125);
-            border-radius: 0.375rem;
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-        }
-        
-        .card-header {
-            background-color: var(--bs-primary);
-            color: white;
-            border-bottom: 1px solid rgba(0,0,0,.125);
-            padding: 0.75rem 1.25rem;
-        }
-        
-        .btn-primary {
-            background-color: var(--bs-primary);
-            border-color: var(--bs-primary);
-        }
-        
-        .btn-primary:hover {
-            background-color: #0056b3;
-            border-color: #0056b3;
-        }
-        
-        .alert-danger {
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
-            border: 1px solid transparent;
-            border-radius: 0.375rem;
-            padding: 0.75rem 1.25rem;
-        }
-        
-        .alert-warning {
-            background-color: #fff3cd;
-            border-color: #ffecb5;
-            color: #856404;
-        }
-        
-        .navbar-like {
-            background-color: var(--bs-primary);
-            color: white;
-            padding: 1rem 0;
             margin-bottom: 2rem;
         }
         
-        .site-title {
-            font-size: 1.5rem;
+        .card {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+            background: white;
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom: none;
+            padding: 1.5rem;
+            border-radius: 1rem 1rem 0 0 !important;
+        }
+        
+        .card-header h2 {
+            font-weight: 700;
+            font-size: 1.75rem;
+            margin: 0;
+        }
+        
+        .card-body {
+            padding: 2rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 0.75rem 2rem;
             font-weight: 600;
+            border-radius: 0.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1rem rgba(102, 126, 234, 0.4);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+        
+        .btn-lg {
+            padding: 1rem 2.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .alert {
+            border-radius: 0.75rem;
+            border: none;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+        }
+        
+        .alert-danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .alert-warning {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            color: #856404;
+        }
+        
+        .alert-success {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-left: 5px solid #28a745;
+        }
+        
+        .alert-heading {
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+        
+        .benefit-item {
+            background: white;
+            padding: 0.75rem 1rem;
+            margin: 0.5rem 0;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            transition: transform 0.2s;
+        }
+        
+        .benefit-item:hover {
+            transform: translateX(5px);
+        }
+        
+        .navbar-like {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 0;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+        
+        .site-title {
+            font-size: 2rem;
+            font-weight: 700;
             color: white;
             text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+        
+        .site-title:hover {
+            color: #ffecd2;
         }
         
         .footer-like {
             margin-top: 3rem;
             padding: 2rem 0;
-            background-color: var(--bs-dark);
+            background: rgba(0, 0, 0, 0.2);
             color: white;
             text-align: center;
+            border-top: 2px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .form-section {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            padding: 2rem;
+            border-radius: 1rem;
+            margin-top: 2rem;
+        }
+        
+        .form-section h4 {
+            color: #333;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+        
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .emoji-icon {
+            font-size: 1.5rem;
+            margin-right: 0.5rem;
         }
     </style>
 </head>
 <body>
     <!-- 네비게이션 바 스타일 -->
     <div class="navbar-like">
-        <div class="container">
-            <a href="https://defadb.com/" class="site-title">defadb</a>
+        <div class="container text-center">
+            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
         </div>
     </div>
 
     <div class="container">
         <div class="card">
-            <div class="card-header">
-                <h2 class="text-center mb-0">Bitcoin Cash Payment Service</h2>
+            <div class="card-header text-center">
+                <h2>💳 Bitcoin Cash Payment Service</h2>
             </div>
             <div class="card-body">
                 <!-- Non-Refundable Policy Warning -->
-                <div class="alert alert-danger mb-4">
-                    <h5 class="alert-heading"><strong>⚠️ Important: Non-Refundable Policy</strong></h5>
-                    <p class="mb-1">All Bitcoin Cash payments are <strong>non-refundable</strong>.</p>
-                    <p class="mb-1">• Please verify the amount and address before payment</p>
-                    <p class="mb-1">• Due to blockchain characteristics, sent cryptocurrency cannot be reversed</p>
-                    <p class="mb-0">• Proceeding with payment implies agreement to this policy</p>
+                <div class="alert alert-danger mb-4 text-center">
+                    <h5 class="alert-heading"><span class="emoji-icon">⚠️</span><strong>Important: Non-Refundable Policy</strong></h5>
+                    <p class="mb-2 fs-5">All Bitcoin Cash payments are <strong>non-refundable</strong>.</p>
+                    <div class="text-start" style="max-width: 600px; margin: 0 auto;">
+                        <p class="mb-1">• Please verify the amount and address before payment</p>
+                        <p class="mb-1">• Due to blockchain characteristics, sent cryptocurrency cannot be reversed</p>
+                        <p class="mb-0">• Proceeding with payment implies agreement to this policy</p>
+                    </div>
                 </div>
                 
-                <div class="alert alert-warning mb-4">
-                    <strong>📋 Payment Instructions:</strong> Send the exact amount to the generated address below. Payment completion may take 10-30 minutes.
+                <div class="alert alert-warning mb-4 text-center">
+                    <p class="mb-0"><span class="emoji-icon">📋</span><strong>Payment Instructions:</strong> Send the exact amount to the generated address below. Payment completion may take 10-30 minutes.</p>
                 </div>
                 
                 <!-- Premium Benefits Information -->
                 <div class="alert alert-success mb-4">
-                    <h5 class="alert-heading">💎 Premium Benefits</h5>
-                    <p class="mb-2"><strong>Special benefits for payments of 0.0003 BCH or more:</strong></p>
-                    <p class="mb-1">✅ Remove ad banners across the entire site</p>
-                    <p class="mb-1">✅ Clean and focused browsing environment</p>
-                    <p class="mb-0">✅ Faster page loading speed</p>
+                    <h5 class="alert-heading text-center"><span class="emoji-icon">💎</span>Premium Benefits</h5>
+                    <p class="mb-3 text-center"><strong>Special benefits for payments of 0.0003 BCH or more:</strong></p>
+                    <div style="max-width: 600px; margin: 0 auto;">
+                        <div class="benefit-item">✅ Remove ad banners across the entire site</div>
+                        <div class="benefit-item">✅ Clean and focused browsing environment</div>
+                        <div class="benefit-item">✅ Faster page loading speed</div>
+                        <div class="benefit-item">✅ Gold badge with premium community access</div>
+                    </div>
                 </div>
                 
                 <div class="text-center mb-4">
-                    <a href="https://defadb.com/" class="btn btn-lg btn-primary">Return to defadb.com</a>
+                    <a href="https://oratio.space/" class="btn btn-lg btn-primary">🏠 Return to oratio.space</a>
                 </div>
                 
-                <h4>Generate Test Invoice</h4>
-                <p class="text-muted">For development and testing purposes only.</p>
-                <form action="/generate_invoice" method="get" class="mb-3">
-                    <div class="mb-3">
-                        <label for="amount" class="form-label">Amount (BCH)</label>
-                        <input type="number" step="0.00001" min="0.00001" name="amount" id="amount" class="form-control" value="0.01" required>
-                        <div class="form-text">Minimum amount: 0.0001 BCH</div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="user_id" class="form-label">User ID <span class="text-danger">*</span></label>
-                        <input type="text" name="user_id" id="user_id" class="form-control" placeholder="User ID for credit accumulation" required>
-                        <div class="form-text text-danger">
-                            <strong>Required:</strong> User ID is required for credit accumulation and ad removal benefits<br>
-                            <strong>⚠️ Warning:</strong> Incorrect User ID entry will prevent credit accumulation and premium benefits
+                <div class="form-section">
+                    <h4>🎫 Generate Payment Invoice</h4>
+                    <p class="text-center text-muted mb-4">For development and testing purposes only.</p>
+                    <form action="generate_invoice" method="get" class="mb-3">
+                        <div class="mb-3">
+                            <label for="amount" class="form-label fw-bold">Amount (BCH)</label>
+                            <input type="number" step="0.00001" min="0.00001" name="amount" id="amount" class="form-control" value="0.01" required>
+                            <div class="form-text">Minimum amount: 0.0001 BCH</div>
                         </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Generate Invoice</button>
-                </form>
+                        <div class="mb-3">
+                            <label for="user_id" class="form-label fw-bold">Username <span class="text-danger">*</span></label>
+                            <input type="text" name="user_id" id="user_id" class="form-control" 
+                                   value="{{ user_id }}" 
+                                   {% if user_id %}readonly{% endif %}
+                                   placeholder="{% if not username %}Please login first{% else %}{{ username }}{% endif %}" 
+                                   required
+                                   style="display: none;">
+                            <input type="text" class="form-control" 
+                                   value="{% if username %}{{ username }}{% else %}Not logged in{% endif %}" 
+                                   readonly>
+                            <div class="form-text {% if username %}text-success{% else %}text-danger{% endif %}">
+                                {% if username %}
+                                <strong>✓ Logged in as:</strong> <span class="fw-bold">{{ username }}</span><br>
+                                <strong>Info:</strong> Credits will be accumulated to your account after payment
+                                {% else %}
+                                <strong>⚠️ Not logged in:</strong> Please login to oratio.space first<br>
+                                <strong>Warning:</strong> Without login, you cannot receive payment benefits
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary btn-lg" {% if not username %}disabled{% endif %}>
+                                {% if username %}🚀 Generate Invoice{% else %}🔒 Login Required{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
@@ -154,7 +258,7 @@
     <!-- Footer -->
     <div class="footer-like">
         <div class="container">
-            <p class="mb-0">&copy; 2025 defadb - Bitcoin Cash Payment System</p>
+            <p class="mb-0">&copy; 2025 oratio - Bitcoin Cash Payment System</p>
             <small>Providing secure and transparent cryptocurrency payments</small>
         </div>
     </div>

@@ -275,7 +275,7 @@ echo "=== 검사 완료 ==="
 문서 관리 방식에 대한 개선 제안이나 질문이 있으시면:
 - GitHub Issues 등록
 - 팀 미팅에서 논의
-- 개별 문의: admin@defadb.com
+- 개별 문의: admin@oratio.space
 
 ### 추가 지원
 - 새로운 문서 유형 추가 요청

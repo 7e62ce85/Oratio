@@ -93,6 +93,7 @@ import { Icon, Spinner } from "../common/icon";
 import { MomentTime } from "../common/moment-time";
 import { SortSelect } from "../common/sort-select";
 import { UserBadges } from "../common/user-badges";
+import { checkUserHasGoldBadgeSync } from "../../utils/bch-payment";
 import { CommunityLink } from "../community/community-link";
 import { PersonDetails } from "./person-details";
 import { PersonListing } from "./person-listing";
@@ -211,6 +212,8 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
     showRegistrationDialog: false,
     registrationRes: EMPTY_REQUEST,
   };
+  
+  creditUpdateListener?: () => void;
 
   loadingSettled() {
     return resourcesSettled([
@@ -279,6 +282,22 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
   async componentWillMount() {
     if (!this.state.isIsomorphic && isBrowser()) {
       await this.fetchUserData(this.props, true);
+    }
+    
+    // Listen for credit cache updates to refresh gold badge display
+    this.creditUpdateListener = () => {
+      this.forceUpdate();
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+    }
+  }
+  
+  componentWillUnmount(): void {
+    // Remove credit update listener
+    if (typeof window !== 'undefined' && this.creditUpdateListener) {
+      window.removeEventListener('bch-credit-cache-updated', this.creditUpdateListener);
     }
   }
 
@@ -673,6 +692,7 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
                         isDeleted={pv.person.deleted}
                         isAdmin={pv.is_admin}
                         isBot={pv.person.bot_account}
+                        isPremium={checkUserHasGoldBadgeSync(pv.person)}
                       />
                     </li>
                   </ul>

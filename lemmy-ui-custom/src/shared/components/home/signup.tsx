@@ -26,6 +26,10 @@ import { Icon, Spinner } from "../common/icon";
 import { MarkdownTextArea } from "../common/markdown-textarea";
 import PasswordInput from "../common/password-input.tsx";
 import { RouteComponentProps } from "inferno-router/dist/Route";
+import { 
+  computeProofOfWork, 
+  POW_DIFFICULTY_PRESETS
+} from "../../utils/proof-of-work";
 
 interface State {
   registerRes: RequestState<LoginResponse>;
@@ -43,6 +47,14 @@ interface State {
   };
   captchaPlaying: boolean;
   siteRes: GetSiteResponse;
+  // Proof of Work 관련 상태
+  powChallenge?: string;        // 서버에서 받은 PoW 챌린지
+  powNonce?: number;            // 계산된 nonce
+  powHash?: string;             // 계산된 해시
+  powComputing: boolean;        // PoW 계산 중 여부
+  powProgress: number;          // PoW 계산 진행률 (0-100)
+  powAttempts: number;          // PoW 시도 횟수
+  powDifficulty: number;        // PoW 난이도
 }
 
 @scrollMixin
@@ -61,6 +73,11 @@ export class Signup extends Component<
     },
     captchaPlaying: false,
     siteRes: this.isoData.site_res,
+    // Proof of Work 초기값
+    powComputing: false,
+    powProgress: 0,
+    powAttempts: 0,
+    powDifficulty: 20, // 기본 난이도 (약 10초 예상)
   };
 
   loadingSettled() {
@@ -264,6 +281,7 @@ export class Signup extends Component<
           </>
         )}
         {this.renderCaptcha()}
+        {this.renderProofOfWork()}
         <div className="mb-3 row">
           <div className="col-sm-10">
             <div className="form-check">
@@ -346,6 +364,64 @@ export class Signup extends Component<
     }
   }
 
+  renderProofOfWork() {
+    return (
+      <div className="mb-3 row">
+        <label className="col-sm-2 col-form-label">
+          �️ Bot Verification
+        </label>
+        <div className="col-sm-10">
+          {this.state.powComputing ? (
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center mb-2">
+                  <Spinner />
+                  <span className="ms-2">
+                    🤖 Verifying you're human... ({this.state.powProgress.toFixed(0)}%)
+                  </span>
+                </div>
+                <div className="progress">
+                  <div
+                    className="progress-bar progress-bar-striped progress-bar-animated"
+                    role="progressbar"
+                    style={`width: ${this.state.powProgress}%`}
+                    aria-valuenow={this.state.powProgress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+                <small className="text-muted mt-2 d-block">
+                  Attempts: {this.state.powAttempts.toLocaleString()}
+                </small>
+              </div>
+            </div>
+          ) : this.state.powHash ? (
+            <div className="alert alert-success mb-0" role="alert">
+              <Icon icon="check-circle" classes="icon-inline me-2" />
+              ✓ Verification Complete!
+              <small className="d-block text-muted mt-1">
+                Completed in {this.state.powAttempts.toLocaleString()} attempts
+              </small>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-outline-secondary"
+              onClick={linkEvent(this, this.handleComputePoW)}
+            >
+              <Icon icon="shield" classes="icon-inline me-2" />
+              Verify I'm Not a Bot
+            </button>
+          )}
+          <small className="form-text text-muted d-block mt-2">
+            To prevent spam, we perform an automatic verification check.
+            This runs in your browser and takes about 10 seconds.
+          </small>
+        </div>
+      </div>
+    );
+  }
+
   showCaptcha(res: GetCaptchaResponse) {
     const captchaRes = res?.ok;
     return captchaRes ? (
@@ -378,6 +454,13 @@ export class Signup extends Component<
 
   async handleRegisterSubmit(i: Signup, event: any) {
     event.preventDefault();
+    
+    // PoW 검증
+    if (!i.state.powHash || !i.state.powNonce || !i.state.powChallenge) {
+      toast("Please complete the bot verification first.", "danger");
+      return;
+    }
+
     const {
       show_nsfw,
       answer,
@@ -392,6 +475,24 @@ export class Signup extends Component<
     if (username && password && password_verify) {
       i.setState({ registerRes: LOADING_REQUEST });
 
+      // TODO: 백엔드 API가 준비되면 아래와 같이 PoW 정보 전송
+      // const registerRes = await HttpService.client.register({
+      //   username,
+      //   password,
+      //   password_verify,
+      //   email,
+      //   show_nsfw,
+      //   captcha_uuid,
+      //   captcha_answer,
+      //   honeypot,
+      //   answer,
+      //   // PoW 필드 추가
+      //   pow_challenge: i.state.powChallenge,
+      //   pow_nonce: i.state.powNonce,
+      //   pow_hash: i.state.powHash,
+      // });
+
+      // 임시: 기존 방식 유지 (백엔드 수정 전까지)
       const registerRes = await HttpService.client.register({
         username,
         password,
@@ -403,6 +504,7 @@ export class Signup extends Component<
         honeypot,
         answer,
       });
+      
       switch (registerRes.state) {
         case "failed": {
           toast(registerRes.err.message, "danger");
@@ -481,6 +583,52 @@ export class Signup extends Component<
   handleHoneyPotChange(i: Signup, event: any) {
     i.state.form.honeypot = event.target.value;
     i.setState(i.state);
+  }
+
+  async handleComputePoW(i: Signup) {
+    try {
+      // 챌린지 생성 (타임스탬프 + 랜덤값)
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2);
+      const challenge = `${timestamp}-${random}`;
+      
+      i.setState({ 
+        powChallenge: challenge,
+        powComputing: true,
+        powProgress: 0,
+        powAttempts: 0
+      });
+
+      // PoW 계산 (진행률 콜백 포함)
+      const result = await computeProofOfWork(
+        challenge,
+        i.state.powDifficulty,
+        (progress, attempts) => {
+          i.setState({ 
+            powProgress: progress,
+            powAttempts: attempts
+          });
+        }
+      );
+
+      // 계산 완료
+      i.setState({
+        powNonce: result.nonce,
+        powHash: result.hash,
+        powAttempts: result.attempts,
+        powComputing: false,
+        powProgress: 100
+      });
+
+      toast("✓ Verification complete!", "success");
+    } catch (error) {
+      console.error('PoW computation failed:', error);
+      toast("Verification failed. Please try again.", "danger");
+      i.setState({ 
+        powComputing: false,
+        powProgress: 0
+      });
+    }
   }
 
   async handleRegenCaptcha(i: Signup) {

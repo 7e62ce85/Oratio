@@ -20,6 +20,11 @@ import {
   resourcesSettled,
   bareRoutePush,
 } from "@utils/helpers";
+import { 
+  isPremiumCommunity, 
+  canAccessPremiumCommunitySync,
+  checkUserHasGoldBadge
+} from "@utils/bch-payment";
 import { scrollMixin } from "../mixins/scroll-mixin";
 import type { QueryParams, StringBoolean } from "@utils/types";
 import { RouteDataResponse } from "@utils/types";
@@ -30,6 +35,7 @@ import {
   createRef,
   linkEvent,
 } from "inferno";
+import { Link } from "inferno-router";
 import { RouteComponentProps } from "inferno-router/dist/Route";
 import {
   AddAdmin,
@@ -416,6 +422,56 @@ export class Community extends Component<CommunityRouteProps, State> {
   }
 
   render() {
+    const communityRes = this.state.communityRes;
+    const communityName = this.props.match.params.name;
+    const currentUser = UserService.Instance.myUserInfo?.local_user_view.person;
+    
+    // Check if this is a premium community and if user has access
+    const isPremium = isPremiumCommunity(communityName);
+    const hasAccess = canAccessPremiumCommunitySync(communityName, currentUser);
+    
+    // If it's a premium community and user doesn't have access, show access denied
+    if (isPremium && !hasAccess) {
+      return (
+        <div className="community container-lg">
+          <div className="row">
+            <main className="col-12 col-md-8 col-lg-9">
+              <div className="alert alert-warning" role="alert">
+                <h4 className="alert-heading">
+                  <Icon icon="lock" classes="icon-inline me-2" />
+                  {I18NextService.i18n.t("premium_community_access_required")}
+                </h4>
+                <p>
+                  This community is for gold members only. 
+                  A minimum of 0.0001 BCH credit is required to become a gold member.
+                </p>
+                <hr />
+                <p className="mb-0">
+                  {!currentUser ? (
+                    <>
+                      Please <Link to="/login">login</Link> first, then add BCH credits.
+                    </>
+                  ) : (
+                    <>
+                      To add BCH credits, please visit the{" "}
+                      <a 
+                        href={typeof window !== 'undefined' && window.__BCH_CONFIG__?.PAYMENT_URL || "http://localhost:8081/"} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        payment page
+                      </a>
+                      .
+                    </>
+                  )}
+                </p>
+              </div>
+            </main>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="community container-lg">
         <div className="row">

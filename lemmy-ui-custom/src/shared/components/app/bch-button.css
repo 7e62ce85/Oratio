@@ -1,0 +1,157 @@
+/* BCH Button Responsive Theme Styles */
+
+/* Light theme hover/focus styles */
+.bch-button-light:hover,
+.bch-button-light:focus {
+  background-color: #1B5E20 !important;
+  border-color: #1B5E20 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(27, 94, 32, 0.4) !important;
+}
+
+.bch-button-light:focus {
+  outline: 2px solid #4CAF50;
+  outline-offset: 2px;
+}
+
+.bch-button-light:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(27, 94, 32, 0.3) !important;
+}
+
+/* Dark theme hover/focus styles */
+.bch-button-dark:hover,
+.bch-button-dark:focus {
+  background-color: #66BB6A !important;
+  border-color: #66BB6A !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(102, 187, 106, 0.4) !important;
+}
+
+.bch-button-dark:focus {
+  outline: 2px solid #81C784;
+  outline-offset: 2px;
+}
+
+.bch-button-dark:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(102, 187, 106, 0.3) !important;
+}
+
+/* Automatic theme detection using CSS media queries */
+@media (prefers-color-scheme: dark) {
+  .bch-button-auto {
+    background-color: #4CAF50 !important;
+    border-color: #4CAF50 !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3) !important;
+  }
+  
+  .bch-button-auto:hover,
+  .bch-button-auto:focus {
+    background-color: #66BB6A !important;
+    border-color: #66BB6A !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(102, 187, 106, 0.4) !important;
+  }
+  
+  .bch-button-auto:focus {
+    outline: 2px solid #81C784;
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  .bch-button-auto {
+    background-color: #2E7D32 !important;
+    border-color: #2E7D32 !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 4px rgba(46, 125, 50, 0.3) !important;
+  }
+  
+  .bch-button-auto:hover,
+  .bch-button-auto:focus {
+    background-color: #1B5E20 !important;
+    border-color: #1B5E20 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(27, 94, 32, 0.4) !important;
+  }
+  
+  .bch-button-auto:focus {
+    outline: 2px solid #4CAF50;
+    outline-offset: 2px;
+  }
+}
+
+/* Base styles for all BCH buttons */
+.bch-button-base {
+  padding: 5px 10px !important;
+  border-radius: 6px !important;
+  font-weight: bold !important;
+  margin-left: 10px !important;
+  transition: all 0.3s ease !important;
+  border: 2px solid !important;
+  text-decoration: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  outline: none !important;
+}
+
+/* Accessibility improvements */
+.bch-button-base:focus-visible {
+  outline: 2px solid currentColor !important;
+  outline-offset: 2px !important;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .bch-button-base {
+    border-width: 3px !important;
+    font-weight: 900 !important;
+  }
+  
+  .bch-button-light,
+  .bch-button-auto {
+    background-color: #000000 !important;
+    border-color: #000000 !important;
+    color: #ffffff !important;
+  }
+  
+  .bch-button-dark {
+    background-color: #ffffff !important;
+    border-color: #ffffff !important;
+    color: #000000 !important;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .bch-button-base {
+    transition: none !important;
+  }
+  
+  .bch-button-light:hover,
+  .bch-button-light:focus,
+  .bch-button-dark:hover,
+  .bch-button-dark:focus,
+  .bch-button-auto:hover,
+  .bch-button-auto:focus {
+    transform: none !important;
+  }
+}
+
+/* BCH Icon SVG protection - prevent CSS from overriding fill colors */
+svg.bch-icon {
+  display: inline-block !important;
+  vertical-align: middle !important;
+}
+
+svg.bch-icon circle {
+  fill: #8DC351 !important;
+}
+
+svg.bch-icon path {
+  fill: #FFFFFF !important;
+}
