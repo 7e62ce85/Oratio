@@ -422,6 +422,65 @@ class ElectronCashClient:
         except Exception as e:
             logger.error(f"트랜잭션 목록 조회 오류: {str(e)}")
             return []
+    
+    def get_mempool_transactions(self):
+        """
+        Mempool의 미확인 트랜잭션 목록 조회
+        Zero-Conf 검증을 위해 사용
+        
+        Returns:
+            list: mempool의 트랜잭션 해시 리스트
+        """
+        try:
+            # ElectronCash에서 mempool 조회
+            # getmempool 또는 getmempooltransactions 메서드 시도
+            result = self.call_method("getmempool")
+            
+            if result is None:
+                # 대체 메서드 시도
+                result = self.call_method("getmempooltransactions")
+            
+            if result and isinstance(result, list):
+                logger.info(f"Mempool에서 {len(result)}개의 미확인 트랜잭션 발견")
+                return result
+            elif result and isinstance(result, dict):
+                # dict 형태로 반환될 경우 키만 추출
+                tx_hashes = list(result.keys())
+                logger.info(f"Mempool에서 {len(tx_hashes)}개의 미확인 트랜잭션 발견")
+                return tx_hashes
+            else:
+                logger.warning("Mempool 조회 결과가 없거나 형식이 잘못되었습니다")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Mempool 조회 오류: {str(e)}")
+            logger.error(traceback.format_exc())
+            return []
+    
+    def get_raw_transaction(self, tx_hash):
+        """
+        Raw 트랜잭션 정보 조회 (input/output 포함)
+        
+        Args:
+            tx_hash: 트랜잭션 해시
+            
+        Returns:
+            dict: raw 트랜잭션 정보
+        """
+        try:
+            # verbose=True로 상세 정보 조회
+            result = self.call_method("getrawtransaction", [tx_hash, True])
+            
+            if result:
+                logger.debug(f"Raw 트랜잭션 조회 성공: {tx_hash}")
+                return result
+            else:
+                logger.warning(f"Raw 트랜잭션을 찾을 수 없음: {tx_hash}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Raw 트랜잭션 조회 오류: {str(e)}")
+            return None
 
     def find_transaction_for_invoice(self, invoice):
         """인보이스에 대한 트랜잭션 찾기"""

@@ -443,17 +443,17 @@ export class Community extends Component<CommunityRouteProps, State> {
                 </h4>
                 <p>
                   This community is for gold members only. 
-                  A minimum of 0.0001 BCH credit is required to become a gold member.
+                  An active annual membership is required to become a gold member.
                 </p>
                 <hr />
                 <p className="mb-0">
                   {!currentUser ? (
                     <>
-                      Please <Link to="/login">login</Link> first, then add BCH credits.
+                      Please <Link to="/login">login</Link> first, then purchase an annual membership.
                     </>
                   ) : (
                     <>
-                      To add BCH credits, please visit the{" "}
+                      To purchase an annual membership, please visit the{" "}
                       <a 
                         href={typeof window !== 'undefined' && window.__BCH_CONFIG__?.PAYMENT_URL || "http://localhost:8081/"} 
                         target="_blank" 

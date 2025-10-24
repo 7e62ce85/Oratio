@@ -230,34 +230,43 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
         return;
       }
       
-      // Use username instead of ID for API call
-      const apiUrl = `${getBCHAPIUrl()}/${person.name}`;
+      // Fetch credit balance for display
+      const creditApiUrl = `${getBCHAPIUrl()}/${person.name}`;
       
-      const response = await fetch(apiUrl, {
+      const creditResponse = await fetch(creditApiUrl, {
         headers: {
           'X-API-Key': getApiKey() || ""
         }
       });
       
-      if (response.ok) {
-        const data = await response.json();
+      if (creditResponse.ok) {
+        const creditData = await creditResponse.json();
         
-        // credit_balance 필드가 있는지 확인
-        if (data.credit_balance !== undefined) {
-          // Update the shared cache in bch-payment.ts FIRST so gold badge checks work
-          // Only update cache if credit > 0 to avoid caching transient 0 values from API
-          if (data.credit_balance > 0) {
-            updateCreditCache(person.id, data.credit_balance);
-          }
-          
-          this.setState({ userCredit: data.credit_balance });
-        } else {
-          console.error("[BCH] Response does not contain credit_balance field:", data);
+        if (creditData.credit_balance !== undefined) {
+          this.setState({ userCredit: creditData.credit_balance });
         }
-      } else {
-        const errorText = await response.text();
-        console.error(`[BCH] Failed to fetch user credit: ${response.status}`, errorText);
       }
+      
+      // Update membership status to cache
+      const membershipApiUrl = `${getBCHAPIUrl()}/api/membership/status/${person.name}`;
+      
+      const membershipResponse = await fetch(membershipApiUrl, {
+        headers: {
+          'X-API-Key': getApiKey() || ""
+        }
+      });
+      
+      if (membershipResponse.ok) {
+        const membershipData = await membershipResponse.json();
+        
+        if (membershipData.status === 'active') {
+          // Update the cache so components using checkUserHasGoldBadgeSync will get the value
+          updateCreditCache(person.id, 1.0); // 1.0 = has active membership
+        } else {
+          updateCreditCache(person.id, 0.0); // 0.0 = no active membership
+        }
+      }
+      
     } catch (error) {
       console.error("[BCH] Error fetching user credit:", error);
     }
@@ -653,6 +662,17 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                           >
                             <Icon icon="settings" classes="me-1" />
                             {I18NextService.i18n.t("settings")}
+                          </NavLink>
+                        </li>
+                        <li>
+                          <NavLink
+                            to="/wallet"
+                            className="dropdown-item px-2"
+                            title="My Wallet"
+                            onMouseUp={linkEvent(this, handleCollapseClick)}
+                          >
+                            <Icon icon="wallet" classes="me-1" />
+                            My Wallet
                           </NavLink>
                         </li>
                         <li>

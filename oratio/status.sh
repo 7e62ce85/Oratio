@@ -62,6 +62,35 @@ else
 fi
 echo ""
 
+# BCH Payment Service
+echo -e "${BOLD}2.5 BCH PAYMENT SERVICE (ZERO-CONF)${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if docker ps --format "{{.Names}}" | grep -q "bitcoincash-service"; then
+    BC_MEM=$(docker stats --no-stream --format "{{.MemUsage}}" bitcoincash-service | awk '{print $1}')
+    BC_LIMIT=$(docker stats --no-stream --format "{{.MemUsage}}" bitcoincash-service | awk '{print $3}')
+    BC_PERCENT=$(docker stats --no-stream --format "{{.MemPerc}}" bitcoincash-service)
+    
+    # Check HTTP health
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/health 2>/dev/null)
+    
+    echo -e "Status:    ${GREEN}✅ Running${NC}"
+    echo -e "Memory:    $BC_MEM / $BC_LIMIT ($BC_PERCENT)"
+    
+    if [ "$HTTP_CODE" = "200" ]; then
+        echo -e "Health:    ${GREEN}✅ Healthy (HTTP 200)${NC}"
+        
+        # Get Zero-Conf status
+        ZERO_CONF=$(docker exec bitcoincash-service python3 -c "from config import ZERO_CONF_ENABLED, MIN_CONFIRMATIONS; print(f'Zero-Conf: {ZERO_CONF_ENABLED}, Min: {MIN_CONFIRMATIONS}')" 2>/dev/null || echo "N/A")
+        echo -e "Config:    $ZERO_CONF"
+    else
+        echo -e "Health:    ${YELLOW}⚠️  Unhealthy (HTTP $HTTP_CODE)${NC}"
+    fi
+else
+    echo -e "Status:    ${RED}❌ Not Running${NC}"
+fi
+echo ""
+
 # All Containers
 echo -e "${BOLD}3. ALL CONTAINERS${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

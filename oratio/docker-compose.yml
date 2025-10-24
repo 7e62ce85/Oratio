@@ -73,6 +73,9 @@ services:
       - COMMIT_HASH=latest
       # BCH API 설정 - 실제 도메인으로 업데이트
       - LEMMY_API_KEY=${LEMMY_API_KEY}
+      # Internal URL for server-side rendering (Docker network)
+      - LEMMY_BCH_API_URL_INTERNAL=http://bitcoincash-service:8081/api/user_credit
+      # External URL for client-side (browser)
       - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://payments.oratio.space/api/user_credit}
       - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://payments.oratio.space/}
     volumes:

@@ -22,10 +22,17 @@ ELECTRON_CASH_PASSWORD = os.environ.get('ELECTRON_CASH_PASSWORD', 'secure_passwo
 EC_AVAILABLE = True  # Flag to indicate if Electron Cash is available
 
 # Bitcoin Cash configuration
-CONFIRMATIONS_REQUIRED = int(os.environ.get('MIN_CONFIRMATIONS', 1))  # Number of confirmations required for a payment to be considered valid
+# Zero-Confirmation 설정 (0으로 설정하면 즉시 수락)
+CONFIRMATIONS_REQUIRED = int(os.environ.get('MIN_CONFIRMATIONS', 0))  # Number of confirmations required for a payment to be considered valid
 # Add MIN_CONFIRMATIONS as alias for CONFIRMATIONS_REQUIRED for backward compatibility
 MIN_CONFIRMATIONS = CONFIRMATIONS_REQUIRED
 PAYOUT_WALLET = os.environ.get('PAYOUT_WALLET', 'bitcoincash:qr2u4f2psj0enj83l3s8qx53p6nhlrmcfcdhgphl4d')  # Valid BCH wallet address
+
+# Zero-Confirmation 검증 설정
+ZERO_CONF_ENABLED = os.environ.get('ZERO_CONF_ENABLED', 'true').lower() == 'true'  # Zero-conf 활성화
+ZERO_CONF_DELAY_SECONDS = int(os.environ.get('ZERO_CONF_DELAY_SECONDS', 5))  # 이중지불 체크를 위한 선택적 딜레이 (0~10초 권장)
+ZERO_CONF_MIN_FEE_PERCENT = int(os.environ.get('ZERO_CONF_MIN_FEE_PERCENT', 50))  # 최소 수수료율 (기본값의 몇 %, 50% = 0.5 sat/byte)
+ZERO_CONF_DOUBLE_SPEND_CHECK = os.environ.get('ZERO_CONF_DOUBLE_SPEND_CHECK', 'true').lower() == 'true'  # 이중지불 체크 활성화
 
 # Application settings
 MOCK_MODE = os.environ.get('MOCK_MODE', 'false').lower() == 'true'

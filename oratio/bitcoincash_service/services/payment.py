@@ -2,9 +2,14 @@ import hashlib
 import time
 import traceback
 from datetime import datetime
-from config import logger, MIN_CONFIRMATIONS
+from config import (
+    logger, MIN_CONFIRMATIONS, ZERO_CONF_ENABLED, 
+    ZERO_CONF_DELAY_SECONDS, ZERO_CONF_MIN_FEE_PERCENT,
+    ZERO_CONF_DOUBLE_SPEND_CHECK
+)
 import models
 from services.electron_cash import electron_cash
+from zero_conf_validator import get_validator
 
 def process_payment(invoice_id):
     """결제 상태 확인 및 처리 - ElectronCash 트랜잭션 정보 우선 활용"""
@@ -55,8 +60,8 @@ def process_payment(invoice_id):
     if not payment_address.startswith('bitcoincash:'):
         payment_address = f"bitcoincash:{payment_address}"
     
-    # *** 중요한 변경: ElectronCash를 먼저 시도 ***
-    # ElectronCash를 통한 확인 먼저 시도 (결제가 이미 이루어졌을 가능성 높음)
+    # *** Zero-Confirmation 검증 ***
+    # ElectronCash를 통한 확인 먼저 시도
     try:
         # ElectronCash를 통한 주소 내역 조회
         logger.info(f"ElectronCash를 통해 주소 {payment_address}의 트랜잭션 내역 조회 중...")
@@ -66,38 +71,82 @@ def process_payment(invoice_id):
             # 트랜잭션이 발견됨
             latest_tx = tx_history[0]  # 가장 최근 트랜잭션
             tx_hash = latest_tx.get('tx_hash')
+            tx_height = latest_tx.get('height', 0)  # height가 0이면 unconfirmed
             
             if tx_hash:
                 logger.info(f"ElectronCash에서 주소 {payment_address}의 트랜잭션 발견: {tx_hash}")
+                logger.info(f"트랜잭션 높이: {tx_height} (0 = unconfirmed)")
                 
-                # 해당 트랜잭션의 세부 정보 확인
-                tx_details = electron_cash.call_method("gettransaction", [tx_hash])
-                confirmations = tx_details.get('confirmations', 0) if tx_details else 0
+                # 확인 수 계산 (height가 0이면 unconfirmed)
+                confirmations = 0 if tx_height == 0 else 1  # 간단하게 처리
                 
-                # 인보이스 생성 시간 이후의 트랜잭션인지 확인
-                # 타임스탬프 검증 완화: ElectronCash가 tx를 발견했다면 유효한 것으로 간주
-                # 일부 트랜잭션의 타임스탬프가 정확하지 않을 수 있음
-                tx_time = tx_details.get('timestamp', 0) if tx_details else int(time.time())
-                logger.info(f"트랜잭션 타임스탬프: {tx_time}, 인보이스 생성 시간: {invoice['created_at']}")
+                logger.info(f"트랜잭션 확인 수: {confirmations} (최소 요구: {MIN_CONFIRMATIONS})")
                 
-                # 트랜잭션이 발견되면 유효한 것으로 간주 (타임스탬프 비교 제거)
-                logger.info(f"유효한 트랜잭션 발견. 확인 수: {confirmations}")
+                # Zero-Conf 검증 실행
+                if ZERO_CONF_ENABLED and confirmations < MIN_CONFIRMATIONS:
+                    logger.info(f"🔍 Zero-Conf 검증 시작 (딜레이: {ZERO_CONF_DELAY_SECONDS}초)")
+                    
+                    # 선택적 딜레이 (이중지불 초기 체크)
+                    if ZERO_CONF_DELAY_SECONDS > 0:
+                        logger.info(f"이중지불 초기 체크를 위해 {ZERO_CONF_DELAY_SECONDS}초 대기 중...")
+                        time.sleep(ZERO_CONF_DELAY_SECONDS)
+                        
+                        # 딜레이 후 다시 확인 (이중지불 시도가 있었는지)
+                        tx_history_recheck = electron_cash.call_method("getaddresshistory", [payment_address.replace('bitcoincash:', '')])
+                        if not tx_history_recheck or len(tx_history_recheck) == 0:
+                            logger.error(f"딜레이 후 트랜잭션을 찾을 수 없음: {tx_hash}")
+                            return invoice
+                        # 트랜잭션이 여전히 존재하는지 확인
+                        found = any(tx.get('tx_hash') == tx_hash for tx in tx_history_recheck)
+                        if not found:
+                            logger.error(f"딜레이 후 트랜잭션이 사라짐 (이중지불 가능성): {tx_hash}")
+                            return invoice
+                    
+                    # Zero-Conf Validator로 검증 (단순화된 버전 - ElectronCash 한계로 인해)
+                    # ElectronCash가 getrawtransaction을 지원하지 않으므로 기본 체크만 수행
+                    try:
+                        # 주소 잔액 확인으로 대체
+                        balance = electron_cash.check_address_balance(payment_address)
+                        logger.info(f"주소 잔액 확인: {balance} BCH (예상: {invoice['amount']} BCH)")
+                        
+                        if balance >= invoice['amount'] * 0.99999:  # 0.001% 오차 허용
+                            logger.info(f"✅ Zero-Conf 기본 검증 성공: 충분한 잔액")
+                        else:
+                            logger.error(f"❌ Zero-Conf 검증 실패: 잔액 부족 ({balance} < {invoice['amount']})")
+                            return invoice
+                        
+                    except Exception as e:
+                        logger.error(f"Zero-Conf 검증 중 오류: {str(e)}")
+                        logger.error(traceback.format_exc())
+                        # 검증 오류 시 안전하게 pending 유지
+                        return invoice
                 
-                # 지불 확인
+                # 지불 확인 (Zero-Conf 검증 통과 또는 충분한 확인 수)
                 paid_at = int(time.time())
                 
-                # 인보이스 상태 업데이트 - 바로 completed로 변경
-                models.update_invoice_status(invoice_id, "completed", tx_hash, confirmations, paid_at)
+                # 확인 수에 따라 상태 결정
+                if confirmations >= MIN_CONFIRMATIONS or (ZERO_CONF_ENABLED and confirmations == 0):
+                    # 즉시 완료 처리
+                    status = "completed"
+                    logger.info(f"✅ 결제 완료 처리: {tx_hash} (confirmations={confirmations})")
+                else:
+                    # 확인 대기 상태
+                    status = "paid"
+                    logger.info(f"⏳ 확인 대기 상태: {tx_hash} (confirmations={confirmations}/{MIN_CONFIRMATIONS})")
+                
+                # 인보이스 상태 업데이트
+                models.update_invoice_status(invoice_id, status, tx_hash, confirmations, paid_at)
                 
                 # 응답을 위한 인보이스 정보 업데이트
-                invoice["status"] = "completed"
+                invoice["status"] = status
                 invoice["paid_at"] = paid_at
                 invoice["tx_hash"] = tx_hash
                 invoice["confirmations"] = confirmations
                 
-                # 사용자 크레딧 추가
-                if invoice["user_id"]:
+                # completed 상태이면 크레딧 추가
+                if status == "completed" and invoice["user_id"]:
                     models.credit_user(invoice["user_id"], invoice["amount"], invoice_id)
+                    logger.info(f"💰 사용자 크레딧 추가: {invoice['amount']} BCH")
                     
                 return invoice
     except Exception as e:

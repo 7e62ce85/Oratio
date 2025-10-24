@@ -28,7 +28,8 @@ import {
 import { I18NextService } from "../../services";
 import { PostListing } from "./post-listing";
 import { RequestState } from "../../services/HttpService";
-import { AdBanner } from "../common/ad-banner";
+// INACTIVE: Feed ads temporarily disabled
+// import { AdBanner } from "../common/ad-banner";
 
 interface PostListingsProps {
   posts: PostView[];
@@ -109,12 +110,13 @@ export class PostListings extends Component<PostListingsProps, any> {
                 onHidePost={this.props.onHidePost}
               />
               {idx + 1 !== this.posts.length && <hr className="my-3" />}
+              {/* INACTIVE: Feed ads temporarily disabled (2025-10-23) */}
               {/* Add advertisement every 3 posts for optimal balance */}
-              {(idx + 1) % 3 === 0 && idx + 1 !== this.posts.length && (
+              {/* {(idx + 1) % 3 === 0 && idx + 1 !== this.posts.length && (
                 <div className="my-4">
                   <AdBanner position="sidebar" size="large" section="feed" />
                 </div>
-              )}
+              )} */}
             </>
           ))
         ) : (

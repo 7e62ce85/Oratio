@@ -48,6 +48,7 @@ import {
 import { Reports, ReportsFetchConfig } from "./components/person/reports";
 import { Settings, SettingsFetchConfig } from "./components/person/settings";
 import { VerifyEmail } from "./components/person/verify-email";
+import { WalletPage } from "./components/person/wallet";
 import {
   CreatePostFetchConfig,
   CreatePost,
@@ -180,6 +181,10 @@ export const routes: IRoutePropsWithFetch<RouteData, any, any>[] = [
     component: Settings,
     fetchInitialData: Settings.fetchInitialData,
   } as SettingsFetchConfig,
+  {
+    path: `/wallet`,
+    component: WalletPage,
+  },
   {
     path: `/modlog/:communityId?`,
     component: Modlog,

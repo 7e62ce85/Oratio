@@ -69,6 +69,17 @@ MIN_CONFIRMATIONS=$(docker exec -t $CONTAINER_ID python3 -c "import os; from dot
 echo -e "${CYAN}Payout wallet address:${NC} ${PAYOUT_WALLET}"
 echo -e "${CYAN}Minimum confirmations:${NC} ${MIN_CONFIRMATIONS}"
 
+# Display Zero-Conf settings
+echo -e "\n${BOLD}${BLUE}===== ZERO-CONF SETTINGS =====${NC}"
+docker exec -t $CONTAINER_ID python3 -c "
+import os
+from config import ZERO_CONF_ENABLED, ZERO_CONF_DELAY_SECONDS, ZERO_CONF_MIN_FEE_PERCENT, MIN_CONFIRMATIONS
+print(f'Zero-Conf enabled:       {ZERO_CONF_ENABLED}')
+print(f'Delay (seconds):         {ZERO_CONF_DELAY_SECONDS}')
+print(f'Min fee percentage:      {ZERO_CONF_MIN_FEE_PERCENT}%')
+print(f'Min confirmations:       {MIN_CONFIRMATIONS}')
+" 2>/dev/null || echo -e "${YELLOW}Zero-Conf settings not available${NC}"
+
 # Test the transaction confirmation tracking
 echo -e "\n${BOLD}${BLUE}===== CONFIRMATION TRACKING TEST =====${NC}"
 if [ -n "$BALANCE" ] && [ "$BALANCE" != "0" ]; then

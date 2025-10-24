@@ -60,6 +60,34 @@ def init_db():
         
         # PoW related tables removed
         
+        # 사용자 멤버십 테이블 (Annual Membership)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_memberships (
+            user_id TEXT PRIMARY KEY,
+            membership_type TEXT NOT NULL DEFAULT 'annual',
+            purchased_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            amount_paid REAL NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE
+        )
+        ''')
+        
+        # 멤버십 거래 기록 테이블 (User → Admin BCH transfer)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS membership_transactions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            from_address TEXT,
+            to_address TEXT NOT NULL,
+            amount REAL NOT NULL,
+            tx_hash TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at INTEGER NOT NULL,
+            confirmed_at INTEGER,
+            FOREIGN KEY(user_id) REFERENCES user_memberships(user_id)
+        )
+        ''')
+        
         # 프라그마 설정 - 외래 키 활성화 및 저널 모드 WAL로 변경
         cursor.execute("PRAGMA foreign_keys = ON")
         cursor.execute("PRAGMA journal_mode = WAL")
@@ -425,5 +453,193 @@ def has_user_made_payment_by_username(username):
         logger.error(f"사용자 {username}의 결제 내역 확인 중 오류: {str(e)}")
         return False
 
+# ==================== Membership Functions ====================
+
+def create_membership(user_id, amount_paid, tx_hash=None):
+    """
+    새 연간 멤버십 생성 (1년 유효)
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        now = int(time.time())
+        expires_at = now + (365 * 24 * 60 * 60)  # 1년 후
+        
+        # 기존 멤버십이 있으면 업데이트, 없으면 생성
+        cursor.execute('''
+            INSERT INTO user_memberships (user_id, membership_type, purchased_at, expires_at, amount_paid, is_active)
+            VALUES (?, 'annual', ?, ?, ?, TRUE)
+            ON CONFLICT(user_id) DO UPDATE SET
+                purchased_at = ?,
+                expires_at = ?,
+                amount_paid = ?,
+                is_active = TRUE
+        ''', (user_id, now, expires_at, amount_paid, now, expires_at, amount_paid))
+        
+        # 멤버십 거래 기록 생성
+        transaction_id = str(uuid.uuid4())
+        
+        # Get admin wallet address from config
+        from config import PAYOUT_WALLET
+        admin_address = PAYOUT_WALLET or 'admin_wallet'
+        
+        cursor.execute('''
+            INSERT INTO membership_transactions (id, user_id, to_address, amount, tx_hash, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'completed', ?)
+        ''', (transaction_id, user_id, admin_address, amount_paid, tx_hash, now))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"사용자 {user_id}의 연간 멤버십 생성/갱신: {amount_paid} BCH, 만료일: {expires_at}")
+        return True
+    except Exception as e:
+        logger.error(f"멤버십 생성 중 오류: {str(e)}")
+        return False
+
+def get_membership_status(user_id):
+    """
+    사용자의 멤버십 상태 조회
+    Returns: dict with is_active, expires_at, days_remaining
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT membership_type, purchased_at, expires_at, amount_paid, is_active
+            FROM user_memberships
+            WHERE user_id = ?
+        ''', (user_id,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return {
+                "is_active": False,
+                "has_membership": False
+            }
+        
+        membership_type, purchased_at, expires_at, amount_paid, is_active = result
+        now = int(time.time())
+        
+        # 만료 확인
+        is_expired = now > expires_at
+        if is_expired and is_active:
+            # 만료된 멤버십 비활성화
+            deactivate_membership(user_id)
+            is_active = False
+        
+        days_remaining = max(0, (expires_at - now) // (24 * 60 * 60))
+        
+        return {
+            "is_active": is_active and not is_expired,
+            "has_membership": True,
+            "membership_type": membership_type,
+            "purchased_at": purchased_at,
+            "expires_at": expires_at,
+            "days_remaining": days_remaining,
+            "amount_paid": amount_paid
+        }
+    except Exception as e:
+        logger.error(f"멤버십 상태 조회 중 오류: {str(e)}")
+        return {
+            "is_active": False,
+            "has_membership": False,
+            "error": str(e)
+        }
+
+def deactivate_membership(user_id):
+    """멤버십 비활성화 (만료 시)"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE user_memberships
+            SET is_active = FALSE
+            WHERE user_id = ?
+        ''', (user_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"사용자 {user_id}의 멤버십 비활성화됨")
+        return True
+    except Exception as e:
+        logger.error(f"멤버십 비활성화 중 오류: {str(e)}")
+        return False
+
+def check_and_expire_memberships():
+    """
+    만료된 멤버십 확인 및 비활성화 (백그라운드 작업용)
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        now = int(time.time())
+        
+        cursor.execute('''
+            SELECT user_id FROM user_memberships
+            WHERE is_active = TRUE AND expires_at < ?
+        ''', (now,))
+        
+        expired_users = cursor.fetchall()
+        
+        for (user_id,) in expired_users:
+            cursor.execute('''
+                UPDATE user_memberships
+                SET is_active = FALSE
+                WHERE user_id = ?
+            ''', (user_id,))
+            logger.info(f"사용자 {user_id}의 멤버십이 만료되어 비활성화됨")
+        
+        conn.commit()
+        conn.close()
+        
+        return len(expired_users)
+    except Exception as e:
+        logger.error(f"멤버십 만료 확인 중 오류: {str(e)}")
+        return 0
+
+def get_membership_transactions(user_id, limit=50):
+    """사용자의 멤버십 거래 내역 조회"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, amount, tx_hash, status, created_at, confirmed_at
+            FROM membership_transactions
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (user_id, limit))
+        
+        results = cursor.fetchall()
+        conn.close()
+        
+        transactions = [
+            {
+                "id": row[0],
+                "amount": row[1],
+                "tx_hash": row[2],
+                "status": row[3],
+                "created_at": row[4],
+                "confirmed_at": row[5]
+            }
+            for row in results
+        ]
+        
+        return transactions
+    except Exception as e:
+        logger.error(f"멤버십 거래 내역 조회 중 오류: {str(e)}")
+        return []
+
+# 데이터베이스 초기화 함수 호출
+init_db()
 # 데이터베이스 초기화 함수 호출
 init_db()

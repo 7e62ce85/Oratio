@@ -65,9 +65,9 @@
 
 ## 🎯 광고 배치 기회 분석
 
-### **A. 피드 내 광고 (Feed Ads)**
+### **A. 피드 내 광고 (Feed Ads)** ⚠️ **잠정적으로 미사용/INACTIVE**
 **위치**: PostListings 컴포넌트 내부  
-**현재 상태**: ✅ **구현 완료**  
+**현재 상태**: 🔴 **잠정 비활성화** (구현은 완료되었으나 현재 미사용 중)  
 **구현 난이도**: ⭐⭐ (낮음)
 
 ```typescript
@@ -299,10 +299,10 @@
   - **파일**: `/home/user/srv/lemmy-ui-custom//src/shared/components/community/community.tsx` (473번째 줄)
   - **코드**: `<AdBanner position="sidebar" size="medium" section="community" />`
   
-- **피드 내 광고**: ✅ 완료 (보라색 그라디언트 "피드 추천")
+- **피드 내 광고**: 🔴 **잠정 비활성화** (보라색 그라디언트 "피드 추천")
   - **파일**: `/home/user/srv/lemmy-ui-custom//src/shared/components/post/post-listings.tsx` (115번째 줄)
-  - **코드**: `<AdBanner position="sidebar" size="large" section="feed" />`
-  - **배치**: 3개 포스트마다 광고 삽입
+  - **코드**: `<AdBanner position="sidebar" size="large" section="feed" />` *(현재 미사용)*
+  - **배치**: 3개 포스트마다 광고 삽입 *(잠정 비활성화)*
   
 - **포스트 상세 사이드바**: ✅ 완료 (민트색 그라디언트 "관련 서비스")
   - **파일**: `/home/user/srv/lemmy-ui-custom//src/shared/components/post/post.tsx` (827번째 줄)
@@ -383,28 +383,33 @@ checkUserCredit(): Promise<void> // BCH 크레딧 비동기 확인
 
 #### **광고 배치별 수익 예상**
 1. **헤더 광고**: $800-1,200/월 (모든 페이지 노출)
-2. **피드 내 광고**: $1,500-2,500/월 (가장 높은 수익, 3개 포스트마다)
+2. ~~**피드 내 광고**: $1,500-2,500/월~~ **(잠정 비활성화)**
 3. **사이드바 광고**: $1,200-2,000/월 (홈+커뮤니티+포스트 페이지)
 4. **댓글 섹션 광고**: $500-800/월 (5개 댓글마다)
-5. **총 예상 수익**: **$4,000-6,500/월**
+5. **총 예상 수익**: **$3,000-5,000/월** *(피드 광고 제외)*
 
 #### **BCH 크레딧 수익**
 - 월 500-1,000명의 사용자가 광고 제거 선택시
 - 크레딧 구매율 5-10% 예상
 - 추가 수익: $125-250/월
 
-#### **연간 총 수익 예상**
-- **보수적**: $49,500/년 (월 $4,125)
-- **현실적**: $63,000/년 (월 $5,250)  
-- **낙관적**: $81,000/년 (월 $6,750)
+#### **연간 총 수익 예상** *(피드 광고 비활성화 반영)*
+- **보수적**: $37,500/년 (월 $3,125)
+- **현실적**: $48,000/년 (월 $4,000)  
+- **낙관적**: $63,000/년 (월 $5,250)
+
+**참고**: 피드 내 광고를 재활성화할 경우 연간 $18,000-24,000 추가 수익 가능
 
 ### 🎯 **현재 구현 완성도: 95%** ✨
 
 #### **완료된 기능**
-- ✅ **6개 섹션별 광고 시스템**: 100% 완료
+- ✅ **5개 섹션별 광고 시스템**: 100% 완료 (피드 광고는 잠정 비활성화)
 - ✅ **BCH 크레딧 연동**: 100% 완료  
 - ✅ **반응형 디자인**: 100% 완료
 - ✅ **사용자 경험 최적화**: 100% 완료
+
+#### **잠정 비활성화**
+- 🔴 **피드 내 광고**: 구현은 완료되었으나 현재 미사용 중 (필요시 재활성화 가능)
 
 #### **남은 작업 (선택사항)**
 - 🔄 **성능 모니터링**: 클릭률, 노출률 추적 시스템
@@ -451,12 +456,12 @@ checkUserCredit(): Promise<void> // BCH 크레딧 비동기 확인
 ### 💡 **최종 결론**
 
 **현재 상태**: 광고 시스템 **95% 완성** ✨  
-**구현 완료**: 모든 주요 광고 배치 및 BCH 크레딧 시스템 완료  
-**예상 연간 수익**: **$49,500-81,000** 💰  
+**구현 완료**: 주요 광고 배치 및 BCH 크레딧 시스템 완료 (피드 광고 제외)  
+**예상 연간 수익**: **$37,500-63,000** 💰 *(피드 광고 재활성화 시 최대 $81,000)*  
 **투자 대비 수익률**: 매우 높음 (개발 비용 대비 2,000%+ ROI)
 
 #### **🎉 주요 성과**
-- **6개 전략적 위치**에 섹션별 맞춤 광고 배치 완료
+- **5개 전략적 위치**에 섹션별 맞춤 광고 배치 완료 (피드 광고는 잠정 비활성화)
 - **BCH 크레딧 기반** 광고 제거 시스템으로 사용자 선택권 보장
 - **반응형 디자인**으로 모바일/데스크톱 완벽 지원
 - **사용자 경험 최적화**: 과도하지 않은 광고 밀도로 자연스러운 통합
@@ -466,11 +471,11 @@ checkUserCredit(): Promise<void> // BCH 크레딧 비동기 확인
 
 #### **📁 구현된 파일 목록**
 1. **핵심 컴포넌트**: `/home/user/srv/lemmy-ui-custom//src/shared/components/common/ad-banner.tsx`
-2. **헤더 광고**: `/home/user/srv/lemmy-ui-custom//src/shared/components/app/app.tsx` (127줄)
-3. **홈 사이드바**: `/home/user/srv/lemmy-ui-custom//src/shared/components/home/home.tsx` (569줄)
-4. **커뮤니티 사이드바**: `/home/user/srv/lemmy-ui-custom//src/shared/components/community/community.tsx` (473줄)
-5. **피드 광고**: `/home/user/srv/lemmy-ui-custom//src/shared/components/post/post-listings.tsx` (115줄)
-6. **포스트 사이드바**: `/home/user/srv/lemmy-ui-custom//src/shared/components/post/post.tsx` (827줄, 886줄)
-7. **댓글 광고**: `/home/user/srv/lemmy-ui-custom//src/shared/components/comment/comment-nodes.tsx` (148줄)
+2. **헤더 광고**: `/home/user/srv/lemmy-ui-custom//src/shared/components/app/app.tsx` (127줄) ✅
+3. **홈 사이드바**: `/home/user/srv/lemmy-ui-custom//src/shared/components/home/home.tsx` (569줄) ✅
+4. **커뮤니티 사이드바**: `/home/user/srv/lemmy-ui-custom//src/shared/components/community/community.tsx` (473줄) ✅
+5. ~~**피드 광고**: `/home/user/srv/lemmy-ui-custom//src/shared/components/post/post-listings.tsx` (115줄)~~ 🔴 **비활성화**
+6. **포스트 사이드바**: `/home/user/srv/lemmy-ui-custom//src/shared/components/post/post.tsx` (827줄, 886줄) ✅
+7. **댓글 광고**: `/home/user/srv/lemmy-ui-custom//src/shared/components/comment/comment-nodes.tsx` (148줄) ✅
 
-**🎯 결론**: 광고 시스템이 완벽하게 구현되어 즉시 수익 창출이 가능한 상태입니다! 🎊
+**🎯 결론**: 광고 시스템이 완벽하게 구현되어 즉시 수익 창출이 가능한 상태입니다! (피드 광고는 필요시 재활성화 가능) 🎊

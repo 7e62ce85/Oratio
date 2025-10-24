@@ -16,6 +16,7 @@ from jwt_utils import extract_user_info_from_jwt
 # 라우트 모듈 가져오기
 from routes.invoice import invoice_bp
 from routes.api import api_bp
+from routes.membership import membership_bp
 
 # 서비스 모듈 가져오기
 from services.background_tasks import start_background_tasks
@@ -45,6 +46,7 @@ def forward_to_payout_wallet():
 # Blueprint 등록
 app.register_blueprint(invoice_bp)
 app.register_blueprint(api_bp)
+app.register_blueprint(membership_bp)
 
 # 정적 파일 제공
 @app.route('/static/<path:path>')

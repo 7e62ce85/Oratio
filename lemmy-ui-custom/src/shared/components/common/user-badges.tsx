@@ -56,7 +56,7 @@ export class UserBadges extends Component<UserBadgesProps> {
             <span className="col">
               {getRoleLabelPill({
                 label: "🥇",
-                tooltip: "Gold Member - Has 0.0001 BCH or more credit",
+                tooltip: "Gold Member - Annual Membership Active",
                 classes: "text-warning border border-warning",
                 shrink: false,
               })}
