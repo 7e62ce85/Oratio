@@ -48,6 +48,10 @@ app.register_blueprint(invoice_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(membership_bp)
 
+# Upload quota blueprint
+from routes.upload import upload_bp
+app.register_blueprint(upload_bp)
+
 # 정적 파일 제공
 @app.route('/static/<path:path>')
 def serve_static(path):
@@ -67,6 +71,12 @@ def index():
                              username=user_info['username'])
     else:
         return render_template('index.html', user_id='', username='')
+
+# Bitcoin Cash help guide page route
+@app.route('/help')
+def help_guide():
+    """Bitcoin Cash 안내 페이지"""
+    return render_template('help.html')
 
 # 전역 예외 처리
 @app.errorhandler(Exception)

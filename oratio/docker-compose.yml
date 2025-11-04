@@ -73,11 +73,11 @@ services:
       - COMMIT_HASH=latest
       # BCH API 설정 - 실제 도메인으로 업데이트
       - LEMMY_API_KEY=${LEMMY_API_KEY}
-      # Internal URL for server-side rendering (Docker network)
+      # Server-side (internal Docker network) URL
       - LEMMY_BCH_API_URL_INTERNAL=http://bitcoincash-service:8081/api/user_credit
-      # External URL for client-side (browser)
-      - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://payments.oratio.space/api/user_credit}
-      - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://payments.oratio.space/}
+      # Client-side (external) URL
+      - LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL:-https://oratio.space/payments/api/user_credit}
+      - LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL:-https://oratio.space/payments/}
     volumes:
       - ./volumes/lemmy-ui/extra_themes:/app/extra_themes:Z
     depends_on:
@@ -109,9 +109,9 @@ services:
     image: docker.io/pgautoupgrade/pgautoupgrade:16-alpine
     hostname: postgres
     environment:
-      - POSTGRES_USER=lemmy
-      - POSTGRES_PASSWORD=15JpMF0Xv1NfoJPsY9aG
-      - POSTGRES_DB=lemmy
+      - POSTGRES_USER=${POSTGRES_USER:-lemmy}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-lemmy}
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data:Z
       - ./customPostgresql.conf:/etc/postgresql.conf:Z
@@ -119,6 +119,8 @@ services:
     command: postgres -c config_file=/etc/postgresql.conf
     shm_size: 256m
     logging: *default-logging
+    env_file:
+      - .env
 
   postfix:
     image: docker.io/mwader/postfix-relay
@@ -177,6 +179,12 @@ services:
       - DB_PATH=/data/payments.db
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-secure_random_key}
       - MIN_CONFIRMATIONS=1
+      # PostgreSQL connection for membership sync (vote multiplier)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-lemmy}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-lemmy}
     volumes:
       - ./bitcoincash_service:/app
       - ./data/bitcoincash:/data
@@ -185,6 +193,7 @@ services:
     depends_on:
       - electron-cash
       - lemmy
+      - postgres
     dns:
       - 8.8.8.8
       - 8.8.4.4

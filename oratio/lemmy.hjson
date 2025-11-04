@@ -6,7 +6,7 @@
     host: postgres
     port: 5432
     user: "lemmy"
-    password: "15JpMF0Xv1NfoJPsY9aG"
+    password: "FRfwa2qk6LHSbmR+O1XBb475IDVcpMZ3"
     database: "lemmy"
     pool_size: 5
   }

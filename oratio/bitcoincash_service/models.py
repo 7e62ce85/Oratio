@@ -380,6 +380,59 @@ def get_user_transactions(user_id, limit=50):
     
     return transactions
 
+def deduct_credit(user_id, amount, description="Credit deduction", tx_id=None):
+    """사용자 크레딧 차감
+    
+    Args:
+        user_id: 사용자 ID (username)
+        amount: 차감할 BCH 금액
+        description: 거래 설명
+        tx_id: 관련 트랜잭션 ID (선택)
+    
+    Returns:
+        bool: 성공 여부
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # 현재 크레딧 확인
+        current_credit = get_user_credit(user_id) or 0.0
+        
+        if current_credit < amount:
+            logger.error(f"크레딧 부족: {user_id} has {current_credit} BCH, needs {amount} BCH")
+            conn.close()
+            return False
+        
+        # 크레딧 차감
+        new_balance = current_credit - amount
+        now = int(time.time())
+        
+        cursor.execute("""
+            UPDATE user_credits 
+            SET credit_balance = ?, last_updated = ?
+            WHERE user_id = ?
+        """, (new_balance, now, user_id))
+        
+        # 거래 기록 추가
+        transaction_id = tx_id or str(uuid.uuid4())
+        cursor.execute("""
+            INSERT INTO transactions (id, user_id, amount, type, description, created_at)
+            VALUES (?, ?, ?, 'debit', ?, ?)
+        """, (transaction_id, user_id, -amount, description, now))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Deducted {amount} BCH from {user_id}: {description}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to deduct credit from {user_id}: {e}")
+        conn.rollback()
+        conn.close()
+        return False
+
 def get_user_credit_by_username(username):
     """사용자명으로 크레딧 조회"""
     conn = get_db_connection()

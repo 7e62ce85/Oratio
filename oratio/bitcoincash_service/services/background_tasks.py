@@ -8,6 +8,10 @@ import models
 from services.electron_cash import electron_cash
 from services.payment import process_payment
 from zero_conf_validator import get_validator
+from services.membership_sync import setup_membership_sync
+
+# Initialize membership sync service
+membership_sync_service = None
 
 def cleanup_expired_invoices():
     """만료된 인보이스 처리"""
@@ -126,6 +130,9 @@ def run_background_tasks():
             # 멤버십 만료 체크 (새로 추가)
             check_expired_memberships()
             
+            # 업로드 쿼터 리셋 체크 (새로 추가)
+            reset_expired_upload_quotas()
+            
             # 주기적으로 자금 전송 시도 (설정에 따라)
             if FORWARD_PAYMENTS:
                 electron_cash.forward_to_payout_wallet()
@@ -145,8 +152,49 @@ def check_expired_memberships():
     except Exception as e:
         logger.error(f"멤버십 만료 체크 중 오류: {str(e)}")
 
+def reset_expired_upload_quotas():
+    """만료된 업로드 쿼터 리셋"""
+    try:
+        from .upload_quota_service import UploadQuotaService
+        from config import DB_PATH
+        
+        quota_service = UploadQuotaService(DB_PATH)
+        
+        # Get all active memberships
+        conn = models.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT user_id FROM user_memberships 
+            WHERE is_active = TRUE
+        """)
+        active_users = cursor.fetchall()
+        conn.close()
+        
+        reset_count = 0
+        for user in active_users:
+            user_id = user[0]
+            if quota_service.reset_quota_if_expired(user_id):
+                reset_count += 1
+        
+        if reset_count > 0:
+            logger.info(f"✅ 업로드 쿼터 {reset_count}개 리셋됨")
+    except Exception as e:
+        logger.error(f"❌ 업로드 쿼터 리셋 중 오류: {str(e)}")
+
 def start_background_tasks():
     """백그라운드 작업 시작"""
+    global membership_sync_service
+    
+    # Initialize membership sync service
+    try:
+        membership_sync_service = setup_membership_sync()
+        # Start periodic sync every 60 seconds
+        membership_sync_service.start_periodic_sync(interval_seconds=60)
+        logger.info("멤버십 동기화 서비스 시작됨 (PostgreSQL ↔ SQLite)")
+    except Exception as e:
+        logger.error(f"멤버십 동기화 서비스 시작 실패: {str(e)}")
+        logger.error(traceback.format_exc())
+    
     # 백그라운드 스레드 시작
     background_thread = threading.Thread(target=run_background_tasks)
     background_thread.daemon = True
