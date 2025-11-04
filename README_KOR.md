@@ -1,10 +1,10 @@
-# Lemmy with Bitcoin Cash Payment Integration (defadb.com)
+# Lemmy with Bitcoin Cash Payment Integration (oratio.space)
 
-이 프로젝트는 Electron Cash 지갑을 사용하여 **Bitcoin Cash (BCH) 결제 통합**이 포함된 **Lemmy** 커뮤니티 플랫폼을 구현합니다. Docker 컨테이너에서 실행되며, **defadb.com** 도메인에서 운영 중인 완전한 BCH 결제 솔루션을 제공합니다.
+이 프로젝트는 Electron Cash 지갑을 사용하여 **Bitcoin Cash (BCH) 결제 통합**이 포함된 **Lemmy** 커뮤니티 플랫폼을 구현합니다. Docker 컨테이너에서 실행되며, **oratio.space** 도메인에서 운영 중인 완전한 BCH 결제 솔루션을 제공합니다.
 
 ## 🌐 **운영 중인 서비스**
-- **메인 사이트**: https://defadb.com
-- **결제 서비스**: https://payments.defadb.com
+- **메인 사이트**: https://oratio.space
+- **결제 서비스**: https://payments.oratio.space
 - **상태**: 프로덕션 환경에서 안정적으로 운영 중
 
 ## 📋 목차
@@ -44,7 +44,7 @@
 이 프로젝트는 Bitcoin Cash 결제를 Lemmy 커뮤니티 플랫폼과 통합하여 다음을 제공합니다:
 
 ### **🚀 현재 운영 상태**
-- **도메인**: defadb.com (프로덕션 환경)
+- **도메인**: oratio.space (프로덕션 환경)
 - **SSL 인증서**: Let's Encrypt 적용 완료
 - **서비스 상태**: 7개 컨테이너 안정적 운영
 - **결제 시스템**: Bitcoin Cash 실제 거래 처리 중
@@ -75,7 +75,7 @@
 
 ## 시스템 아키텍처
 
-**defadb.com** 에서 운영 중인 시스템은 7개의 상호 연결된 Docker 컨테이너로 구성됩니다:
+**oratio.space** 에서 운영 중인 시스템은 7개의 상호 연결된 Docker 컨테이너로 구성됩니다:
 
 ### **🏗️ 컨테이너 구조**
 ```
@@ -167,7 +167,7 @@ electron-cash         Up             7777
 ### **💚 BCH 결제 버튼**
 - **위치**: 메인 네비게이션 바에 눈에 띄게 표시
 - **디자인**: Bitcoin Cash 로고가 포함된 녹색 테마 버튼
-- **기능**: `https://payments.defadb.com`로 직접 연결
+- **기능**: `https://payments.oratio.space`로 직접 연결
 - **반응형**: 데스크톱 및 모바일 인터페이스 완벽 지원
 
 ### **💰 사용자 크레딧 표시**
@@ -230,10 +230,16 @@ payments.your-domain.com  A    [서버 IP]
 
 ### **2. 설정 지침**
 
-#### **📥 프로젝트 클론**
+#### **📥 프로젝트 클론 / 로컬 체크아웃**
+원격 저장소에서 클론한 뒤 `oratio` 하위 디렉터리로 이동합니다. 이미 로컬에 저장소가 있다면 프로젝트 루트로 이동하세요.
+
 ```bash
-git clone https://github.com/joshHam/khankorean.git
-cd khankorean/oratio
+# 원격 저장소에서 클론 (URL을 본인 저장소로 교체)
+git clone <your-repo-url>
+cd Oratio/oratio
+
+# 로컬 체크아웃이 있는 경우
+cd /path/to/Oratio/oratio
 ```
 
 #### **🔐 환경변수 설정**
@@ -358,7 +364,7 @@ curl https://payments.your-domain.com/health
   - 사용자 크레딧 적용을 위한 Lemmy API와의 통합
   - UI 통합을 위한 RESTful API 엔드포인트
 - 데이터베이스: WAL 저널링 모드가 포함된 SQLite
-- 위치: `/user/oratio/bitcoincash_service`
+- 위치: `./oratio/bitcoincash_service` (레포지토리 루트 기준)
 
 ### 3. Electron Cash 통합
 
@@ -369,7 +375,7 @@ curl https://payments.your-domain.com/health
   - 거래 검증
   - 결제 전송
 - 결제 서비스를 위한 RPC 인터페이스
-- 지갑 데이터는 `/user/oratio/data/electron_cash`에 저장
+- 지갑 데이터는 `./oratio/data/electron_cash`에 저장되어 있는 것이 일반적입니다 (호스트 마운트에 맞게 조정하세요)
 
 ### 4. Nginx 구성
 
@@ -377,7 +383,7 @@ curl https://payments.your-domain.com/health
 - Let's Encrypt 인증서를 사용한 SSL 종료
 - HTTP 및 HTTPS 트래픽 처리를 위한 구성
 - BCH UI 자산을 위한 정적 파일 제공
-- 위치: `/user/oratio/nginx`
+- 위치: `./oratio/nginx` (레포지토리 상대 경로, 배포 환경에 맞게 조정)
 
 ---
 
@@ -459,13 +465,15 @@ curl https://payments.your-domain.com/health
 
 ## 백업 및 유지보수
 
-### 지갑 백업
+# 지갑 백업
 
-시스템에는 Electron Cash 지갑 데이터를 백업하기 위해 정기적으로 실행되어야 하는 지갑 백업 스크립트(`wallet_backup.sh`)가 포함되어 있습니다. 백업할 주요 파일:
+레포지토리에 백업 스크립트가 포함되어 있습니다. 아래 경로들은 이 저장소 레이아웃에서 흔히 사용되는 예시입니다. 실제로는 볼륨 마운트 위치에 맞춰 경로를 조정하세요:
 
-- `/srv/lemmy/defadb.com/data/electron_cash/wallets`
-- `/srv/lemmy/defadb.com/data/electron_cash/seed.txt`
-- `/srv/lemmy/defadb.com/data/bitcoincash/payments.db`
+- `./oratio/data/electron_cash/wallets`
+- `./oratio/data/electron_cash/seed.txt`
+- `./oratio/data/bitcoincash/payments.db`
+
+배포에서 `/srv/...` 같은 경로를 사용하는 경우에는 적절히 변경하십시오.
 
 ### 거래 모니터링
 
@@ -568,17 +576,20 @@ services:
 
 ### 진단 명령어
 
-디버깅을 위해 다음 명령어를 사용할 수 있습니다:
+디버깅을 위해, `docker-compose.yml`이 있는 레포지토리 루트(보통 `oratio/`)에서 다음을 실행하세요:
 
 ```bash
+# 레포지토리 루트에서 실행 (경로는 환경에 맞게 조정)
+cd oratio
+
 # Bitcoin Cash 서비스 로그 확인
-docker-compose logs bitcoincash-service
+docker-compose logs bitcoincash-service --tail=200
 
 # UI 컨테이너 로그 확인
-docker-compose logs lemmy-ui
+docker-compose logs lemmy-ui --tail=200
 
-# BCH 구성 테스트
-docker-compose exec lemmy-ui printenv | grep BCH
+# UI 컨테이너의 환경 변수 확인
+docker-compose exec lemmy-ui printenv | grep -i BCH
 
 # API 연결 테스트
 curl -H "X-API-Key: YOUR_API_KEY" http://localhost:8081/api/user_credit/1
@@ -673,32 +684,27 @@ oratio/bitcoincash_service/TECHNICAL_REPORT.md  # 기술 보고서
 
 ### **🧹 파일 정리 명령어**
 
-다음 명령어로 불필요한 파일들을 안전하게 정리할 수 있습니다:
+다음 명령어는 레포지토리 루트에서 실행 가능한 정리 템플릿입니다. 실제 삭제 전 백업을 반드시 확인하세요.
 
 ```bash
-cd /opt/khankorean/oratio
+# 레포지토리 루트에서 시작
+cd oratio
 
-# 백업 생성 (안전을 위해)
+# 삭제 전 백업 생성
 tar -czf cleanup_backup_$(date +%Y%m%d).tar.gz \
-  readme* *ISSUE* *SUMMARY* nginx_dev.conf nginx_ssl_setup.conf \
+  README* *ISSUE* *SUMMARY* nginx_dev.conf nginx_ssl_setup.conf \
   fix-*.sh *.txt EMAIL_*
 
-# 중복 문서 삭제
-rm -f readme\(v0.01\) readme\(20250413\)
+# 예시 삭제 (백업 후에만 실행)
+rm -f "readme(v0.01)" "readme(20250413)"
 rm -f restartingISSUE.md TECHNICAL_SUMMARY.md DOMAIN_CHANGES_SUMMARY.md
-
-# 임시 개발 파일 삭제
 rm -f nginx_dev.conf nginx_ssl_setup.conf
 rm -f fix-bitcoincash.sh fix-bitcoincash-service.sh
-
-# 과거 로그 파일 삭제
 rm -f electron-cash-logs.txt transfer_log.txt lemmy_thumbnail_fix_summary.txt
-
-# 사용하지 않는 이메일 가이드 삭제
 rm -f GMAIL_SMTP_SETUP.md SENDGRID_SETUP.md
 rm -f EMAIL_VERIFICATION_GUIDE.md EMAIL_VERIFICATION_IMPLEMENTATION_SUMMARY.txt
 
-echo "✅ 불필요한 파일 정리 완료"
+echo "✅ 불필요한 파일 정리 완료 (삭제 전 백업 확인)"
 ```
 
 ### **📊 정리 후 예상되는 디스크 공간 절약**
@@ -714,7 +720,7 @@ echo "✅ 불필요한 파일 정리 완료"
 ## 최근 개선사항 (2025년)
 
 ### **🏗️ 인프라스트럭처 개선**
-- **도메인 전환**: `localhost` → `defadb.com` 프로덕션 환경 구축
+- **도메인 전환**: `localhost` → `oratio.space` 프로덕션 환경 구축
 - **SSL 보안**: Let's Encrypt 자동 인증서 발급 시스템
 - **Docker 최적화**: 7개 컨테이너 안정적 운영 구조
 - **Nginx 프록시**: 고성능 리버스 프록시 및 SSL 종료
@@ -828,7 +834,7 @@ docker-compose exec bitcoincash-service python -m pytest
 
 ---
 
-**🎉 defadb.com에서 실제 운영 중인 Bitcoin Cash 통합 Lemmy 커뮤니티를 경험해보세요!**
+**🎉 oratio.space에서 실제 운영 중인 Bitcoin Cash 통합 Lemmy 커뮤니티를 경험해보세요!**
 
 ---
 

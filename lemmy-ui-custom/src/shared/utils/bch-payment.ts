@@ -42,18 +42,29 @@ const QUEUE_DELAY = 100; // 100ms between requests to avoid rate limiting
 if (typeof window !== 'undefined') {
   try {
     const stored = localStorage.getItem(CACHE_STORAGE_KEY);
+    console.log(`[BCH] Loading cache from localStorage... found: ${!!stored}`);
+    
     if (stored) {
       const data = JSON.parse(stored);
       const now = Date.now();
       let hasRestoredCache = false;
       
-      // Only restore non-expired entries
+      console.log(`[BCH] localStorage has ${Object.keys(data).length} entries`);
+      
+      // Restore ALL entries (even expired ones) to prevent badge flicker
+      // Expired entries will be refreshed in background by checkUserHasGoldBadgeSync
       Object.entries(data).forEach(([userId, value]: [string, any]) => {
-        if (value && typeof value === 'object' && (now - value.timestamp) < CACHE_DURATION) {
+        if (value && typeof value === 'object') {
           creditCache.set(Number(userId), value);
           hasRestoredCache = true;
+          
+          // Log restored cache for debugging
+          const isExpired = (now - value.timestamp) >= CACHE_DURATION;
+          console.log(`[BCH] Restored cache for user ${userId}: credit=${value.credit}, expired=${isExpired}`);
         }
       });
+      
+      console.log(`[BCH] Total restored to memory: ${creditCache.size} entries`);
       
       // Notify all components that cache has been restored
       // This ensures components re-render with cached badge data
@@ -77,6 +88,8 @@ if (typeof window !== 'undefined') {
           window.addEventListener('DOMContentLoaded', notifyComponents);
         }
       }
+    } else {
+      console.log(`[BCH] localStorage is empty, starting fresh`);
     }
   } catch (error) {
     console.error("[BCH] Error loading cache from localStorage:", error);
@@ -92,6 +105,7 @@ function saveCacheToStorage() {
         data[userId] = value;
       });
       localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(data));
+      console.log(`[BCH] Saved ${Object.keys(data).length} entries to localStorage`);
     } catch (error) {
       console.error("[BCH] Error saving cache to localStorage:", error);
     }
@@ -190,6 +204,8 @@ async function checkUserHasGoldBadgeInternal(person: Person): Promise<boolean> {
   const baseUrl = apiUrl.replace('/api/user_credit', '');
   const membershipUrl = `${baseUrl}/api/membership/status/${username}`;
   
+  console.log(`[BCH] Checking membership for user ${username} (ID: ${userId})`);
+  
   try {
     const response = await fetch(membershipUrl, {
       headers: {
@@ -200,6 +216,8 @@ async function checkUserHasGoldBadgeInternal(person: Person): Promise<boolean> {
     if (response.ok) {
       const data = await response.json();
       const isActive = data.membership?.is_active || false;
+      
+      console.log(`[BCH] Membership result for ${username}: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
       
       // Cache the result
       const cacheValue = isActive ? 1.0 : 0.0;
@@ -217,6 +235,7 @@ async function checkUserHasGoldBadgeInternal(person: Person): Promise<boolean> {
       
       return isActive;
     } else {
+      console.error(`[BCH] API error for ${username}: ${response.status} ${response.statusText}`);
       return false;
     }
   } catch (error) {
@@ -268,27 +287,60 @@ export function checkUserHasGoldBadgeSync(person: Person): boolean {
   const cached = creditCache.get(userId);
   const now = Date.now();
   
-  // If we have a recent cache hit, use it
-  if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-    // Cached value: 1.0 = active membership, 0.0 = no membership
+  // If we have a cache hit (expired or not), use it
+  // This is the key to preventing flicker
+  if (cached) {
+    const isExpired = (now - cached.timestamp) >= CACHE_DURATION;
+    
+    // If expired, trigger refresh in background
+    if (isExpired && !pendingRequests.has(userId)) {
+      console.log(`[BCH] Cache expired for user ${userId}, refreshing...`);
+      checkUserHasGoldBadge(person).catch((err) => {
+        console.error("[BCH] Error checking gold badge status:", err);
+      });
+    }
+    
+    // Always return cached value (even if expired) to prevent flicker
     return cached.credit >= 1.0;
   }
   
-  // If cache exists but expired, trigger refresh but still use old value
-  // This prevents badges from flickering during refresh
-  if (cached) {
-    // Trigger async fetch in background
+  // No memory cache - check localStorage as fallback
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(CACHE_STORAGE_KEY);
+      if (stored) {
+        const data = JSON.parse(stored);
+        const userCache = data[userId];
+        
+        if (userCache && typeof userCache === 'object') {
+          console.log(`[BCH] Found localStorage cache for user ${userId}, restoring to memory`);
+          
+          // Restore to memory cache
+          creditCache.set(userId, userCache);
+          
+          // Trigger refresh in background (cache might be old)
+          if (!pendingRequests.has(userId)) {
+            checkUserHasGoldBadge(person).catch((err) => {
+              console.error("[BCH] Error checking gold badge status:", err);
+            });
+          }
+          
+          return userCache.credit >= 1.0;
+        }
+      }
+    } catch (error) {
+      console.error("[BCH] Error reading from localStorage:", error);
+    }
+  }
+  
+  // No cache at all - trigger async fetch ONLY if not already pending/queued
+  // This prevents multiple "No cache" messages and duplicate API calls
+  if (!pendingRequests.has(userId) && !requestQueue.some(item => item.userId === userId)) {
+    console.log(`[BCH] No cache for user ${userId}, fetching...`);
     checkUserHasGoldBadge(person).catch((err) => {
       console.error("[BCH] Error checking gold badge status:", err);
     });
-    // Return the old cached value while waiting for refresh
-    return cached.credit >= 1.0;
   }
-  
-  // No cache at all - trigger async fetch and return false for now
-  checkUserHasGoldBadge(person).catch((err) => {
-    console.error("[BCH] Error checking gold badge status:", err);
-  });
   
   return false;
 }

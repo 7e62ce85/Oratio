@@ -246,27 +246,6 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
           this.setState({ userCredit: creditData.credit_balance });
         }
       }
-      
-      // Update membership status to cache
-      const membershipApiUrl = `${getBCHAPIUrl()}/api/membership/status/${person.name}`;
-      
-      const membershipResponse = await fetch(membershipApiUrl, {
-        headers: {
-          'X-API-Key': getApiKey() || ""
-        }
-      });
-      
-      if (membershipResponse.ok) {
-        const membershipData = await membershipResponse.json();
-        
-        if (membershipData.status === 'active') {
-          // Update the cache so components using checkUserHasGoldBadgeSync will get the value
-          updateCreditCache(person.id, 1.0); // 1.0 = has active membership
-        } else {
-          updateCreditCache(person.id, 0.0); // 0.0 = no active membership
-        }
-      }
-      
     } catch (error) {
       console.error("[BCH] Error fetching user credit:", error);
     }
@@ -379,6 +358,20 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                   </NavLink>
                 </li>
               )}
+              {/* Temporarily disabled - Lemmy donation button
+              <li className="nav-item">
+                <a
+                  className="nav-link d-inline-flex align-items-center d-md-inline-block"
+                  title={I18NextService.i18n.t("support_lemmy")}
+                  href={donateLemmyUrl}
+                >
+                  <Icon icon="heart" classes="small" />
+                  <span className="d-inline ms-1 d-md-none ms-md-0">
+                    {I18NextService.i18n.t("support_lemmy")}
+                  </span>
+                </a>
+              </li>
+              */}
             </ul>
           )}
           <button
@@ -439,18 +432,6 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                   </NavLink>
                 </li>
               )}
-              <li className="nav-item">
-                <a
-                  className="nav-link d-inline-flex align-items-center d-md-inline-block"
-                  title={I18NextService.i18n.t("support_lemmy")}
-                  href={donateLemmyUrl}
-                >
-                  <Icon icon="heart" classes="small" />
-                  <span className="d-inline ms-1 d-md-none ms-md-0">
-                    {I18NextService.i18n.t("support_lemmy")}
-                  </span>
-                </a>
-              </li>
             </ul>
             <ul id="navbarIcons" className="navbar-nav">
               <li id="navSearch" className="nav-item">

@@ -588,15 +588,21 @@ export class Signup extends Component<
   async handleComputePoW(i: Signup) {
     try {
       // 챌린지 생성 (타임스탬프 + 랜덤값)
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(2);
-      const challenge = `${timestamp}-${random}`;
+      // 이미 챌린지가 있다면 재사용 (중복 클릭 방지)
+      let challenge = i.state.powChallenge;
+      if (!challenge) {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2);
+        challenge = `${timestamp}-${random}`;
+      }
       
       i.setState({ 
         powChallenge: challenge,
         powComputing: true,
         powProgress: 0,
-        powAttempts: 0
+        powAttempts: 0,
+        powNonce: undefined,
+        powHash: undefined
       });
 
       // PoW 계산 (진행률 콜백 포함)

@@ -1,10 +1,36 @@
+### 2. Bitcoin Cash Payment Service
+
+- Flask-based API service for handling BCH payments
+- Features:
+  - Invoice generation and management
+  - Payment verification and transaction monitoring
+  - User credit management
+  - QR code generation for mobile payments
+  - Integration with Lemmy API for user credit application
+  - RESTful API endpoints for UI integration
+- Database: SQLite with WAL journaling mode
+- Located in `./oratio/bitcoincash_service` (relative to the repo root)
+-- Serves as the Bitcoin Cash wallet backend
+- Manages:
+  - Address generation
+  - Balance checking
+  - Transaction verification
+  - Payment forwarding
+  - RPC interface for the payment service
+- Wallet data is commonly stored under `./oratio/data/electron_cash` in this repo layout (adjust to your host mount).
+### 4. Nginx Configuration
+
+- Reverse proxy for both Lemmy and the payment service
+- Configuration for handling both HTTP and HTTPS traffic
+- Static file serving for BCH UI assets
+- Configuration files typically live in `./oratio/nginx` in this repository (adjust for your deployment).
 # Lemmy with Bitcoin Cash Payment Integration
 
-This project implements a **Lemmy** community platform with **Bitcoin Cash (BCH) Payment Integration** using Electron Cash wallet. Running in Docker containers, it provides a complete solution for accepting BCH payments within a Lemmy forum installation, with **Nginx** configured as a reverse proxy with SSL (Let's Encrypt).
+This project implements a **Lemmy** community platform with **Bitcoin Cash (BCH) Payment Integration** using an Electron Cash wallet. It runs in Docker containers and provides a complete solution for accepting BCH payments within a Lemmy forum installation. Nginx is used as a reverse proxy with optional Let's Encrypt SSL.
 
 ## 🌐 **Live Services**
-- **Main Site**: https://defadb.com
-- **Payment Service**: https://payments.defadb.com
+- **Main Site**: https://oratio.space
+- **Payment Service**: https://payments.oratio.space
 - **Status**: Stable production environment
 
 ## 📋 Table of Contents
@@ -39,11 +65,10 @@ This project implements a **Lemmy** community platform with **Bitcoin Cash (BCH)
 
 This project integrates Bitcoin Cash payments with the Lemmy community platform, providing:
 
-### **🚀 Current Production Status**
-- **Domain**: defadb.com (Production environment)
-- **SSL Certificate**: Let's Encrypt certificates applied
-- **Service Status**: 7 containers running stably
-- **Payment System**: Processing real Bitcoin Cash transactions
+### **🚀 Current / Example Production Status**
+- Example domain used in documentation: oratio.space
+- SSL: documentation refers to Let's Encrypt usage; apply your own certificates in production
+- Typical deployment (docs): 7 containers (proxy, lemmy-ui, lemmy, postgres, pictrs, bitcoincash-service, electron-cash)
 
 ### **💰 Payment Features**
 - **Payment Processing**: Complete BCH payment processing using Electron Cash
@@ -71,7 +96,7 @@ The implementation uses Flask (Python) for the payment service and integrates wi
 
 ## System Architecture
 
-The system running on **defadb.com** consists of 7 interconnected Docker containers:
+The system running on **oratio.space** consists of 7 interconnected Docker containers:
 
 ### **🏗️ Container Structure**
 ```
@@ -163,7 +188,7 @@ All components communicate securely through Docker networking, with all external
 ### **💚 BCH 결제 버튼**
 - **위치**: 메인 네비게이션 바에 눈에 띄게 표시
 - **디자인**: Bitcoin Cash 로고가 포함된 녹색 테마 버튼
-- **기능**: `https://payments.defadb.com`로 직접 연결
+- **기능**: `https://payments.oratio.space`로 직접 연결
 - **반응형**: 데스크톱 및 모바일 인터페이스 완벽 지원
 
 ### **💰 사용자 크레딧 표시**
@@ -226,10 +251,16 @@ payments.your-domain.com  A    [서버 IP]
 
 ### **2. 설정 지침**
 
-#### **📥 프로젝트 클론**
+#### **📥 Project clone / local checkout**
+If you are working from a remote repository, clone it and then change into the `oratio` subdirectory. If you already have this repository checked out locally, `cd` into the project root.
+
 ```bash
-git clone https://github.com/joshHam/khankorean.git
-cd khankorean/oratio
+# If cloning from a remote repo (replace URL with your fork/remote)
+git clone <your-repo-url>
+cd Oratio/oratio
+
+# Or, from an existing local checkout
+cd /path/to/Oratio/oratio
 ```
 
 #### **🔐 환경변수 설정**
@@ -354,7 +385,7 @@ curl https://payments.your-domain.com/health
   - Integration with Lemmy API for user credit application
   - RESTful API endpoints for UI integration
 - Database: SQLite with WAL journaling mode
-- Located in `/user/oratio/bitcoincash_service`
+- Located in `./oratio/bitcoincash_service` (relative to the repo root)
 
 ### 3. Electron Cash Integration
 
@@ -365,7 +396,7 @@ curl https://payments.your-domain.com/health
   - Transaction verification
   - Payment forwarding
 - RPC interface for the payment service
-- Wallet data stored in `/user/oratio/data/electron_cash`
+- Wallet data stored in `./oratio/data/electron_cash` (adjust to your host mount)
 
 ### 4. Nginx Configuration
 
@@ -373,7 +404,7 @@ curl https://payments.your-domain.com/health
 - SSL termination with Let's Encrypt certificates
 - Configuration for handling both HTTP and HTTPS traffic
 - Static file serving for BCH UI assets
-- Located in `/user/oratio/nginx`
+- Located in `./oratio/nginx` (repo-relative path; adjust for deployment)
 
 ---
 
@@ -455,13 +486,15 @@ The payment service uses SQLite with the following tables:
 
 ## Backup and Maintenance
 
-### Wallet Backup
+# Wallet backup
 
-The system includes a wallet backup script (`wallet_backup.sh`) that should be run regularly to back up the Electron Cash wallet data. Key files to back up include:
+The repo includes backup scripts. Adjust paths below to where you mount or store container volumes on your host. Common locations in this repository layout:
 
-- `/srv/lemmy/defadb.com/data/electron_cash/wallets`
-- `/srv/lemmy/defadb.com/data/electron_cash/seed.txt`
-- `/srv/lemmy/defadb.com/data/bitcoincash/payments.db`
+- `./oratio/data/electron_cash/wallets`
+- `./oratio/data/electron_cash/seed.txt`
+- `./oratio/data/bitcoincash/payments.db`
+
+If your deployment uses `/srv/...` or another host path for volumes, adapt the paths accordingly.
 
 ### Transaction Monitoring
 
@@ -564,19 +597,22 @@ services:
 
 ### Diagnostic Commands
 
-For debugging, you can use these commands:
+For debugging, use these commands from the repository root (where `docker-compose.yml` lives, typically `oratio/`):
 
 ```bash
+# From repo root (adjust path if your compose file is elsewhere)
+cd oratio
+
 # Check Bitcoin Cash service logs
-docker-compose logs bitcoincash-service
+docker-compose logs bitcoincash-service --tail=200
 
 # Check UI container logs
-docker-compose logs lemmy-ui
+docker-compose logs lemmy-ui --tail=200
 
-# Test BCH configuration
-docker-compose exec lemmy-ui printenv | grep BCH
+# Test environment variables in the UI container
+docker-compose exec lemmy-ui printenv | grep -i BCH
 
-# Test API connectivity
+# Test API connectivity (service commonly listens on 8081 in compose)
 curl -H "X-API-Key: YOUR_API_KEY" http://localhost:8081/api/user_credit/1
 ```
 
@@ -607,7 +643,7 @@ curl -H "X-API-Key: YOUR_API_KEY" http://localhost:8081/api/user_credit/1
 ## 📈 **Recent Improvements (2025)**
 
 ### **🏗️ Infrastructure Improvements**
-- **Domain Migration**: `localhost` → `defadb.com` production environment setup
+- **Domain Migration**: `localhost` → `oratio.space` production environment setup
 - **SSL Security**: Let's Encrypt automatic certificate issuance system
 - **Docker Optimization**: Stable 7-container operational structure
 - **Nginx Proxy**: High-performance reverse proxy and SSL termination
@@ -721,7 +757,7 @@ This project is distributed under the AGPL-3.0 license. See [LICENSE](LICENSE) f
 
 ---
 
-**🎉 Experience the Bitcoin Cash integrated Lemmy community currently operating on defadb.com!**
+**🎉 Experience the Bitcoin Cash integrated Lemmy community currently operating on oratio.space!**
 
 ---
 
@@ -731,9 +767,10 @@ This project is distributed under the AGPL-3.0 license. See [LICENSE](LICENSE) f
 
 ## 🗂️ **Project File Cleanup Guide**
 
-### **❌ Recommended Files for Deletion**
 
-The following files are temporary files or duplicate documents created during development and can be safely deleted:
+### **❌ Recommended files to consider for cleanup**
+
+The documentation lists several legacy or temporary files. Before deleting, create a backup tarball and confirm they are not used in your current deployment.
 
 #### **📄 Document Files (Duplicates/Legacy Versions)**
 ```bash
@@ -794,32 +831,27 @@ oratio/bitcoincash_service/TECHNICAL_REPORT.md  # Technical report
 
 ### **🧹 File Cleanup Commands**
 
-Use the following commands to safely clean up unnecessary files:
+Use the following commands as a starting point from the repo root (adjust paths to your environment):
 
 ```bash
-cd /opt/khankorean/oratio
+# From repository root (example: path/to/Oratio)
+cd oratio
 
-# Create backup (for safety)
+# Create a backup tarball before deleting anything
 tar -czf cleanup_backup_$(date +%Y%m%d).tar.gz \
-  readme* *ISSUE* *SUMMARY* nginx_dev.conf nginx_ssl_setup.conf \
+  README* *ISSUE* *SUMMARY* nginx_dev.conf nginx_ssl_setup.conf \
   fix-*.sh *.txt EMAIL_*
 
-# Delete duplicate documents
-rm -f readme\(v0.01\) readme\(20250413\)
+# Example deletions (only after verifying backups)
+rm -f "readme(v0.01)" "readme(20250413)"
 rm -f restartingISSUE.md TECHNICAL_SUMMARY.md DOMAIN_CHANGES_SUMMARY.md
-
-# Delete temporary development files
 rm -f nginx_dev.conf nginx_ssl_setup.conf
 rm -f fix-bitcoincash.sh fix-bitcoincash-service.sh
-
-# Delete legacy log files
 rm -f electron-cash-logs.txt transfer_log.txt lemmy_thumbnail_fix_summary.txt
-
-# Delete unused email guides
 rm -f GMAIL_SMTP_SETUP.md SENDGRID_SETUP.md
 rm -f EMAIL_VERIFICATION_GUIDE.md EMAIL_VERIFICATION_IMPLEMENTATION_SUMMARY.txt
 
-echo "✅ Unnecessary file cleanup completed"
+echo "✅ Unnecessary file cleanup completed (verify backup before deleting)"
 ```
 
 ### **📊 Expected Disk Space Savings After Cleanup**

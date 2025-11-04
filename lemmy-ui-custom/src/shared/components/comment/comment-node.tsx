@@ -449,7 +449,7 @@ export class CommentNode extends Component<CommentNodeProps, CommentNodeState> {
             allLanguages={this.props.allLanguages}
             siteLanguages={this.props.siteLanguages}
             hideImages={this.props.hideImages}
-            isChild={!this.props.isTopLevel}
+            isChild={true}
             depth={this.props.node.depth + 1}
             onCommentReplyRead={this.props.onCommentReplyRead}
             onPersonMentionRead={this.props.onPersonMentionRead}

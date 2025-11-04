@@ -27,6 +27,13 @@ import {
   POW_DIFFICULTY_PRESETS
 } from "../../utils/proof-of-work";
 import {
+  validateUpload,
+  recordUpload,
+  showUploadSizeMessage,
+  shouldPromptForCredit,
+  formatBytes,
+} from "../../utils/upload-quota";
+import {
   archiveTodayUrl,
   ghostArchiveUrl,
   postMarkdownFieldCharacterLimit,
@@ -267,27 +274,106 @@ function handleImageUpload(i: PostForm, event: any) {
     file = event;
   }
 
+  if (!file) return;
+
+  // Get user info
+  const userInfo = UserService.Instance.myUserInfo;
+  if (!userInfo) {
+    toast("Please log in to upload files", "danger");
+    return;
+  }
+
+  const username = userInfo.local_user_view.person.name;
+  const fileSize = file.size;
+  const filename = file.name;
+
+  // Set loading state
   i.setState({ imageLoading: true });
 
-  HttpService.client.uploadImage({ image: file }).then(res => {
-    if (res.state === "success") {
-      if (res.data.msg === "ok") {
-        i.state.form.url = res.data.url;
-        i.setState({
-          imageLoading: false,
-          imageDeleteUrl: res.data.delete_url as string,
-        });
-      } else if (res.data.msg === "too_large") {
-        toast(I18NextService.i18n.t("upload_too_large"), "danger");
-      } else {
-        toast(JSON.stringify(res), "danger");
+  // Validate upload quota (use username as identifier for BCH service)
+  validateUpload(username, username, fileSize, filename)
+    .then(validation => {
+      // Show validation messages
+      showUploadSizeMessage(fileSize, filename, validation);
+
+      if (!validation.allowed) {
+        i.setState({ imageLoading: false });
+        return Promise.reject(new Error(validation.message));
       }
-    } else if (res.state === "failed") {
-      console.error(res.err.message);
-      toast(res.err.message, "danger");
+
+      // Check if credit charge is required
+      if (shouldPromptForCredit(validation)) {
+        // User needs to confirm credit usage
+        const confirmed = confirm(
+          `⚠️ Upload Size Notice\n\n` +
+          `This file (${formatBytes(fileSize)}) exceeds your available quota.\n\n` +
+          `Overage: ${formatBytes(validation.overage_bytes || 0)}\n` +
+          `Cost: ${validation.charge_amount_bch} BCH ($${validation.charge_amount_usd})\n\n` +
+          `Do you want to proceed and charge your credit?`
+        );
+
+        if (!confirmed) {
+          i.setState({ imageLoading: false });
+          toast("Upload cancelled", "info");
+          return Promise.reject(new Error("User cancelled upload"));
+        }
+      }
+
+      // Proceed with upload
+      return HttpService.client.uploadImage({ image: file });
+    })
+    .then(res => {
+      if (res.state === "success") {
+        if (res.data.msg === "ok") {
+          const uploadUrl = res.data.url;
+          
+          console.log('[Post Form] Upload successful, recording transaction...');
+          
+          // Record ALL uploads (both free and member users)
+          recordUpload(
+            username, // Use username as identifier
+            username,
+            filename,
+            fileSize,
+            uploadUrl,
+            file.type,
+            undefined, // post_id - will be set after post creation
+            undefined, // comment_id
+            false // use_credit - determined by backend based on quota
+          ).then(() => {
+            console.log('[Post Form] Upload transaction recorded successfully');
+          }).catch(err => {
+            console.error("[Post Form] Failed to record upload transaction:", err);
+            // Don't block the upload, just log the error
+          });
+
+          // Set the URL in the form
+          i.state.form.url = uploadUrl;
+          i.setState({
+            imageLoading: false,
+            imageDeleteUrl: res.data.delete_url as string,
+          });
+        } else if (res.data.msg === "too_large") {
+          toast(I18NextService.i18n.t("upload_too_large"), "danger");
+          i.setState({ imageLoading: false });
+        } else {
+          toast(JSON.stringify(res), "danger");
+          i.setState({ imageLoading: false });
+        }
+      } else if (res.state === "failed") {
+        console.error(res.err.message);
+        toast(res.err.message, "danger");
+        i.setState({ imageLoading: false });
+      }
+    })
+    .catch(error => {
+      // Silently handle cancellations and validation errors
+      if (error.message !== "User cancelled upload" && !error.message.includes("not allowed")) {
+        console.error("Upload error:", error);
+        toast("Upload failed: " + error.message, "danger");
+      }
       i.setState({ imageLoading: false });
-    }
-  });
+    });
 }
 
 function handlePostNameChange(i: PostForm, event: any) {
@@ -558,6 +644,10 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
               disabled={!UserService.Instance.myUserInfo}
               onChange={linkEvent(this, handleImageUpload)}
             />
+            <small className="form-text text-muted">
+              💡 Free users: 250KB per file. Members: 20GB annual quota.{" "}
+              <strong>JPG/JPEG recommended</strong> for best efficiency.
+            </small>
             {this.state.imageLoading && <Spinner />}
             {url && isImage(url) && (
               <img src={url} className="img-fluid mt-2" alt="" />
@@ -732,7 +822,8 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
               disabled={
                 !this.state.form.community_id ||
                 this.props.loading ||
-                this.state.submitted
+                this.state.submitted ||
+                this.state.imageLoading
               }
               type="submit"
               className="btn btn-secondary me-2"
@@ -988,15 +1079,21 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
   async handleComputePoW(i: PostForm) {
     try {
       // 챌린지 생성 (타임스탬프 + 랜덤값)
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(2);
-      const challenge = `${timestamp}-${random}`;
+      // 이미 챌린지가 있다면 재사용 (중복 클릭 방지)
+      let challenge = i.state.powChallenge;
+      if (!challenge) {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2);
+        challenge = `${timestamp}-${random}`;
+      }
       
       i.setState({ 
         powChallenge: challenge,
         powComputing: true,
         powProgress: 0,
-        powAttempts: 0
+        powAttempts: 0,
+        powNonce: undefined,
+        powHash: undefined
       });
 
       // PoW 계산 (진행률 콜백 포함)

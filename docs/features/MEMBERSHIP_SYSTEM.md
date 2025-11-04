@@ -1,6 +1,6 @@
 # Annual Membership & Gold Badge System
 
-> **Version**: v4.0 | **Updated**: 2025-10-24 | **Status**: ✅ Production
+> **Version**: v4.2 | **Updated**: 2025-11-02 | **Status**: ✅ Production (Vote Toggle Bug Fixed)
 
 ## 🎯 Quick Overview
 
@@ -11,7 +11,7 @@
 | **Cost** | $5 USD in BCH (real-time exchange rate) |
 | **Duration** | 365 days from purchase |
 | **Payment** | From user credit → admin wallet |
-| **Benefits** | Gold badge display, premium community access |
+| **Benefits** | Gold badge display, premium community access, **5x vote power** |
 
 ---
 
@@ -305,6 +305,9 @@ docker-compose logs -f bitcoincash-service | grep -i "membership\|error"
 - **Auto Admin Transfer** (payment goes to admin wallet)
 - **Auto Expiry Check** (background task every 15s)
 - **Comprehensive Logging** (all operations tracked)
+- **5x Vote Multiplier** (membership users' votes count 5 times more on posts)
+- **Automatic Membership Sync** (SQLite → PostgreSQL every 60 seconds)
+- **Database-Level Implementation** (transparent to frontend, no UI changes needed)
 
 ---
 
@@ -370,13 +373,28 @@ docker exec -it bitcoincash-service sqlite3 /app/data/payment.db
 
 ## 📅 Changelog
 
+**2025-11-02** (v4.2) - Vote Toggle Bug Fix
+- 🐛 **CRITICAL FIX**: Fixed mobile browser vote toggle issue
+- 🔧 Trigger now properly tracks upvote/downvote removal separately
+- ✅ Fixed cumulative upvote/downvote accumulation bug
+- 📝 When toggling vote off, now correctly removes the multiplied votes
+- 🔄 Ran migration to recalculate all existing post aggregates
+- **Before**: Toggle upvote→off would only remove -1 instead of -5
+- **After**: Toggle upvote→off correctly removes -5
+
+**2025-10-24** (v4.1) - Badge Flicker Fix
+- 🐛 **CRITICAL FIX**: Removed duplicate membership API calls from Navbar
+- 🔧 Fixed badge flickering on login/refresh by removing redundant `fetchUserCredit()` membership check
+- 🚀 Now using centralized `bch-payment.ts` cache system exclusively
+- ⚡ Eliminated 4x duplicate API calls (was calling membership API from both navbar.tsx and bch-payment.ts)
+- 📝 See detailed analysis: [Badge Flicker Debug Report](../troubleshooting/badge-flicker-vscode-disk-mismatch-2025-10-24.md)
+
 **2025-10-24** (v4.0)
 - ✅ Full annual membership system
 - ✅ Changed from credit-based (0.0001 BCH) to membership ($5/year)
 - ✅ Multiple price API fallbacks
 - ✅ localStorage persistence
 - ✅ Rate limiting queue
-- ✅ Fixed badge flickering
 - ✅ Fixed duplicate badges
 - ✅ Comprehensive documentation
 
@@ -387,4 +405,80 @@ docker exec -it bitcoincash-service sqlite3 /app/data/payment.db
 
 ---
 
-_Document Version: 1.0 | System Version: v4.0 | Status: Production Ready_
+## 🗳️ Vote Multiplier System
+
+### Overview
+
+Membership users' votes on posts automatically count as **5x normal votes**. This is implemented at the database level using PostgreSQL triggers, making it transparent and automatic.
+
+### How It Works
+
+1. **User votes on a post** → Lemmy backend records vote in `post_like` table
+2. **PostgreSQL trigger fires** → Checks if user has active membership
+3. **If membership active** → Automatically multiplies vote impact by 5x in `post_aggregates`
+4. **Result** → Post score reflects the 5x multiplier immediately
+
+### Technical Implementation
+
+**Database Trigger**: `membership_post_vote_multiplier`
+- Fires on INSERT, UPDATE, DELETE of `post_like` table
+- Checks `user_memberships` table for active status
+- Applies 5x multiplier to vote score
+- Updates `post_aggregates` accordingly
+
+**Membership Sync Service**:
+- Runs every 60 seconds in bitcoincash-service
+- Syncs active memberships from SQLite → PostgreSQL
+- Ensures vote multiplier has current membership data
+
+**Key Files**:
+- `/oratio/migrations/membership_vote_multiplier.sql` - Database triggers
+- `/oratio/bitcoincash_service/services/membership_sync.py` - Sync service
+- `/oratio/deploy_membership_vote_multiplier.sh` - Deployment script
+
+### Deployment
+
+```bash
+# 1. First time: Refresh passwords (includes PostgreSQL password)
+cd /home/user/Oratio/oratio
+bash refresh_passwords.sh
+
+# 2. Restart services with new passwords
+docker compose down
+docker compose up -d
+
+# 3. Deploy vote multiplier
+bash deploy_membership_vote_multiplier.sh
+```
+
+### Verification
+
+```bash
+# Check if triggers are installed
+docker exec -i postgres psql -U lemmy -d lemmy -c \
+  "SELECT tgname FROM pg_trigger WHERE tgname = 'membership_post_vote_multiplier';"
+
+# View synced memberships
+docker exec -i postgres psql -U lemmy -d lemmy -c \
+  "SELECT user_id, is_active, expires_at FROM user_memberships;"
+
+# Check sync service logs
+docker compose logs -f bitcoincash-service | grep -i "membership sync"
+
+# Test vote multiplier
+# 1. Have a membership user vote on a post
+# 2. Check the vote counts:
+docker exec -i postgres psql -U lemmy -d lemmy -c \
+  "SELECT id, score, upvotes FROM post_aggregates WHERE post_id = YOUR_POST_ID;"
+```
+
+### Benefits
+
+- **Reward loyal members** - Membership users have more influence
+- **Transparent** - Works automatically, no frontend changes
+- **Fair** - Only applies to posts, not comments
+- **Efficient** - Database-level implementation (no API overhead)
+
+---
+
+_Document Version: 1.3 | System Version: v4.2 | Status: Production Ready_
