@@ -32,27 +32,66 @@ class LemmyAPI:
             "password": password
         }
     
-    def login_as_admin(self) -> bool:
-        """관리자로 로그인하여 JWT 토큰 획득"""
+    def login_as_admin(self, max_retries: int = 3) -> bool:
+        """관리자로 로그인하여 JWT 토큰 획득
+        
+        Args:
+            max_retries: Maximum number of retry attempts for duplicate key errors
+        """
+        logger.info("🔐 [LEMMY LOGIN] Starting admin login process...")
+        
         if not self.admin_credentials:
-            logger.error("관리자 인증 정보가 설정되지 않았습니다")
+            logger.error("❌ [LEMMY LOGIN] 관리자 인증 정보가 설정되지 않았습니다")
             return False
         
+        logger.info(f"🔐 [LEMMY LOGIN] Admin credentials: username={self.admin_credentials.get('username_or_email')}, password={'*' * len(self.admin_credentials.get('password', ''))}")
+        
         url = f"{self.base_url}/api/v3/user/login"
-        try:
-            response = requests.post(url, json=self.admin_credentials)
-            if response.status_code == 200:
-                data = response.json()
-                if "jwt" in data:
-                    self.jwt_token = data["jwt"]
-                    logger.info("관리자 로그인 성공")
-                    return True
+        logger.info(f"🔐 [LEMMY LOGIN] Login URL: {url}")
+        
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    # Wait before retry to avoid duplicate key collision
+                    wait_time = 0.5 * (attempt + 1)
+                    logger.info(f"🔐 [LEMMY LOGIN] Retry attempt {attempt + 1}/{max_retries}, waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                
+                logger.info(f"🔐 [LEMMY LOGIN] Sending POST request...")
+                response = requests.post(url, json=self.admin_credentials, timeout=10)
+                logger.info(f"🔐 [LEMMY LOGIN] Response status: {response.status_code}")
+                logger.info(f"🔐 [LEMMY LOGIN] Response body: {response.text[:500]}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info(f"🔐 [LEMMY LOGIN] Response JSON keys: {data.keys()}")
+                    if "jwt" in data:
+                        self.jwt_token = data["jwt"]
+                        logger.info(f"✅ [LEMMY LOGIN] 관리자 로그인 성공! JWT token length: {len(self.jwt_token)}")
+                        return True
+                    else:
+                        logger.error(f"❌ [LEMMY LOGIN] JWT 토큰을 찾을 수 없습니다. Response: {data}")
+                elif response.status_code == 400:
+                    # Check for duplicate key error - this happens when login tokens collide
+                    try:
+                        error_data = response.json()
+                        if 'duplicate key' in error_data.get('message', '').lower() or 'login_token_pkey' in error_data.get('message', ''):
+                            logger.warning(f"⚠️ [LEMMY LOGIN] Duplicate key error, will retry... (attempt {attempt + 1}/{max_retries})")
+                            continue  # Retry with delay
+                    except:
+                        pass
+                    logger.error(f"❌ [LEMMY LOGIN] 로그인 실패: {response.status_code} - {response.text}")
                 else:
-                    logger.error("JWT 토큰을 찾을 수 없습니다")
-            else:
-                logger.error(f"로그인 실패: {response.status_code} - {response.text}")
-        except Exception as e:
-            logger.error(f"로그인 요청 중 오류 발생: {str(e)}")
+                    logger.error(f"❌ [LEMMY LOGIN] 로그인 실패: {response.status_code} - {response.text}")
+                    break  # Don't retry for other errors
+            except requests.exceptions.Timeout:
+                logger.error(f"❌ [LEMMY LOGIN] 로그인 요청 타임아웃")
+            except requests.exceptions.ConnectionError as e:
+                logger.error(f"❌ [LEMMY LOGIN] 연결 오류: {str(e)}")
+            except Exception as e:
+                logger.error(f"❌ [LEMMY LOGIN] 로그인 요청 중 오류 발생: {str(e)}")
+                import traceback
+                logger.error(f"❌ [LEMMY LOGIN] Traceback: {traceback.format_exc()}")
         
         return False
     
@@ -169,6 +208,261 @@ class LemmyAPI:
             logger.error(f"사이트 설정 요청 중 오류 발생: {str(e)}")
         
         return None
+
+    def get_post(self, post_id: int) -> Optional[Dict[str, Any]]:
+        """
+        게시글 정보 조회 (community 정보 포함)
+        
+        Args:
+            post_id: 게시글 ID
+            
+        Returns:
+            게시글 정보 dict 또는 None
+            반환값 예시: {
+                "post_view": {
+                    "post": {...},
+                    "community": {"id": 1, "name": "banmal", "title": "반말"},
+                    ...
+                }
+            }
+        """
+        url = f"{self.base_url}/api/v3/post"
+        params = {"id": post_id}
+        
+        try:
+            response = requests.get(url, params=params, timeout=5)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.warning(f"게시글 정보 조회 실패: post_id={post_id}, status={response.status_code}")
+        except Exception as e:
+            logger.error(f"게시글 정보 요청 중 오류 발생: post_id={post_id}, error={str(e)}")
+        
+        return None
+
+    def get_community_by_post_id(self, post_id: int) -> Optional[Dict[str, str]]:
+        """
+        게시글 ID로 커뮤니티 정보 조회 (광고 타겟팅용)
+        
+        Args:
+            post_id: 게시글 ID
+            
+        Returns:
+            {"name": "banmal", "title": "반말"} 형태 또는 None
+        """
+        post_data = self.get_post(post_id)
+        if post_data and "post_view" in post_data:
+            community = post_data["post_view"].get("community", {})
+            if community:
+                return {
+                    "name": community.get("name", ""),
+                    "title": community.get("title", "")
+                }
+        return None
+
+    def remove_post(self, post_id: int, removed: bool = True, reason: Optional[str] = None) -> bool:
+        """게시글 제거/복원 (관리자/모더레이터 권한 필요)"""
+        logger.info(f"🔧 [LEMMY API] remove_post called: post_id={post_id}, removed={removed}, reason={reason}")
+        logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
+        
+        if not self.jwt_token and not self.login_as_admin():
+            logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
+            return False
+        
+        url = f"{self.base_url}/api/v3/post/remove"
+        data = {
+            "post_id": post_id,
+            "removed": removed
+        }
+        
+        if reason:
+            data["reason"] = reason
+        
+        logger.info(f"🔧 [LEMMY API] Request URL: {url}")
+        logger.info(f"🔧 [LEMMY API] Request data: {data}")
+        
+        try:
+            response = requests.post(url, json=data, headers=self.get_headers())
+            logger.info(f"🔧 [LEMMY API] Response status: {response.status_code}")
+            logger.info(f"🔧 [LEMMY API] Response body: {response.text[:500]}")
+            
+            if response.status_code == 200:
+                action = "제거" if removed else "복원"
+                logger.info(f"✅ [LEMMY API] 게시글 {post_id} {action}됨")
+                return True
+            else:
+                logger.error(f"❌ [LEMMY API] 게시글 제거 실패: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"❌ [LEMMY API] 게시글 제거 요청 중 오류 발생: {str(e)}")
+            import traceback
+            logger.error(f"❌ [LEMMY API] Traceback: {traceback.format_exc()}")
+        
+        return False
+    
+    def remove_comment(self, comment_id: int, removed: bool = True, reason: Optional[str] = None) -> bool:
+        """댓글 제거/복원 (관리자/모더레이터 권한 필요)"""
+        logger.info(f"🔧 [LEMMY API] remove_comment called: comment_id={comment_id}, removed={removed}, reason={reason}")
+        logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
+        
+        if not self.jwt_token and not self.login_as_admin():
+            logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
+            return False
+        
+        url = f"{self.base_url}/api/v3/comment/remove"
+        data = {
+            "comment_id": comment_id,
+            "removed": removed
+        }
+        
+        if reason:
+            data["reason"] = reason
+        
+        logger.info(f"🔧 [LEMMY API] Request URL: {url}")
+        logger.info(f"🔧 [LEMMY API] Request data: {data}")
+        
+        try:
+            response = requests.post(url, json=data, headers=self.get_headers())
+            logger.info(f"🔧 [LEMMY API] Response status: {response.status_code}")
+            logger.info(f"🔧 [LEMMY API] Response body: {response.text[:500]}")
+            
+            if response.status_code == 200:
+                action = "제거" if removed else "복원"
+                logger.info(f"✅ [LEMMY API] 댓글 {comment_id} {action}됨")
+                return True
+            else:
+                logger.error(f"❌ [LEMMY API] 댓글 제거 실패: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"❌ [LEMMY API] 댓글 제거 요청 중 오류 발생: {str(e)}")
+            import traceback
+            logger.error(f"❌ [LEMMY API] Traceback: {traceback.format_exc()}")
+        
+        return False
+
+    def purge_post(self, post_id: int, reason: Optional[str] = None) -> bool:
+        """게시글 영구 삭제 (관리자 권한 필요) - 완전히 삭제되어 누구도 볼 수 없음"""
+        logger.info(f"🔧 [LEMMY API] purge_post called: post_id={post_id}, reason={reason}")
+        logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
+        
+        if not self.jwt_token and not self.login_as_admin():
+            logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
+            return False
+        
+        url = f"{self.base_url}/api/v3/admin/purge/post"
+        data = {"post_id": post_id}
+        
+        if reason:
+            data["reason"] = reason
+        
+        logger.info(f"🔧 [LEMMY API] Request URL: {url}")
+        logger.info(f"🔧 [LEMMY API] Request data: {data}")
+        
+        try:
+            response = requests.post(url, json=data, headers=self.get_headers())
+            logger.info(f"🔧 [LEMMY API] Response status: {response.status_code}")
+            logger.info(f"🔧 [LEMMY API] Response body: {response.text[:500]}")
+            
+            if response.status_code == 200:
+                logger.info(f"✅ [LEMMY API] 게시글 {post_id} 영구 삭제됨 (purged)")
+                return True
+            else:
+                logger.error(f"❌ [LEMMY API] 게시글 영구 삭제 실패: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"❌ [LEMMY API] 게시글 영구 삭제 요청 중 오류 발생: {str(e)}")
+            import traceback
+            logger.error(f"❌ [LEMMY API] Traceback: {traceback.format_exc()}")
+        
+        return False
+
+    def purge_comment(self, comment_id: int, reason: Optional[str] = None) -> bool:
+        """댓글 영구 삭제 (관리자 권한 필요) - 완전히 삭제되어 누구도 볼 수 없음"""
+        logger.info(f"🔧 [LEMMY API] purge_comment called: comment_id={comment_id}, reason={reason}")
+        logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
+        
+        if not self.jwt_token and not self.login_as_admin():
+            logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
+            return False
+        
+        url = f"{self.base_url}/api/v3/admin/purge/comment"
+        data = {"comment_id": comment_id}
+        
+        if reason:
+            data["reason"] = reason
+        
+        logger.info(f"🔧 [LEMMY API] Request URL: {url}")
+        logger.info(f"🔧 [LEMMY API] Request data: {data}")
+        
+        try:
+            response = requests.post(url, json=data, headers=self.get_headers())
+            logger.info(f"🔧 [LEMMY API] Response status: {response.status_code}")
+            logger.info(f"🔧 [LEMMY API] Response body: {response.text[:500]}")
+            
+            if response.status_code == 200:
+                logger.info(f"✅ [LEMMY API] 댓글 {comment_id} 영구 삭제됨 (purged)")
+                return True
+            else:
+                logger.error(f"❌ [LEMMY API] 댓글 영구 삭제 실패: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"❌ [LEMMY API] 댓글 영구 삭제 요청 중 오류 발생: {str(e)}")
+            import traceback
+            logger.error(f"❌ [LEMMY API] Traceback: {traceback.format_exc()}")
+        
+        return False
+
+    def ban_person(self, person_id: int, ban: bool = True, reason: Optional[str] = None, 
+                   expires: Optional[int] = None, remove_data: bool = False) -> bool:
+        """
+        사용자 차단/차단 해제 (관리자 권한 필요)
+        
+        Args:
+            person_id: 차단할 사용자 ID (Lemmy person_id)
+            ban: True=차단, False=차단 해제
+            reason: 차단 사유
+            expires: 차단 만료 시간 (Unix timestamp, None=영구)
+            remove_data: 사용자 데이터 삭제 여부
+        
+        Returns:
+            성공 여부
+        """
+        logger.info(f"🔧 [LEMMY API] ban_person called: person_id={person_id}, ban={ban}, reason={reason}, expires={expires}")
+        logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
+        
+        if not self.jwt_token and not self.login_as_admin():
+            logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
+            return False
+        
+        url = f"{self.base_url}/api/v3/user/ban"
+        data = {
+            "person_id": person_id,
+            "ban": ban,
+            "remove_data": remove_data
+        }
+        
+        if reason:
+            data["reason"] = reason
+        
+        if expires:
+            data["expires"] = expires
+        
+        logger.info(f"🔧 [LEMMY API] Request URL: {url}")
+        logger.info(f"🔧 [LEMMY API] Request data: {data}")
+        
+        try:
+            response = requests.post(url, json=data, headers=self.get_headers())
+            logger.info(f"🔧 [LEMMY API] Response status: {response.status_code}")
+            logger.info(f"🔧 [LEMMY API] Response body: {response.text[:500]}")
+            
+            if response.status_code == 200:
+                action = "차단" if ban else "차단 해제"
+                logger.info(f"✅ [LEMMY API] 사용자 {person_id} {action}됨")
+                return True
+            else:
+                logger.error(f"❌ [LEMMY API] 사용자 차단 실패: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"❌ [LEMMY API] 사용자 차단 요청 중 오류 발생: {str(e)}")
+            import traceback
+            logger.error(f"❌ [LEMMY API] Traceback: {traceback.format_exc()}")
+        
+        return False
 
 def setup_lemmy_integration() -> Optional[LemmyAPI]:
     """Lemmy 통합 설정"""

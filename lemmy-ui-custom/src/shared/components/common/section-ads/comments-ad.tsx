@@ -19,7 +19,7 @@ export class CommentsAd extends Component<CommentsAdProps, any> {
         : "첫 번째 댓글을 남겨보세요!";
         
       adContent = `
-        <div style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); padding: 12px; border-radius: 8px; text-align: center; color: #333; font-family: Arial, sans-serif;">
+        <div style="background: #ffffff; padding: 12px; border-radius: 8px; text-align: center; color: #333; font-family: Arial, sans-serif; border: 1px solid #e6e6e6;">
           <h3 style="margin: 0 0 8px 0; font-size: 16px;">💬 토론 참여</h3>
           <p style="margin: 0 0 12px 0; font-size: 13px; opacity: 0.8;">${encouragementText}</p>
           <a href="#" target="_blank" rel="noopener" onclick="console.log('Comments ad clicked, comment count: ${commentCount || 0}')" 

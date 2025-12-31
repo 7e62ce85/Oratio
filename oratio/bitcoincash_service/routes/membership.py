@@ -68,6 +68,30 @@ def get_status(username):
             "error": "Internal server error"
         }), 500
 
+@membership_bp.route('/api/membership/check/<username>', methods=['GET'])
+def check_membership(username):
+    """
+    Public endpoint to check if user has active membership (no auth required)
+    Used for appeal form validation
+    Returns: simple boolean is_active status
+    """
+    try:
+        status = models.get_membership_status(username)
+        
+        return jsonify({
+            "success": True,
+            "username": username,
+            "is_active": status.get('is_active', False),
+            "expires_at": status.get('expires_at') if status.get('is_active') else None
+        })
+    except Exception as e:
+        logger.error(f"Error checking membership for {username}: {str(e)}")
+        return jsonify({
+            "success": False,
+            "username": username,
+            "is_active": False
+        }), 200  # Return 200 even on error, with is_active=False
+
 @membership_bp.route('/api/membership/purchase', methods=['POST'])
 @require_api_key
 def purchase_membership():

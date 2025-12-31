@@ -49,6 +49,7 @@ import { Reports, ReportsFetchConfig } from "./components/person/reports";
 import { Settings, SettingsFetchConfig } from "./components/person/settings";
 import { VerifyEmail } from "./components/person/verify-email";
 import { WalletPage } from "./components/person/wallet";
+import { AdsPage } from "./components/person/ads";
 import {
   CreatePostFetchConfig,
   CreatePost,
@@ -76,6 +77,9 @@ import {
 import { InitialFetchRequest, RouteData } from "./interfaces";
 import { GetSiteResponse } from "lemmy-js-client";
 import { Inferno } from "inferno";
+import { ModeratorReviewPanel } from "./components/cp/moderator-review-panel";
+import { AdminControlPanel } from "./components/cp/admin-control-panel";
+import { AppealForm } from "./components/cp/appeal-form";
 
 export interface IRoutePropsWithFetch<
   DataT extends RouteData,
@@ -186,6 +190,10 @@ export const routes: IRoutePropsWithFetch<RouteData, any, any>[] = [
     component: WalletPage,
   },
   {
+    path: `/ads`,
+    component: AdsPage,
+  },
+  {
     path: `/modlog/:communityId?`,
     component: Modlog,
     fetchInitialData: Modlog.fetchInitialData,
@@ -229,6 +237,18 @@ export const routes: IRoutePropsWithFetch<RouteData, any, any>[] = [
     fetchInitialData: Instances.fetchInitialData,
   } as InstancesFetchConfig,
   { path: `/legal`, component: Legal },
+  {
+    path: `/cp/moderator-review`,
+    component: ModeratorReviewPanel,
+  },
+  {
+    path: `/cp/admin-panel`,
+    component: AdminControlPanel,
+  },
+  {
+    path: `/cp/appeal`,
+    component: AppealForm,
+  },
   {
     path: "/activitypub/externalInteraction",
     component: RemoteFetch,

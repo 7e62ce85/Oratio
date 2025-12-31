@@ -25,9 +25,11 @@ import {
   SavePost,
   TransferCommunity,
 } from "lemmy-js-client";
-import { I18NextService } from "../../services";
+import { I18NextService, UserService } from "../../services";
 import { PostListing } from "./post-listing";
 import { RequestState } from "../../services/HttpService";
+import { getReportedContentIds, isPostReported } from "../../utils/cp-moderation";
+import { canMod } from "@utils/roles";
 // INACTIVE: Feed ads temporarily disabled
 // import { AdBanner } from "../common/ad-banner";
 
@@ -41,6 +43,7 @@ interface PostListingsProps {
   voteDisplayMode: LocalUserVoteDisplayMode;
   enableNsfw?: boolean;
   viewOnly?: boolean;
+  ssrReportedPostIds?: Set<number>; // Pre-fetched CP reported IDs from SSR (optional, for performance)
   onPostEdit(form: EditPost): Promise<RequestState<PostResponse>>;
   onPostVote(form: CreatePostLike): Promise<RequestState<PostResponse>>;
   onPostReport(form: CreatePostReport): Promise<void>;
@@ -61,17 +64,109 @@ interface PostListingsProps {
   onHidePost(form: HidePost): Promise<void>;
 }
 
-export class PostListings extends Component<PostListingsProps, any> {
+interface PostListingsState {
+  reportedPostIds: Set<number>;
+  loadingReports: boolean;
+}
+
+export class PostListings extends Component<PostListingsProps, PostListingsState> {
   duplicatesMap = new Map<number, PostView[]>();
 
   constructor(props: any, context: any) {
     super(props, context);
+    // Use SSR pre-fetched data if available, otherwise start with empty set
+    const hasSSRData = !!props.ssrReportedPostIds;
+    this.state = {
+      reportedPostIds: props.ssrReportedPostIds || new Set(),
+      loadingReports: !hasSSRData  // No need to load if SSR provided data
+    };
+    if (hasSSRData) {
+      console.log(`💾 [CP Filter] Using ${props.ssrReportedPostIds.size} pre-fetched reported IDs from SSR`);
+    }
+  }
+
+  async componentDidMount() {
+    // Only fetch if we don't have SSR data
+    if (this.state.loadingReports) {
+      console.log("🔄 [CP Filter] PostListings mounted - fetching reported content...");
+      const startTime = performance.now();
+      await this.fetchReportedContent();
+      const elapsed = performance.now() - startTime;
+      console.log(`✅ [CP Filter] Initial fetch completed in ${elapsed.toFixed(1)}ms`);
+    } else {
+      console.log(`💾 [CP Filter] PostListings mounted - using ${this.state.reportedPostIds.size} SSR-provided reported IDs (no fetch needed)`);
+    }
+    
+    // Refresh reported content every 30 seconds
+    if (typeof window !== 'undefined') {
+      this.reportRefreshInterval = window.setInterval(() => {
+        console.log("🔄 [CP Filter] Periodic refresh (30s interval)");
+        this.fetchReportedContent();
+      }, 30000);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.reportRefreshInterval) {
+      clearInterval(this.reportRefreshInterval);
+    }
+  }
+
+  reportRefreshInterval?: number;
+
+  async fetchReportedContent() {
+    const fetchStart = performance.now();
+    try {
+      console.log("📡 [CP Filter] Calling getReportedContentIds()...");
+      const { posts } = await getReportedContentIds();
+      const fetchElapsed = performance.now() - fetchStart;
+      console.log(`✅ [CP Filter] Got ${posts.size} reported posts (${fetchElapsed.toFixed(1)}ms)`);
+      this.setState({ reportedPostIds: posts, loadingReports: false });
+    } catch (error) {
+      const fetchElapsed = performance.now() - fetchStart;
+      console.error(`❌ [CP Filter] Error after ${fetchElapsed.toFixed(1)}ms:`, error);
+      this.setState({ loadingReports: false });
+    }
   }
 
   get posts() {
-    return this.props.removeDuplicates
+    const user = UserService.Instance.myUserInfo;
+    const rawPosts = this.props.removeDuplicates
       ? this.removeDuplicates()
       : this.props.posts;
+    
+    // CRITICAL: If still loading reported content list, return empty array
+    // This prevents "flash" of CP content before filter is ready
+    if (this.state.loadingReports) {
+      console.log("⏳ [CP Filter] Still loading reported IDs - showing no posts yet");
+      return [];
+    }
+    
+    // Filter posts based on hidden status and CP reports
+    return rawPosts.filter(post_view => {
+      // IMPORTANT: Don't filter hidden posts here - Lemmy handles this
+      // Hidden posts should be visible in user's own profile but not in feeds
+      // This is handled by Lemmy's backend API response, not frontend filtering
+      
+      // Filter out CP reported posts (only pending reports) for non-moderators
+      if (!this.state.reportedPostIds.has(post_view.post.id)) {
+        return true; // Not reported or report was resolved, show it
+      }
+      
+      // Post is in reported list - check if user is moderator/admin
+      if (!user) {
+        return false; // Not logged in, hide reported content
+      }
+      
+      // Check if user is moderator of the community or admin
+      const isModerator = post_view.community.moderators?.some(
+        mod => mod.moderator.id === user.local_user_view.person.id
+      );
+      const isAdmin = user.local_user_view.person.admin;
+      
+      // Show reported content only to moderators and admins
+      return isModerator || isAdmin;
+    });
   }
 
   render() {

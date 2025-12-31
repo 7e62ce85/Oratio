@@ -118,6 +118,7 @@ interface HomeState {
   tagline?: string;
   siteRes: GetSiteResponse;
   isIsomorphic: boolean;
+  reportedPostIds: Set<number>; // CP reported posts (pre-fetched in SSR)
 }
 
 interface HomeProps {
@@ -131,6 +132,7 @@ interface HomeProps {
 type HomeData = RouteDataResponse<{
   postsRes: GetPostsResponse;
   commentsRes: GetCommentsResponse;
+  reportedPostIds?: Set<number>; // CP reported posts (SSR-fetched)
 }>;
 
 function getRss(listingType: ListingType, sort: SortType) {
@@ -251,6 +253,7 @@ export class Home extends Component<HomeRouteProps, HomeState> {
     showSidebarMobile: false,
     subscribedCollapsed: false,
     isIsomorphic: false,
+    reportedPostIds: new Set(), // Initialize empty, will be filled from isoData if available
   };
 
   loadingSettled(): boolean {
@@ -318,6 +321,13 @@ export class Home extends Component<HomeRouteProps, HomeState> {
   }
 
   async componentWillMount() {
+    // Load pre-fetched CP reported IDs from SSR if available
+    const ssrReportedIds = this.isoData.routeData.reportedPostIds;
+    if (ssrReportedIds && ssrReportedIds.state === "success" && ssrReportedIds.data) {
+      console.log(`💾 [HOME] Loading ${ssrReportedIds.data.size} pre-fetched reported IDs from SSR`);
+      this.setState({ reportedPostIds: ssrReportedIds.data });
+    }
+    
     if (
       (!this.state.isIsomorphic ||
         !Object.values(this.isoData.routeData).some(
@@ -339,6 +349,9 @@ export class Home extends Component<HomeRouteProps, HomeState> {
     query: { listingType, dataType, sort, pageCursor, showHidden },
     headers,
   }: InitialFetchRequest<HomePathProps, HomeProps>): Promise<HomeData> {
+    console.log("🚀 [HOME SSR] fetchInitialData starting...");
+    const ssrStart = Date.now();
+    
     const client = wrapClient(
       new LemmyHttp(getHttpBaseInternal(), { headers }),
     );
@@ -370,14 +383,37 @@ export class Home extends Component<HomeRouteProps, HomeState> {
       commentsFetch = client.getComments(getCommentsForm);
     }
 
+    // CRITICAL: Fetch CP reported content IDs in parallel with posts/comments
+    // This prevents "flash" of CP content on initial page load
+    console.log("📡 [HOME SSR] Fetching reported content IDs in parallel...");
+    const cpFetchStart = Date.now();
+    
+    let reportedPostIds: Set<number> = new Set();
+    try {
+      // Import getReportedContentIds dynamically to avoid circular dependency
+      const { getReportedContentIds } = await import("@utils/cp-moderation");
+      const { posts } = await getReportedContentIds();
+      reportedPostIds = posts;
+      const cpElapsed = Date.now() - cpFetchStart;
+      console.log(`✅ [HOME SSR] Got ${reportedPostIds.size} reported posts in ${cpElapsed}ms`);
+    } catch (error) {
+      const cpElapsed = Date.now() - cpFetchStart;
+      console.error(`❌ [HOME SSR] Failed to fetch reported IDs after ${cpElapsed}ms:`, error);
+      // Continue with empty set - better to show content than break page
+    }
+
     const [postsRes, commentsRes] = await Promise.all([
       postsFetch,
       commentsFetch,
     ]);
+    
+    const ssrElapsed = Date.now() - ssrStart;
+    console.log(`✅ [HOME SSR] fetchInitialData completed in ${ssrElapsed}ms`);
 
     return {
       commentsRes,
       postsRes,
+      reportedPostIds: { state: "success", data: reportedPostIds }, // Wrap in RequestState format
     };
   }
 
@@ -599,6 +635,8 @@ export class Home extends Component<HomeRouteProps, HomeState> {
           <PaginatorCursor
             nextPage={this.getNextPage}
             onNext={this.handlePageNext}
+            onPrev={this.handlePagePrev}
+            prevDisabled={!this.props.pageCursor}
           />
         </div>
       </div>
@@ -633,6 +671,7 @@ export class Home extends Component<HomeRouteProps, HomeState> {
               enableNsfw={enableNsfw(siteRes)}
               allLanguages={siteRes.all_languages}
               siteLanguages={siteRes.discussion_languages}
+              ssrReportedPostIds={this.state.reportedPostIds}
               onBlockPerson={this.handleBlockPerson}
               onPostEdit={this.handlePostEdit}
               onPostVote={this.handlePostVote}
@@ -750,6 +789,21 @@ export class Home extends Component<HomeRouteProps, HomeState> {
     showHidden,
   }: HomeProps) {
     const token = (this.fetchDataToken = Symbol());
+    
+    // Fetch CP reported IDs for client-side navigation (login redirect, etc.)
+    // This runs when SSR data is not available
+    if (this.state.reportedPostIds.size === 0) {
+      try {
+        console.log("📡 [HOME Client] Fetching reported content IDs...");
+        const { getReportedContentIds } = await import("@utils/cp-moderation");
+        const { posts } = await getReportedContentIds();
+        console.log(`✅ [HOME Client] Got ${posts.size} reported posts`);
+        this.setState({ reportedPostIds: posts });
+      } catch (error) {
+        console.error("❌ [HOME Client] Failed to fetch reported IDs:", error);
+      }
+    }
+    
     if (dataType === DataType.Post) {
       this.setState({ postsRes: LOADING_REQUEST, commentsRes: EMPTY_REQUEST });
       const postsRes = await HttpService.client.getPosts({
@@ -980,19 +1034,28 @@ export class Home extends Component<HomeRouteProps, HomeState> {
     const hideRes = await HttpService.client.hidePost(form);
 
     if (hideRes.state === "success") {
-      this.setState(prev => {
-        if (prev.postsRes.state === "success") {
-          for (const post of prev.postsRes.data.posts.filter(p =>
-            form.post_ids.some(id => id === p.post.id),
-          )) {
-            post.hidden = form.hide;
+      // If unhiding (form.hide === false), we need to refetch posts
+      // because Lemmy's GetPosts API doesn't return hidden posts by default
+      if (!form.hide) {
+        // Refetch posts to include the newly unhidden post
+        await this.fetchData();
+        toast(I18NextService.i18n.t("post_unhidden"));
+      } else {
+        // For hiding, just update the state
+        this.setState(prev => {
+          if (prev.postsRes.state === "success") {
+            for (const post of prev.postsRes.data.posts.filter(p =>
+              form.post_ids.some(id => id === p.post.id),
+            )) {
+              post.hidden = form.hide;
+            }
           }
-        }
 
-        return prev;
-      });
+          return prev;
+        });
 
-      toast(I18NextService.i18n.t(form.hide ? "post_hidden" : "post_unhidden"));
+        toast(I18NextService.i18n.t("post_hidden"));
+      }
     }
   }
 

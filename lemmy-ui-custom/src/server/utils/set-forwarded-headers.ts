@@ -28,5 +28,10 @@ export function setForwardedHeaders(headers: IncomingHttpHeaders): {
     out["Authorization"] = `Bearer ${auth}`;
   }
 
+  // Also forward the raw cookie header for CP checks and other services
+  if (headers.cookie) {
+    out.cookie = headers.cookie as string;
+  }
+
   return out;
 }

@@ -769,7 +769,7 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
                 id="user-email"
                 className="form-control"
                 placeholder={I18NextService.i18n.t("optional")}
-                value={this.state.saveUserSettingsForm.email}
+                value={this.state.saveUserSettingsForm.email ?? ""}
                 onInput={linkEvent(this, this.handleEmailChange)}
                 minLength={3}
               />
@@ -1592,7 +1592,8 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
   }
 
   handleEmailChange(i: Settings, event: any) {
-    i.setState(s => ((s.saveUserSettingsForm.email = event.target.value), s));
+    const email = event.target.value.trim();
+    i.setState(s => ((s.saveUserSettingsForm.email = email === "" ? undefined : email), s));
   }
 
   handleBioChange(val: string) {
@@ -1671,6 +1672,19 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
 
       // You need to reload the page, to properly update the siteRes everywhere
       setTimeout(() => location.reload(), 500);
+    } else if (saveRes.state === "failed") {
+      // Show specific error message to user
+      const errorMsg = saveRes.err.message;
+      if (errorMsg === "email_already_exists") {
+        // Show a more detailed message for duplicate email
+        toast(
+          I18NextService.i18n.t("email_already_exists") + " " +
+          I18NextService.i18n.t("email_already_exists_detail"),
+          "danger"
+        );
+      } else {
+        toast(errorMsg, "danger");
+      }
     }
 
     setThemeOverride(undefined);

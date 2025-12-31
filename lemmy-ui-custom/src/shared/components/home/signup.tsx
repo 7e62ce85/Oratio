@@ -525,6 +525,9 @@ export class Signup extends Component<
 
             if (site.state === "success") {
               UserService.Instance.myUserInfo = site.data.my_user;
+              
+              // Set default discussion languages after successful registration
+              await i.setDefaultLanguages(site.data);
             }
 
             i.props.history.replace("/communities");
@@ -606,22 +609,51 @@ export class Signup extends Component<
       });
 
       // PoW 계산 (진행률 콜백 포함)
-      const result = await computeProofOfWork(
-        challenge,
-        i.state.powDifficulty,
-        (progress, attempts) => {
+      // 최대 3번 재시도 (운이 매우 나쁜 경우 대비)
+      let result;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          result = await computeProofOfWork(
+            challenge,
+            i.state.powDifficulty,
+            (progress, attempts) => {
+              i.setState({ 
+                powProgress: progress,
+                powAttempts: attempts
+              });
+            }
+          );
+          break; // 성공하면 루프 탈출
+        } catch (error) {
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            throw error; // 최대 재시도 횟수 초과
+          }
+          
+          // 새 챌린지로 재시도
+          console.warn(`PoW 계산 시간 초과, 재시도 중... (${retryCount}/${maxRetries})`);
+          toast(`계산 시간 초과, 재시도 중... (${retryCount}/${maxRetries})`, "info");
+          
+          const timestamp = Date.now();
+          const random = Math.random().toString(36).substring(2);
+          challenge = `${timestamp}-${random}`;
+          
           i.setState({ 
-            powProgress: progress,
-            powAttempts: attempts
+            powChallenge: challenge,
+            powProgress: 0,
+            powAttempts: 0
           });
         }
-      );
+      }
 
       // 계산 완료
       i.setState({
-        powNonce: result.nonce,
-        powHash: result.hash,
-        powAttempts: result.attempts,
+        powNonce: result!.nonce,
+        powHash: result!.hash,
+        powAttempts: result!.attempts,
         powComputing: false,
         powProgress: 100
       });
@@ -668,5 +700,64 @@ export class Signup extends Component<
 
   captchaPngSrc(captcha: CaptchaResponse) {
     return `data:image/png;base64,${captcha.png}`;
+  }
+
+  /**
+   * Set default discussion languages for new users
+   * Default: undetermined + browser language + English
+   */
+  async setDefaultLanguages(siteData: GetSiteResponse) {
+    try {
+      // Get browser language
+      const browserLang = navigator.language || (navigator.languages && navigator.languages[0]) || 'en';
+      const browserLangCode = browserLang.split('-')[0].toLowerCase(); // e.g., 'ko' from 'ko-KR'
+      
+      // Available languages from site
+      const allLanguages = siteData.all_languages;
+      
+      // Find language IDs
+      const undeterminedId = allLanguages.find(l => l.code === 'und')?.id;
+      const englishId = allLanguages.find(l => l.code === 'en')?.id;
+      const browserLangId = allLanguages.find(l => l.code === browserLangCode)?.id;
+      
+      // Build language list: undetermined + browser language + English
+      const languageIds = new Set<number>();
+      
+      if (undeterminedId) languageIds.add(undeterminedId);
+      if (browserLangId && browserLangId !== englishId) languageIds.add(browserLangId);
+      if (englishId) languageIds.add(englishId);
+      
+      const discussion_languages = Array.from(languageIds);
+      
+      console.log('[Signup] Setting default languages for new user:', {
+        browserLang,
+        browserLangCode,
+        languageIds: discussion_languages,
+        languages: discussion_languages.map(id => 
+          allLanguages.find(l => l.id === id)?.name
+        )
+      });
+      
+      // Update user settings with default languages
+      if (discussion_languages.length > 0 && UserService.Instance.myUserInfo) {
+        const updateRes = await HttpService.client.saveUserSettings({
+          discussion_languages,
+        });
+        
+        if (updateRes.state === 'success') {
+          console.log('[Signup] Default languages set successfully');
+          // Update local user info
+          const updatedSite = await HttpService.client.getSite();
+          if (updatedSite.state === 'success') {
+            UserService.Instance.myUserInfo = updatedSite.data.my_user;
+          }
+        } else {
+          console.error('[Signup] Failed to set default languages:', updateRes);
+        }
+      }
+    } catch (error) {
+      console.error('[Signup] Error setting default languages:', error);
+      // Don't block registration flow if language setting fails
+    }
   }
 }

@@ -20,6 +20,7 @@ import { UnreadCounterService } from "../../services";
 import { RouteData } from "../../interfaces";
 import { IRoutePropsWithFetch } from "../../routes";
 import { simpleScrollMixin } from "../mixins/scroll-mixin";
+import { checkUserCPPermissions } from "../../utils/cp-moderation";
 
 interface LoginProps {
   prev?: string;
@@ -84,15 +85,47 @@ async function handleLoginSubmit(i: Login, event: any) {
         if (loginRes.err.message === "missing_totp_token") {
           i.setState({ show2faModal: true });
         } else {
-          // TODO: We shouldn't be passing error messages as args into i18next
-          toast(
-            I18NextService.i18n.t(
-              loginRes.err.message === "registration_application_is_pending"
-                ? "registration_application_pending"
-                : loginRes.err.message,
-            ),
-            "danger",
-          );
+          // Lemmy returns "incorrect_login" for both wrong password AND banned users
+          // Always check CP permissions to see if user is actually banned
+          try {
+            console.log(`[LOGIN] Login failed, checking if user is banned: ${username_or_email}`);
+            const perms = await checkUserCPPermissions(username_or_email);
+            console.log(`[LOGIN] CP permissions response:`, perms);
+            
+            // Check if user is banned (handle both boolean and number from backend)
+            const isBannedValue = perms?.is_banned as any;
+            const userIsBanned = isBannedValue === true || isBannedValue === 1 || isBannedValue === "1";
+            
+            if (perms && userIsBanned && perms.ban_end) {
+              const now = Math.floor(Date.now() / 1000);
+              const daysLeft = Math.ceil((perms.ban_end - now) / (24 * 60 * 60));
+              const banEndDate = new Date(perms.ban_end * 1000).toISOString().split('T')[0];
+              
+              console.log(`[LOGIN] Ban details - until: ${banEndDate}, days left: ${daysLeft}`);
+              
+              // Bilingual message (Korean/English)
+              const banMessage = `당신은 ${banEndDate}까지 사이트에서 추방되었습니다 (${daysLeft}일 남음). ` +
+                `멤버십 사용자는 /cp/appeal 에서 이의제기할 수 있습니다.\n\n` +
+                `You are banned until ${banEndDate} (${daysLeft} days remaining). ` +
+                `Membership users can appeal at /cp/appeal`;
+              
+              toast(banMessage, "danger");
+            } else {
+              console.log(`[LOGIN] User NOT banned - showing regular login error`);
+              // Regular login error (wrong password, etc.)
+              toast(
+                I18NextService.i18n.t(loginRes.err.message),
+                "danger",
+              );
+            }
+          } catch (err) {
+            console.error("[LOGIN] Error fetching CP permissions:", err);
+            // Fallback to original message
+            toast(
+              I18NextService.i18n.t(loginRes.err.message),
+              "danger",
+            );
+          }
         }
 
         i.setState({ loginRes });
@@ -242,6 +275,10 @@ export class Login extends Component<LoginRouteProps, State> {
             </div>
           </div>
         </form>
+        <div className="alert alert-info mt-4">
+          <strong>ℹ️ Banned Users:</strong> If you are a membership user and cannot log in due to a ban, 
+          you can submit an appeal at <a href="/cp/appeal" className="alert-link">/cp/appeal</a> without logging in.
+        </div>
       </div>
     );
   }

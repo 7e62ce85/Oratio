@@ -206,7 +206,7 @@ class ElectronCashClient:
     def check_address_balance(self, address):
         """주소의 잔액 확인"""
         try:
-            logger.info(f"[DEBUG] Balance check requested for address: {address}")
+            logger.debug(f"Balance check requested for address: {address}")
             
             # Ensure clean address format
             clean_address = address.replace('bitcoincash:', '')
@@ -215,22 +215,22 @@ class ElectronCashClient:
             else:
                 formatted_address = address
             
-            logger.info(f"[DEBUG] Formatted address for balance check: {formatted_address}")
+            logger.debug(f"Formatted address for balance check: {formatted_address}")
                 
             # 직접 결제 모드에서는 API를 통해 잔액 확인
             if DIRECT_MODE:
                 try:
                     from direct_payment import direct_payment_handler
                     balance = direct_payment_handler.check_address_balance(address)
-                    logger.info(f"[DEBUG] DIRECT_MODE balance result: {balance} BCH for address {formatted_address}")
+                    logger.debug(f"DIRECT_MODE balance result: {balance} BCH for address {formatted_address}")
                     return balance
                 except ImportError:
-                    logger.error("[DEBUG] 직접 결제 모듈을 불러올 수 없습니다.")
+                    logger.error("직접 결제 모듈을 불러올 수 없습니다.")
                     return 0.0
                 
             if MOCK_MODE:
                 # Mock 모드: 지불 시뮬레이션
-                logger.info(f"[DEBUG] MOCK_MODE is active. Checking for pending invoices for address {formatted_address}")
+                logger.debug(f"MOCK_MODE is active. Checking for pending invoices for address {formatted_address}")
                 conn = models.get_db_connection()
                 cursor = conn.cursor()
                 cursor.execute(
@@ -244,22 +244,22 @@ class ElectronCashClient:
                     invoice_id, amount, created_at = result
                     # 1분 후 지불 시뮬레이션
                     if time.time() - created_at > 60:
-                        logger.info(f"[DEBUG] MOCK_MODE simulating payment of {amount} BCH for invoice {invoice_id}")
+                        logger.debug(f"MOCK_MODE simulating payment of {amount} BCH for invoice {invoice_id}")
                         return amount
                     else:
-                        logger.info(f"[DEBUG] MOCK_MODE invoice {invoice_id} exists but not ready for payment simulation yet")
+                        logger.debug(f"MOCK_MODE invoice {invoice_id} exists but not ready for payment simulation yet")
                 else:
-                    logger.info(f"[DEBUG] MOCK_MODE no pending invoice found for address {formatted_address}")
+                    logger.debug(f"MOCK_MODE no pending invoice found for address {formatted_address}")
                     
                 return 0.0
             else:
                 # ElectronCash를 통한 잔액 확인
-                logger.info(f"[DEBUG] Making RPC call to check balance for address {formatted_address}")
+                logger.debug(f"Making RPC call to check balance for address {formatted_address}")
                 result = self.call_method("getaddressbalance", [formatted_address])
                 
                 if result is not None:
                     # 원본 응답 로깅
-                    logger.info(f"[DEBUG] Raw balance response for {formatted_address}: {result}")
+                    logger.debug(f"Raw balance response for {formatted_address}: {result}")
                     
                     # ElectronCash의 응답 형식은 {"confirmed": X, "unconfirmed": Y}
                     try:
@@ -278,18 +278,18 @@ class ElectronCashClient:
                         else:
                             unconfirmed_bch = float(unconfirmed_value) / 100000000.0
                         
-                        logger.info(f"[DEBUG] Calculated balance for {formatted_address}: confirmed={confirmed_bch} BCH, unconfirmed={unconfirmed_bch} BCH")
+                        logger.debug(f"Calculated balance for {formatted_address}: confirmed={confirmed_bch} BCH, unconfirmed={unconfirmed_bch} BCH")
                         
                         # 매우 작은 값은 버림 (1e-6 BCH 이하는 잡음으로 간주)
                         total_bch = confirmed_bch + unconfirmed_bch
                         if total_bch < 0.000001:
-                            logger.warning(f"[DEBUG] Balance too small ({total_bch} BCH), treating as zero")
+                            logger.debug(f"Balance too small ({total_bch} BCH), treating as zero")
                             return 0.0
                         
                         # 외부 API로 확인
                         try:
                             # Blockchair API를 통한 잔액 확인 (대체 방법)
-                            logger.info(f"[DEBUG] Verifying with Blockchair API for address {clean_address}")
+                            logger.debug(f"Verifying with Blockchair API for address {clean_address}")
                             api_url = f"https://api.blockchair.com/bitcoin-cash/dashboards/address/{clean_address}"
                             api_response = requests.get(api_url, timeout=10)
                             
@@ -300,56 +300,56 @@ class ElectronCashClient:
                                     api_balance_sats = address_data.get('balance', 0)
                                     api_balance_bch = float(api_balance_sats) / 100000000.0
                                     
-                                    logger.info(f"[DEBUG] Blockchair API balance: {api_balance_bch} BCH ({api_balance_sats} satoshis)")
+                                    logger.debug(f"Blockchair API balance: {api_balance_bch} BCH ({api_balance_sats} satoshis)")
                                     
                                     # 만약 API 잔액이 더 크고 의미 있는 값이면 사용
                                     if api_balance_bch > total_bch and api_balance_bch >= 0.00001:
-                                        logger.info(f"[DEBUG] Using Blockchair API balance: {api_balance_bch} BCH > {total_bch} BCH")
+                                        logger.debug(f"Using Blockchair API balance: {api_balance_bch} BCH > {total_bch} BCH")
                                         return api_balance_bch
                                     elif api_balance_bch < 0.00001 and total_bch >= 0.00001:
-                                        logger.warning(f"[DEBUG] API balance ({api_balance_bch}) very low but Electron Cash shows {total_bch}. This may be a false positive!")
+                                        logger.warning(f"API balance ({api_balance_bch}) very low but Electron Cash shows {total_bch}. This may be a false positive!")
                                 else:
-                                    logger.warning(f"[DEBUG] Blockchair API didn't return data for {clean_address}")
+                                    logger.debug(f"Blockchair API didn't return data for {clean_address}")
                             else:
-                                logger.warning(f"[DEBUG] Blockchair API request failed with status {api_response.status_code}")
+                                logger.debug(f"Blockchair API request failed with status {api_response.status_code}")
                         except Exception as e:
-                            logger.warning(f"[DEBUG] External API check failed: {str(e)}")
+                            logger.debug(f"External API check failed: {str(e)}")
                         
                         # 인보이스의 경우 미확인 거래도 포함하여 반환
-                        logger.info(f"[DEBUG] Final balance determination for {formatted_address}: {total_bch} BCH")
+                        logger.debug(f"Final balance determination for {formatted_address}: {total_bch} BCH")
                         return total_bch
                     except (ValueError, TypeError) as e:
-                        logger.error(f"[DEBUG] Balance conversion error: {str(e)}")
+                        logger.error(f"Balance conversion error: {str(e)}")
                         # 오류 발생 시 direct_payment 모듈 사용
                         try:
                             from direct_payment import direct_payment_handler
                             balance = direct_payment_handler.check_address_balance(formatted_address)
-                            logger.info(f"[DEBUG] Fallback to direct_payment balance: {balance} BCH")
+                            logger.debug(f"Fallback to direct_payment balance: {balance} BCH")
                             return balance
                         except ImportError:
-                            logger.error("[DEBUG] 직접 결제 모듈을 불러올 수 없습니다.")
+                            logger.error("직접 결제 모듈을 불러올 수 없습니다.")
                             return 0.0
                 else:
-                    logger.error(f"[DEBUG] Failed to get balance from ElectronCash for {formatted_address}")
+                    logger.error(f"Failed to get balance from ElectronCash for {formatted_address}")
                     # ElectronCash 실패 시 직접 처리기로 시도
                     try:
                         from direct_payment import direct_payment_handler
                         balance = direct_payment_handler.check_address_balance(formatted_address)
-                        logger.info(f"[DEBUG] Fallback to direct_payment balance after ElectronCash failure: {balance} BCH")
+                        logger.debug(f"Fallback to direct_payment balance after ElectronCash failure: {balance} BCH")
                         return balance
                     except ImportError:
-                        logger.error("[DEBUG] 직접 결제 모듈을 불러올 수 없습니다.")
+                        logger.error("직접 결제 모듈을 불러올 수 없습니다.")
                         return 0.0
 
         except Exception as e:
-            logger.error(f"[DEBUG] Balance check exception: {str(e)}")
+            logger.error(f"Balance check exception: {str(e)}")
             logger.error(traceback.format_exc())
             # 오류 발생 시 직접 처리기로 시도
             try:
                 from direct_payment import direct_payment_handler
                 return direct_payment_handler.check_address_balance(address)
             except ImportError:
-                logger.error("[DEBUG] 직접 결제 모듈을 불러올 수 없습니다.")
+                logger.error("직접 결제 모듈을 불러올 수 없습니다.")
                 return 0.0
 
     def get_transaction_confirmations(self, tx_hash):
@@ -511,20 +511,20 @@ class ElectronCashClient:
             
             # Remove bitcoincash: prefix for address comparison
             clean_address = formatted_address.replace('bitcoincash:', '')
-            logger.info(f"[DEBUG] 인보이스 {invoice['id']}의 비교 주소: {clean_address}")
+            logger.debug(f"인보이스 {invoice['id']}의 비교 주소: {clean_address}")
             
             # 1. Try to use the 'history' method provided by Electron Cash
-            logger.info(f"[DEBUG] Electron Cash history 메소드를 통해 트랜잭션 검색 중... 인보이스: {invoice['id']}")
+            logger.debug(f"Electron Cash history 메소드를 통해 트랜잭션 검색 중... 인보이스: {invoice['id']}")
             history = self.call_method("history")
             
             if history and isinstance(history, list):
-                logger.info(f"[DEBUG] 트랜잭션 이력 정보 받음: {len(history)} 항목")
+                logger.debug(f"트랜잭션 이력 정보 받음: {len(history)} 항목")
                 
                 # Electron Cash history format is different from listtransactions
                 # Log detailed transaction information for debugging
                 for tx_idx, tx in enumerate(history):
                     tx_hash = tx.get('txid', tx.get('tx_hash', 'unknown'))
-                    logger.info(f"[DEBUG] 트랜잭션 #{tx_idx} 분석: TXID={tx_hash}")
+                    logger.debug(f"트랜잭션 #{tx_idx} 분석: TXID={tx_hash}")
                     
                     # Handle both value formats (string with + and float)
                     tx_value = tx.get('value', '0')
@@ -535,11 +535,11 @@ class ElectronCashClient:
                     
                     # Skip outgoing transactions
                     if tx_value <= 0:
-                        logger.info(f"[DEBUG] 트랜잭션 #{tx_idx}: 금액 {tx_value}이 0보다 작거나 같아 건너뜀")
+                        logger.debug(f"트랜잭션 #{tx_idx}: 금액 {tx_value}이 0보다 작거나 같아 건너뜀")
                         continue
                     
                     # Log transaction information for debugging
-                    logger.info(f"[DEBUG] 트랜잭션 #{tx_idx}: 금액 {tx_value}, 인보이스 요구액: {invoice['amount']}")
+                    logger.debug(f"트랜잭션 #{tx_idx}: 금액 {tx_value}, 인보이스 요구액: {invoice['amount']}")
                     
                     # Search for this address in inputs and outputs
                     found_address = False
@@ -553,7 +553,7 @@ class ElectronCashClient:
                                 tx_addresses.append(addr)
                                 if addr == clean_address:
                                     found_address = True
-                                    logger.info(f"[DEBUG] 주소 {clean_address}가 트랜잭션 입력에서 발견됨")
+                                    logger.debug(f"주소 {clean_address}가 트랜잭션 입력에서 발견됨")
                                     
                     if 'outputs' in tx:
                         for outp in tx['outputs']:
@@ -562,11 +562,11 @@ class ElectronCashClient:
                                 tx_addresses.append(addr)
                                 if addr == clean_address:
                                     found_address = True
-                                    logger.info(f"[DEBUG] 주소 {clean_address}가 트랜잭션 출력에서 발견됨")
+                                    logger.debug(f"주소 {clean_address}가 트랜잭션 출력에서 발견됨")
                     
                     # Fallback to use raw transaction call to check addresses
                     if not found_address:
-                        logger.info(f"[DEBUG] 기본 주소 검색에서 일치하는 항목이 없음. 원시 트랜잭션 데이터 확인 중...")
+                        logger.debug(f"기본 주소 검색에서 일치하는 항목이 없음. 원시 트랜잭션 데이터 확인 중...")
                         
                         # Try to get transaction details using raw data
                         tx_hash = tx.get('tx_hash') or tx.get('txid')
@@ -578,13 +578,13 @@ class ElectronCashClient:
                                         addr = out['address'].replace('bitcoincash:', '')
                                         if addr == clean_address:
                                             found_address = True
-                                            logger.info(f"[DEBUG] 주소 {clean_address}가 원시 트랜잭션 출력에서 발견됨")
+                                            logger.debug(f"주소 {clean_address}가 원시 트랜잭션 출력에서 발견됨")
                     
                     # For HD wallet or other types, we may need to handle address conversion
                     # Try to check if balance is sufficient in case we can't match address exactly
                     if not found_address and abs(tx_value - invoice["amount"]) < 0.00001:
                         # If amount matches almost exactly, this is likely our transaction
-                        logger.info(f"[DEBUG] 주소는 일치하지 않지만 금액이 일치합니다: {tx_value} ≈ {invoice['amount']}")
+                        logger.debug(f"주소는 일치하지 않지만 금액이 일치합니다: {tx_value} ≈ {invoice['amount']}")
                         found_address = True
                     
                     # Try to match the exact amount with a small tolerance
@@ -615,7 +615,7 @@ class ElectronCashClient:
                                         confirmations = 2  # Safe default
                                 
                                 tx_hash = tx.get('tx_hash') or tx.get('txid', '')
-                                logger.info(f"[DEBUG] 인보이스 {invoice['id']}에 대한 트랜잭션 발견: {tx_hash} (확인 수: {confirmations})")
+                                logger.debug(f"인보이스 {invoice['id']}에 대한 트랜잭션 발견: {tx_hash} (확인 수: {confirmations})")
                                 
                                 return {
                                     "txid": tx_hash,
@@ -624,11 +624,11 @@ class ElectronCashClient:
                                     "time": tx_time or int(time.time())
                                 }
                 
-                logger.info(f"[DEBUG] 인보이스 {invoice['id']}에 맞는 트랜잭션을 찾을 수 없습니다.")
+                logger.debug(f"인보이스 {invoice['id']}에 맞는 트랜잭션을 찾을 수 없습니다.")
             
             # Check if balance is sufficient but we couldn't find the exact transaction
             balance = self.check_address_balance(invoice["payment_address"])
-            logger.info(f"[DEBUG] 주소 {invoice['payment_address']}의 잔액: {balance} BCH (필요 금액: {invoice['amount']} BCH)")
+            logger.debug(f"주소 {invoice['payment_address']}의 잔액: {balance} BCH (필요 금액: {invoice['amount']} BCH)")
             
             # IMPORTANT FIX: Instead of automatically creating a local fake transaction ID when balance is sufficient,
             # we now require more verification through external API for greater certainty
@@ -637,7 +637,7 @@ class ElectronCashClient:
                 try:
                     # Remove bitcoincash: prefix for API
                     clean_address = invoice["payment_address"].replace('bitcoincash:', '')
-                    logger.info(f"[DEBUG] 외부 API를 통해 주소 잔액 재확인 중: {clean_address}")
+                    logger.debug(f"외부 API를 통해 주소 잔액 재확인 중: {clean_address}")
                     
                     # Blockchair API를 통한 잔액 확인
                     api_url = f"https://api.blockchair.com/bitcoin-cash/dashboards/address/{clean_address}"
@@ -651,20 +651,20 @@ class ElectronCashClient:
                             api_balance_sats = address_data.get('balance', 0)
                             api_balance_bch = float(api_balance_sats) / 100000000.0
                             
-                            logger.info(f"[DEBUG] Blockchair API 잔액: {api_balance_bch} BCH ({api_balance_sats} satoshis)")
+                            logger.debug(f"Blockchair API 잔액: {api_balance_bch} BCH ({api_balance_sats} satoshis)")
                             
                             # Only confirm if the API also shows sufficient balance
                             if api_balance_bch >= invoice["amount"]:
-                                logger.info(f"[DEBUG] 외부 API가 충분한 잔액을 확인함: {api_balance_bch} BCH >= {invoice['amount']} BCH")
+                                logger.debug(f"외부 API가 충분한 잔액을 확인함: {api_balance_bch} BCH >= {invoice['amount']} BCH")
                                 external_confirmed = True
                             else:
-                                logger.warning(f"[DEBUG] 외부 API에서는 충분한 잔액이 확인되지 않음: {api_balance_bch} BCH < {invoice['amount']} BCH")
+                                logger.debug(f"외부 API에서는 충분한 잔액이 확인되지 않음: {api_balance_bch} BCH < {invoice['amount']} BCH")
                                 external_confirmed = False
                         else:
-                            logger.warning(f"[DEBUG] Blockchair API에서 주소 데이터를 찾을 수 없음")
+                            logger.debug(f"Blockchair API에서 주소 데이터를 찾을 수 없음")
                             external_confirmed = False
                     else:
-                        logger.warning(f"[DEBUG] Blockchair API 응답 오류: {api_response.status_code}")
+                        logger.debug(f"Blockchair API 응답 오류: {api_response.status_code}")
                         external_confirmed = False
                         
                     # Only proceed if external verification passed
@@ -676,7 +676,7 @@ class ElectronCashClient:
                                 if tx_hash:
                                     # Return most recent transaction with sufficient confirmations
                                     confirmations = tx.get('confirmations', 1)
-                                    logger.info(f"[DEBUG] 외부 API로 확인된 충분한 잔액, 가장 최근 트랜잭션 사용: {tx_hash}, 확인 수: {confirmations}")
+                                    logger.debug(f"외부 API로 확인된 충분한 잔액, 가장 최근 트랜잭션 사용: {tx_hash}, 확인 수: {confirmations}")
                                     return {
                                         "txid": tx_hash,
                                         "amount": invoice["amount"],  # Use invoice amount since we can't match exactly
@@ -690,7 +690,7 @@ class ElectronCashClient:
                         hash_object = hashlib.sha256(unique_string.encode())
                         local_txid = f"verified_{hash_object.hexdigest()[:32]}"
                         
-                        logger.info(f"[DEBUG] Electron Cash와 외부 API 모두 충분한 잔액을 확인함. 검증된 로컬 ID 생성: {local_txid}")
+                        logger.debug(f"Electron Cash와 외부 API 모두 충분한 잔액을 확인함. 검증된 로컬 ID 생성: {local_txid}")
                         return {
                             "txid": local_txid,
                             "amount": invoice["amount"],
@@ -698,17 +698,17 @@ class ElectronCashClient:
                             "time": int(time.time())
                         }
                     else:
-                        logger.warning(f"[DEBUG] 외부 API가 충분한 잔액을 확인하지 못함. 결제 확인 불가.")
+                        logger.debug(f"외부 API가 충분한 잔액을 확인하지 못함. 결제 확인 불가.")
                         return None
                         
                 except Exception as e:
-                    logger.error(f"[DEBUG] 외부 API 호출 중 오류: {str(e)}")
+                    logger.error(f"외부 API 호출 중 오류: {str(e)}")
                     logger.error(traceback.format_exc())
                     # Don't fall back to local ID generation if API verification fails
                     return None
             
             # Try a direct API method as a last resort
-            logger.info(f"[DEBUG] Electron Cash에서 적절한 트랜잭션을 찾을 수 없고 잔액도 부족함. 대체 방법으로 확인 중...")
+            logger.debug(f"Electron Cash에서 적절한 트랜잭션을 찾을 수 없고 잔액도 부족함. 대체 방법으로 확인 중...")
             try:
                 from direct_payment import direct_payment_handler
                 result = direct_payment_handler.find_payment_transaction(
@@ -717,14 +717,14 @@ class ElectronCashClient:
                     invoice["created_at"]
                 )
                 if result:
-                    logger.info(f"[DEBUG] direct_payment_handler에서 트랜잭션 찾음: {result['txid']}")
+                    logger.debug(f"direct_payment_handler에서 트랜잭션 찾음: {result['txid']}")
                 return result
             except ImportError:
-                logger.error("[DEBUG] 직접 결제 모듈을 불러올 수 없습니다.")
+                logger.error("직접 결제 모듈을 불러올 수 없습니다.")
                 return None
                 
         except Exception as e:
-            logger.error(f"[DEBUG] 인보이스 트랜잭션 조회 오류: {str(e)}")
+            logger.error(f"인보이스 트랜잭션 조회 오류: {str(e)}")
             logger.error(traceback.format_exc())
             return None
 

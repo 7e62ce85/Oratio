@@ -13,6 +13,8 @@ import { I18NextService, UserService } from "../../services";
 import { Icon } from "../common/icon";
 import { MarkdownTextArea } from "../common/markdown-textarea";
 import { RequestState } from "../../services/HttpService";
+import { checkUserCPPermissions } from "../../utils/cp-moderation";
+import { toast } from "../../toast";
 
 interface CommentFormProps {
   /**
@@ -36,6 +38,23 @@ export class CommentForm extends Component<CommentFormProps, any> {
     super(props, context);
 
     this.handleCommentSubmit = this.handleCommentSubmit.bind(this);
+  }
+
+  componentDidMount() {
+    // Check CP permissions - ban users from commenting if banned
+    const user = UserService.Instance.myUserInfo;
+    if (user && !this.props.edit) { // Only check for new comments, not edits
+      checkUserCPPermissions(user.local_user_view.person.name).then(permissions => {
+        if (permissions && permissions.is_banned) {
+          const banEndDate = new Date((permissions.ban_end || 0) * 1000);
+          toast(
+            `You are banned from commenting until ${banEndDate.toLocaleDateString()} due to CP violation`,
+            "danger"
+          );
+          this.props.onReplyCancel?.();
+        }
+      });
+    }
   }
 
   render() {

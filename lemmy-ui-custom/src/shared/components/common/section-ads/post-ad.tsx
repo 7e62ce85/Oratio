@@ -17,7 +17,7 @@ export class PostAd extends Component<PostAdProps, any> {
     if (!adContent && postType) {
       const typeEmoji = postType === "image" ? "🖼️" : postType === "video" ? "🎥" : postType === "link" ? "🔗" : "📝";
       adContent = `
-        <div style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); padding: 15px; border-radius: 8px; text-align: center; color: #333; font-family: Arial, sans-serif;">
+        <div style="background: #ffffff; padding: 15px; border-radius: 8px; text-align: center; color: #333; font-family: Arial, sans-serif; border: 1px solid #e6e6e6;">
           <h3 style="margin: 0 0 10px 0; font-size: 18px;">${typeEmoji} Related Services</h3>
           <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.8;">Useful tools related to this ${postType} content</p>
           <a href="#" target="_blank" rel="noopener" onclick="console.log('Post ${postType} ad clicked')" 

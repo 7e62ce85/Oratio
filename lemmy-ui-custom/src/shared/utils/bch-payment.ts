@@ -53,14 +53,21 @@ if (typeof window !== 'undefined') {
       
       // Restore ALL entries (even expired ones) to prevent badge flicker
       // Expired entries will be refreshed in background by checkUserHasGoldBadgeSync
+      // IMPORTANT: Only restore membership cache (credit = 0.0 or 1.0), ignore old BCH balance cache
       Object.entries(data).forEach(([userId, value]: [string, any]) => {
         if (value && typeof value === 'object') {
-          creditCache.set(Number(userId), value);
-          hasRestoredCache = true;
-          
-          // Log restored cache for debugging
-          const isExpired = (now - value.timestamp) >= CACHE_DURATION;
-          console.log(`[BCH] Restored cache for user ${userId}: credit=${value.credit}, expired=${isExpired}`);
+          // Only restore if it's a valid membership cache (0.0 or 1.0)
+          // Old BCH balance cache (like 0.0113) should be ignored
+          if (value.credit === 0.0 || value.credit === 1.0) {
+            creditCache.set(Number(userId), value);
+            hasRestoredCache = true;
+            
+            // Log restored cache for debugging
+            const isExpired = (now - value.timestamp) >= CACHE_DURATION;
+            console.log(`[BCH] Restored cache for user ${userId}: credit=${value.credit}, expired=${isExpired}`);
+          } else {
+            console.log(`[BCH] Skipping old BCH balance cache for user ${userId}: credit=${value.credit}`);
+          }
         }
       });
       

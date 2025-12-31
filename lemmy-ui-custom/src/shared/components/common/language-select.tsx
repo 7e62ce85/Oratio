@@ -73,19 +73,78 @@ export class LanguageSelect extends Component<LanguageSelectProps, any> {
         )}
         <div
           className={classNames(`col-sm-${this.props.multiple ? 9 : 10}`, {
-            "input-group": this.props.multiple,
+            "d-flex flex-column": this.props.multiple,
           })}
         >
-          {this.selectBtn}
           {this.props.multiple && (
-            <button
-              className="btn btn-outline-secondary"
-              onClick={linkEvent(this, this.handleDeselectAll)}
-            >
-              <Icon icon="x" />
-            </button>
+            <div className="btn-group mb-2" role="group">
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-primary"
+                onClick={linkEvent(this, this.handleSelectAll)}
+              >
+                <Icon icon="check-square" classes="icon-inline me-1" />
+                {I18NextService.i18n.t("select_all")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={linkEvent(this, this.handleDeselectAll)}
+              >
+                <Icon icon="x" classes="icon-inline me-1" />
+                {I18NextService.i18n.t("deselect_all")}
+              </button>
+            </div>
           )}
+          {this.props.multiple ? this.checkboxList : this.selectBtn}
         </div>
+      </div>
+    );
+  }
+
+  get checkboxList() {
+    const selectedLangs = this.props.selectedLanguageIds || [];
+    const filteredLangs = selectableLanguages(
+      this.props.allLanguages,
+      this.props.siteLanguages,
+      this.props.showAll,
+      this.props.showSite,
+      UserService.Instance.myUserInfo,
+    );
+
+    return (
+      <div 
+        className="language-checkbox-list border rounded p-2" 
+        style={{ maxHeight: "300px", overflowY: "auto" }}
+      >
+        {filteredLangs.length === 0 ? (
+          <div className="text-muted small">
+            {I18NextService.i18n.t("no_languages_available")}
+          </div>
+        ) : (
+          filteredLangs.map(l => (
+            <div key={l.id} className="form-check">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id={`${this.id}-lang-${l.id}`}
+                value={l.id}
+                checked={selectedLangs.includes(l.id)}
+                onChange={linkEvent(
+                  { component: this, languageId: l.id },
+                  this.handleCheckboxChange,
+                )}
+                disabled={this.props.disabled}
+              />
+              <label
+                className="form-check-label"
+                htmlFor={`${this.id}-lang-${l.id}`}
+              >
+                {l.name}
+              </label>
+            </div>
+          ))
+        )}
       </div>
     );
   }
@@ -134,6 +193,28 @@ export class LanguageSelect extends Component<LanguageSelectProps, any> {
     );
   }
 
+  handleCheckboxChange(
+    data: { component: LanguageSelect; languageId: number },
+    event: any,
+  ) {
+    const { component, languageId } = data;
+    const currentSelected = component.props.selectedLanguageIds || [];
+    const isChecked = event.target.checked;
+
+    let newSelected: number[];
+    if (isChecked) {
+      // Add language if not already selected
+      newSelected = currentSelected.includes(languageId)
+        ? currentSelected
+        : [...currentSelected, languageId];
+    } else {
+      // Remove language
+      newSelected = currentSelected.filter(id => id !== languageId);
+    }
+
+    component.props.onChange(newSelected);
+  }
+
   handleLanguageChange(i: LanguageSelect, event: any) {
     const options: HTMLOptionElement[] = Array.from(event.target.options);
     const selected: number[] = options
@@ -141,6 +222,19 @@ export class LanguageSelect extends Component<LanguageSelectProps, any> {
       .map(o => Number(o.value));
 
     i.props.onChange(selected);
+  }
+
+  handleSelectAll(i: LanguageSelect, event: any) {
+    event.preventDefault();
+    const filteredLangs = selectableLanguages(
+      i.props.allLanguages,
+      i.props.siteLanguages,
+      i.props.showAll,
+      i.props.showSite,
+      UserService.Instance.myUserInfo,
+    );
+    const allLanguageIds = filteredLangs.map(l => l.id);
+    i.props.onChange(allLanguageIds);
   }
 
   handleDeselectAll(i: LanguageSelect, event: any) {

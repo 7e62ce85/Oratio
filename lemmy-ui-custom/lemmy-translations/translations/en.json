@@ -434,6 +434,7 @@
   "user_already_exists": "User already exists.",
   "username_already_exists": "Username already exists.",
   "email_already_exists": "Email already exists.",
+  "email_already_exists_detail": "This email address is already being used by another account. Please use a different email address.",
   "couldnt_update_user": "Couldn't update user.",
   "system_err_login": "System error. Try logging out and back in.",
   "rate_limit_error": "Too many requests, try again later.",

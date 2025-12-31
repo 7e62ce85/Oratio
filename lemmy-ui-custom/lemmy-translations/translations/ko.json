@@ -243,6 +243,7 @@
   "system_err_login": "시스템 오류. 다시 로그인하십시오.",
   "user_already_exists": "사용자가 이미 존재합니다.",
   "email_already_exists": "이메일이 이미 존재합니다.",
+  "email_already_exists_detail": "해당 이메일은 다른 계정에서 이미 사용중입니다. 다른 이메일 주소를 입력해주세요.",
   "couldnt_update_user": "사용자를 업데이트 할 수 없습니다.",
   "no_private_message_edit_allowed": "개인 메시지를 편집 할 수 없습니다.",
   "couldnt_create_private_message": "개인 메시지를 만들 수 없습니다.",

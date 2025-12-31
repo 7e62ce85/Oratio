@@ -8,7 +8,7 @@ echo "=== SSL 인증서 자동 설정 시작 ==="
 # 도메인 설정
 MAIN_DOMAIN="oratio.space"
 PAYMENT_DOMAIN="payments.oratio.space"
-EMAIL="admin@oratio.space"  # Let's Encrypt 알림용 이메일
+EMAIL="oratio1809@proton.me"  # Let's Encrypt 알림용 이메일
 
 # Certbot 설치 확인
 if ! command -v certbot &> /dev/null; then

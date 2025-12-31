@@ -39,7 +39,7 @@ function checkDifficulty(hash: string, difficulty: number): boolean {
 /**
  * PoW 계산
  * @param challenge - 서버에서 받은 챌린지 문자열
- * @param difficulty - 난이도 (앞에서부터 0이어야 하는 비트 수, 기본값: 20)
+ * @param difficulty - 난이도 (앞에서부터 0이어야 하는 비트 수, 기본값: 19)
  * @param onProgress - 진행률 콜백 함수 (0-100)
  * @returns nonce와 해시 솔루션
  */
@@ -50,8 +50,15 @@ export async function computeProofOfWork(
 ): Promise<{ nonce: number; hash: string; attempts: number }> {
   
   let nonce = 0;
-  const maxAttempts = 10000000; // 최대 시도 횟수 (무한 루프 방지)
+  // 난이도 20 기준: 평균 1,048,576번 시도 필요
+  // 최대 시도 횟수를 평균의 5배로 제한 (운이 매우 나쁜 경우도 커버)
+  // 5배 초과 시 새 챌린지로 재시도하는 게 더 빠름
+  const expectedAttempts = Math.pow(2, difficulty);
+  const maxAttempts = Math.min(expectedAttempts * 5, 10000000);
   const progressInterval = 10000; // 진행률 업데이트 간격
+  
+  // UI 블로킹 방지: 일정 간격으로 이벤트 루프에 제어권 반환
+  const yieldInterval = 50000; // 50,000번마다 yield
   
   while (nonce < maxAttempts) {
     // 챌린지 + nonce를 합쳐서 해시 계산
@@ -74,10 +81,15 @@ export async function computeProofOfWork(
       const progress = Math.min(95, (nonce / maxAttempts) * 100);
       onProgress(progress, nonce);
     }
+    
+    // UI 블로킹 방지: 주기적으로 이벤트 루프에 제어권 반환
+    if (nonce % yieldInterval === 0) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
   }
   
-  // 최대 시도 횟수 초과
-  throw new Error('PoW computation exceeded maximum attempts');
+  // 최대 시도 횟수 초과 - 새 챌린지로 재시도 권장
+  throw new Error(`PoW computation exceeded maximum attempts (${maxAttempts}). Please try again with a new challenge.`);
 }
 
 /**

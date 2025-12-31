@@ -24,7 +24,7 @@
   
   email: {
     smtp_server: "email-service:1025"
-    smtp_from_address: "noreply@oratio.com"
+    smtp_from_address: "noreply@oratio.space"
     tls_type: "none"
   }
   

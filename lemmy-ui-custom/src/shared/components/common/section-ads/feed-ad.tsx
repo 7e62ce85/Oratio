@@ -18,11 +18,11 @@ export class FeedAd extends Component<FeedAdProps, any> {
       const feedName = feedType === "All" ? "All" : feedType === "Local" ? "Local" : "Subscribed";
       
       adContent = `
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; text-align: center; color: white; font-family: Arial, sans-serif;">
+        <div style="background: #ffffff; padding: 15px; border-radius: 8px; text-align: center; color: #333; font-family: Arial, sans-serif; border: 1px solid #e6e6e6;">
           <h3 style="margin: 0 0 10px 0; font-size: 18px;">${feedEmoji} ${feedName} Feed</h3>
           <p style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.9;">Discover more interesting content</p>
           <a href="#" target="_blank" rel="noopener" onclick="console.log('${feedType} feed ad clicked')" 
-             style="background: #fff; color: #667eea; padding: 8px 20px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block;">
+             style="background: #667eea; color: #fff; padding: 8px 20px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block;">
             Explore Content
           </a>
         </div>

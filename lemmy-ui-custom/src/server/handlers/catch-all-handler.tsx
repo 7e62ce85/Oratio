@@ -90,6 +90,11 @@ export default async (req: Request, res: Response) => {
         return res.redirect("/setup");
       }
 
+      // CP check moved to fetchInitialData in post.tsx to ensure headers are properly passed
+      // Keeping this commented for reference
+      // const postUriMatch = req.path.match(/^\/post\/(\d+)/);
+      // if (postUriMatch) { ... }
+
       if (site && activeRoute?.fetchInitialData && match) {
         const { search } = parsePath(url);
         const initialFetchReq: InitialFetchRequest<Record<string, any>> = {
@@ -110,7 +115,17 @@ export default async (req: Request, res: Response) => {
             I18NextService.i18n.changeLanguage("cimode");
           });
         }
-        routeData = await activeRoute.fetchInitialData(initialFetchReq);
+        
+        try {
+          routeData = await activeRoute.fetchInitialData(initialFetchReq);
+        } catch (err: any) {
+          // Handle CP report blocking (403 Forbidden)
+          if (err?.message?.includes("Forbidden") && err.message.includes("CP report")) {
+            return res.status(403).send("This content has been hidden due to moderation.");
+          }
+          // Re-throw other errors to be handled below
+          throw err;
+        }
       }
 
       if (!activeRoute) {

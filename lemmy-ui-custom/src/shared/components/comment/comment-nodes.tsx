@@ -142,12 +142,7 @@ export class CommentNodes extends Component<CommentNodesProps, any> {
                 onPurgePerson={this.props.onPurgePerson}
                 onPurgeComment={this.props.onPurgeComment}
               />
-              {/* Add advertisement every 5 comments for optimal user experience */}
-              {this.props.isTopLevel && (idx + 1) % 5 === 0 && idx + 1 !== maxComments && (
-                <li className="comment-ad my-3 px-2">
-                  <AdBanner position="comment" size="medium" section="comments" />
-                </li>
-              )}
+              {/* Comments Inline Advertisement - REMOVED (ad section consolidation 2025-12-20) */}
             </>
           ))}
         </ul>

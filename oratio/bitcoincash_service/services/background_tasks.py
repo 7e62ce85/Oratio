@@ -9,6 +9,7 @@ from services.electron_cash import electron_cash
 from services.payment import process_payment
 from zero_conf_validator import get_validator
 from services.membership_sync import setup_membership_sync
+from services.cp_moderation import run_cp_background_tasks  # CP system
 
 # Initialize membership sync service
 membership_sync_service = None
@@ -132,6 +133,9 @@ def run_background_tasks():
             
             # 업로드 쿼터 리셋 체크 (새로 추가)
             reset_expired_upload_quotas()
+            
+            # CP 시스템 백그라운드 작업 (auto-unban, auto-delete)
+            run_cp_background_tasks()
             
             # 주기적으로 자금 전송 시도 (설정에 따라)
             if FORWARD_PAYMENTS:

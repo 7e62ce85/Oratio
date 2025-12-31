@@ -93,6 +93,7 @@ import {
   InitialFetchRequest,
 } from "../../interfaces";
 import { FirstLoadService, I18NextService, UserService } from "../../services";
+import { getReportedContentIds } from "../../utils/cp-moderation";
 import {
   EMPTY_REQUEST,
   HttpService,
@@ -293,8 +294,32 @@ export class Post extends Component<PostRouteProps, PostState> {
   async fetchPost(props: PostRouteProps) {
     const token = (this.fetchPostToken = Symbol());
     this.setState({ postRes: LOADING_REQUEST });
+    const postId = getIdFromProps(props);
+    // Check CP reported-content list first — if content is reported/hidden, block direct access
+    try {
+      const { posts } = await getReportedContentIds();
+      const isReported = posts.has(postId);
+      const user = UserService.Instance.myUserInfo;
+
+      // If reported and user is not admin, block access (show failed state)
+      if (isReported) {
+        const isAdmin = !!(user && user.local_user_view && user.local_user_view.person && user.local_user_view.person.admin);
+        if (!isAdmin) {
+          // Return a failed request state so UI shows error/404-like message
+          const failedState = { state: "failed", err: new Error("Content unavailable (removed or under review)") } as any;
+          if (token === this.fetchPostToken) {
+            this.setState({ postRes: failedState });
+          }
+          return;
+        }
+      }
+    } catch (err) {
+      // If CP service check fails, continue to fetch the post (fail open)
+      console.error("Error checking CP reported content IDs:", err);
+    }
+
     const postRes = await HttpService.client.getPost({
-      id: getIdFromProps(props),
+      id: postId,
       comment_id: getCommentIdFromProps(props),
     });
     if (token === this.fetchPostToken) {
@@ -369,6 +394,42 @@ export class Post extends Component<PostRouteProps, PostState> {
     );
     const postId = getIdFromProps({ match });
     const commentId = getCommentIdFromProps({ match });
+
+    // CP check: Block access to CP-reported posts for non-admin/non-mod users
+    try {
+      const cpCheckUrl = `http://bitcoincash-service:8081/api/cp/check-post-access/${postId}`;
+      const cpCheckHeaders: HeadersInit = {};
+      
+      // Debug: Log all header keys to find cookie field
+      console.log(`[CP CHECK] Headers keys:`, Object.keys(headers || {}));
+      console.log(`[CP CHECK] Headers.cookie:`, headers?.cookie);
+      console.log(`[CP CHECK] Headers['Cookie']:`, headers?.['Cookie']);
+      
+      // Try both lowercase and uppercase Cookie
+      const cookieHeader = headers?.cookie || headers?.['Cookie'] || headers?.['cookie'];
+      if (cookieHeader) {
+        cpCheckHeaders.Cookie = cookieHeader;
+      }
+      
+      console.log(`[CP CHECK] Checking post ${postId} with cookies: ${cookieHeader ? 'present' : 'none'}`);
+      const cpResp = await fetch(cpCheckUrl, { headers: cpCheckHeaders });
+      
+      // Only block if we get explicit 403 response
+      if (cpResp.status === 403) {
+        console.log(`[CP CHECK] Post ${postId} blocked - CP report hidden`);
+        throw new Error("Forbidden: This post has been hidden due to CP report");
+      }
+      
+      console.log(`[CP CHECK] Post ${postId} access allowed (status: ${cpResp.status})`);
+    } catch (err: any) {
+      // Check if this is our intentional 403 error
+      if (err?.message?.includes("Forbidden") && err.message.includes("CP report")) {
+        throw err; // Re-throw our 403 errors to block access
+      }
+      
+      // For network/service errors, log but allow access (fail-open for availability)
+      console.error("[CP CHECK] Service error, allowing access:", err?.message || err);
+    }
 
     const postForm: GetPost = {
       id: postId,
@@ -654,6 +715,9 @@ export class Post extends Component<PostRouteProps, PostState> {
                 onHidePost={this.handleHidePost}
                 onScrollIntoCommentsClick={this.handleScrollIntoCommentsClick}
               />
+              
+              {/* Post Bottom Advertisement - REMOVED (ad section consolidation 2025-12-20) */}
+              
               <div ref={this.commentSectionRef} className="mb-2" />
 
               {/* Only show the top level comment form if its not a context view */}
@@ -900,7 +964,7 @@ export class Post extends Component<PostRouteProps, PostState> {
             onBlockCommunity={this.handleBlockCommunity}
             onEditCommunity={this.handleEditCommunity}
           />
-          <AdBanner position="sidebar" size="medium" section="post" />
+          <AdBanner position="sidebar" size="medium" section="post" community={res.data.community_view.community.name} communityDisplayName={res.data.community_view.community.title} />
         </>
       );
     }
@@ -1361,15 +1425,22 @@ export class Post extends Component<PostRouteProps, PostState> {
     const hideRes = await HttpService.client.hidePost(form);
 
     if (hideRes.state === "success") {
-      this.setState(s => {
-        if (s.postRes.state === "success") {
-          s.postRes.data.post_view.hidden = form.hide;
-        }
+      // If unhiding, refetch the post to ensure it's visible
+      if (!form.hide) {
+        await this.fetchPost();
+        toast(I18NextService.i18n.t("post_unhidden"));
+      } else {
+        // For hiding, just update the state
+        this.setState(s => {
+          if (s.postRes.state === "success") {
+            s.postRes.data.post_view.hidden = form.hide;
+          }
 
-        return s;
-      });
+          return s;
+        });
 
-      toast(I18NextService.i18n.t(form.hide ? "post_hidden" : "post_unhidden"));
+        toast(I18NextService.i18n.t("post_hidden"));
+      }
     }
   }
 

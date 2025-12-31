@@ -16,6 +16,7 @@ import { Icon } from "../common/icon";
 import { PictrsImage } from "../common/pictrs-image";
 import { UserBadges } from "../common/user-badges";
 import { checkUserHasGoldBadgeSync, updateCreditCache } from "../../utils/bch-payment";
+import { getCPNotifications } from "../../utils/cp-moderation";
 import { Subscription } from "rxjs";
 import { tippyMixin } from "../mixins/tippy-mixin";
 import "./bch-button.css";
@@ -55,6 +56,8 @@ interface NavbarState {
   unreadInboxCount: number;
   unreadReportCount: number;
   unreadApplicationCount: number;
+  unreadCPModeratorCount: number;
+  unreadCPAdminCount: number;
   userCredit: number;
   isDarkMode: boolean;
 }
@@ -87,6 +90,8 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
     unreadInboxCount: 0,
     unreadReportCount: 0,
     unreadApplicationCount: 0,
+    unreadCPModeratorCount: 0,
+    unreadCPAdminCount: 0,
     userCredit: 0,
     isDarkMode: false,
   };
@@ -122,24 +127,53 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
       
       // Listen for credit cache updates to refresh badge display
       this.creditUpdateListener = () => {
+        console.log('[Navbar] Credit cache updated event received, forcing re-render');
         this.forceUpdate();
       };
       
       if (typeof window !== 'undefined') {
         window.addEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+        
+        // Force re-render after hydration to pick up localStorage cache
+        // This fixes the badge not showing on initial page load
+        // Use multiple timeouts to catch different loading scenarios
+        setTimeout(() => {
+          console.log('[Navbar] First forceUpdate (100ms)');
+          this.forceUpdate();
+        }, 100);
+        
+        setTimeout(() => {
+          console.log('[Navbar] Second forceUpdate (500ms)');
+          this.forceUpdate();
+        }, 500);
+        
+        setTimeout(() => {
+          console.log('[Navbar] Third forceUpdate (1500ms)');
+          this.forceUpdate();
+        }, 1500);
       }
       
       // Fetch user credit if logged in
       if (UserService.Instance.myUserInfo) {
         this.fetchUserCredit();
+        this.fetchCPNotifications();
       } else {
         // If user info not available yet, retry after a short delay
         // This handles cases where login is in progress
         setTimeout(() => {
           if (UserService.Instance.myUserInfo && this.state.userCredit === 0) {
             this.fetchUserCredit();
+            this.fetchCPNotifications();
           }
         }, 1000);
+      }
+
+      // Poll CP notifications every 30 seconds if user is mod or admin
+      if (UserService.Instance.myUserInfo && 
+          (UserService.Instance.moderatesSomething || amAdmin())) {
+        setInterval(() => {
+          this.fetchCPNotifications();
+        }, 30000);
       }
     }
   }
@@ -251,6 +285,35 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
     }
   }
 
+  // Fetch CP notification counts for moderators and admins
+  async fetchCPNotifications() {
+    try {
+      const user = UserService.Instance.myUserInfo;
+      if (!user) return;
+
+      let moderatorCount = 0;
+      let adminCount = 0;
+
+      const notifications = await getCPNotifications(user.local_user_view.person.id, true);
+      
+      // Count different notification types
+      for (const notif of notifications) {
+        if (notif.notification_type === 'new_report' && UserService.Instance.moderatesSomething) {
+          moderatorCount++;
+        } else if ((notif.notification_type === 'escalated_report' || notif.notification_type === 'appeal_submitted') && amAdmin()) {
+          adminCount++;
+        }
+      }
+
+      this.setState({
+        unreadCPModeratorCount: moderatorCount,
+        unreadCPAdminCount: adminCount
+      });
+    } catch (error) {
+      console.error("[CP] Error fetching CP notifications:", error);
+    }
+  }
+
   componentDidUpdate(_prevProps: NavbarProps) {
     // Check if user info became available in UserService
     // This handles the case where user logs in but BCH credit wasn't fetched
@@ -328,6 +391,40 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                     {this.state.unreadReportCount > 0 && (
                       <span className="mx-1 badge text-bg-light">
                         {numToSI(this.state.unreadReportCount)}
+                      </span>
+                    )}
+                  </NavLink>
+                </li>
+              )}
+              {UserService.Instance.moderatesSomething && (
+                <li className="nav-item nav-item-icon">
+                  <NavLink
+                    to="/cp/moderator-review"
+                    className="p-1 nav-link border-0"
+                    title="CP Moderation Review"
+                    onMouseUp={linkEvent(this, handleCollapseClick)}
+                  >
+                    <Icon icon="flag" />
+                    {this.state.unreadCPModeratorCount > 0 && (
+                      <span className="mx-1 badge text-bg-danger">
+                        {numToSI(this.state.unreadCPModeratorCount)}
+                      </span>
+                    )}
+                  </NavLink>
+                </li>
+              )}
+              {amAdmin() && (
+                <li className="nav-item nav-item-icon">
+                  <NavLink
+                    to="/cp/admin-panel"
+                    className="p-1 nav-link border-0"
+                    title="CP Admin Control Panel"
+                    onMouseUp={linkEvent(this, handleCollapseClick)}
+                  >
+                    <Icon icon="shield" />
+                    {this.state.unreadCPAdminCount > 0 && (
+                      <span className="mx-1 badge text-bg-danger">
+                        {numToSI(this.state.unreadCPAdminCount)}
                       </span>
                     )}
                   </NavLink>
@@ -548,6 +645,46 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                       </NavLink>
                     </li>
                   )}
+                  {UserService.Instance.moderatesSomething && (
+                    <li id="navCPModeration" className="nav-item">
+                      <NavLink
+                        className="nav-link d-inline-flex align-items-center d-md-inline-block"
+                        to="/cp/moderator-review"
+                        title="CP Moderation Review"
+                        onMouseUp={linkEvent(this, handleCollapseClick)}
+                      >
+                        <Icon icon="flag" />
+                        <span className="badge text-bg-danger d-inline ms-1 d-md-none ms-md-0">
+                          CP Review
+                        </span>
+                        {this.state.unreadCPModeratorCount > 0 && (
+                          <span className="mx-1 badge text-bg-danger">
+                            {numToSI(this.state.unreadCPModeratorCount)}
+                          </span>
+                        )}
+                      </NavLink>
+                    </li>
+                  )}
+                  {amAdmin() && (
+                    <li id="navCPAdmin" className="nav-item">
+                      <NavLink
+                        className="nav-link d-inline-flex align-items-center d-md-inline-block"
+                        to="/cp/admin-panel"
+                        title="CP Admin Control Panel"
+                        onMouseUp={linkEvent(this, handleCollapseClick)}
+                      >
+                        <Icon icon="shield" />
+                        <span className="badge text-bg-danger d-inline ms-1 d-md-none ms-md-0">
+                          CP Admin
+                        </span>
+                        {this.state.unreadCPAdminCount > 0 && (
+                          <span className="mx-1 badge text-bg-danger">
+                            {numToSI(this.state.unreadCPAdminCount)}
+                          </span>
+                        )}
+                      </NavLink>
+                    </li>
+                  )}
                   {amAdmin() && (
                     <li id="navApplications" className="nav-item">
                       <NavLink
@@ -597,10 +734,15 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                         )}
                         <span className="d-inline-flex align-items-center">
                           {person.display_name ?? person.name}
-                          <UserBadges
-                            classNames="ms-1"
-                            isPremium={checkUserHasGoldBadgeSync(person)}
-                          />
+                          {(() => {
+                            const isPremium = checkUserHasGoldBadgeSync(person);
+                            return (
+                              <UserBadges
+                                classNames="ms-1"
+                                isPremium={isPremium}
+                              />
+                            );
+                          })()}
                         </span>
                       </button>
                       <ul
@@ -654,6 +796,17 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                           >
                             <Icon icon="wallet" classes="me-1" />
                             My Wallet
+                          </NavLink>
+                        </li>
+                        <li>
+                          <NavLink
+                            to="/ads"
+                            className="dropdown-item px-2"
+                            title="Advertisements"
+                            onMouseUp={linkEvent(this, handleCollapseClick)}
+                          >
+                            <Icon icon="megaphone" classes="me-1" />
+                            Advertisements
                           </NavLink>
                         </li>
                         <li>

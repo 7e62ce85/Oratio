@@ -131,6 +131,8 @@ export default class App extends Component<any, any> {
                 <Route component={ErrorPage} />
               </Switch>
             </div>
+            {/* Website Bottom Advertisement - above footer */}
+            <AdBanner position="footer" size="large" section="website_bottom" className="container-lg my-3 text-center" />
             <Footer site={siteRes} />
           </div>
         </>

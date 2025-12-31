@@ -146,6 +146,7 @@ def get_membership_price():
     Get current price for annual membership (5 USD in BCH)
     Returns: dict with BCH amount and USD price
     """
+    # MEMBERSHIP_USD_PRICE = 5.00  # ORIGINAL - restore after testing
     MEMBERSHIP_USD_PRICE = 5.00
     
     result = calculate_bch_amount(MEMBERSHIP_USD_PRICE)

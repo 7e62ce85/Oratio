@@ -88,6 +88,177 @@ def init_db():
         )
         ''')
         
+        # CP (Child Pornography) Moderation System Tables
+        
+        # User CP permissions
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_cp_permissions (
+            user_id TEXT PRIMARY KEY,
+            person_id INTEGER NOT NULL UNIQUE,
+            username TEXT NOT NULL,
+            can_report_cp BOOLEAN DEFAULT TRUE,
+            can_review_cp BOOLEAN DEFAULT FALSE,
+            is_banned BOOLEAN DEFAULT FALSE,
+            ban_start INTEGER,
+            ban_end INTEGER,
+            ban_count INTEGER DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            last_violation INTEGER
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_cp_can_report ON user_cp_permissions(can_report_cp)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_cp_is_banned ON user_cp_permissions(is_banned)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_cp_ban_end ON user_cp_permissions(ban_end)')
+        
+        # CP reports
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cp_reports (
+            id TEXT PRIMARY KEY,
+            content_type TEXT NOT NULL,
+            content_id INTEGER NOT NULL,
+            community_id INTEGER NOT NULL,
+            reporter_user_id TEXT NOT NULL,
+            reporter_person_id INTEGER NOT NULL,
+            reporter_username TEXT NOT NULL,
+            reporter_is_member BOOLEAN DEFAULT FALSE,
+            creator_user_id TEXT NOT NULL,
+            creator_person_id INTEGER NOT NULL,
+            creator_username TEXT NOT NULL,
+            reason TEXT,
+            report_type TEXT DEFAULT 'cp',
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewed_by_person_id INTEGER,
+            reviewed_by_username TEXT,
+            reviewed_at INTEGER,
+            review_decision TEXT,
+            review_notes TEXT,
+            content_hidden BOOLEAN DEFAULT TRUE,
+            escalation_level TEXT DEFAULT 'moderator',
+            previous_report_id TEXT,
+            created_at INTEGER NOT NULL,
+            auto_delete_at INTEGER,
+            FOREIGN KEY (reporter_user_id) REFERENCES user_cp_permissions(user_id),
+            FOREIGN KEY (creator_user_id) REFERENCES user_cp_permissions(user_id)
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reports_content ON cp_reports(content_type, content_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reports_status ON cp_reports(status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reports_community ON cp_reports(community_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reports_creator ON cp_reports(creator_user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reports_reporter ON cp_reports(reporter_user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reports_escalation ON cp_reports(escalation_level, status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reports_auto_delete ON cp_reports(auto_delete_at)')
+        # Composite index for fast reported-content-ids lookup
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reports_hidden_type_id ON cp_reports(content_hidden, content_type, content_id)')
+        
+        # CP reviews
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cp_reviews (
+            id TEXT PRIMARY KEY,
+            report_id TEXT NOT NULL,
+            reviewer_person_id INTEGER NOT NULL,
+            reviewer_username TEXT NOT NULL,
+            reviewer_role TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            notes TEXT,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (report_id) REFERENCES cp_reports(id) ON DELETE CASCADE
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reviews_report ON cp_reviews(report_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_reviews_reviewer ON cp_reviews(reviewer_person_id)')
+        
+        # CP appeals
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cp_appeals (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            person_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            appeal_type TEXT NOT NULL,
+            related_report_id TEXT,
+            appeal_reason TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewed_by_person_id INTEGER,
+            reviewed_by_username TEXT,
+            reviewed_at INTEGER,
+            admin_decision TEXT,
+            admin_notes TEXT,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES user_cp_permissions(user_id),
+            FOREIGN KEY (related_report_id) REFERENCES cp_reports(id)
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_appeals_user ON cp_appeals(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_appeals_status ON cp_appeals(status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_appeals_created ON cp_appeals(created_at)')
+        
+        # CP notifications
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cp_notifications (
+            id TEXT PRIMARY KEY,
+            recipient_person_id INTEGER NOT NULL,
+            recipient_username TEXT NOT NULL,
+            notification_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            related_report_id TEXT,
+            related_appeal_id TEXT,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at INTEGER NOT NULL,
+            read_at INTEGER
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_notifications_recipient ON cp_notifications(recipient_person_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_notifications_unread ON cp_notifications(recipient_person_id, is_read)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_notifications_created ON cp_notifications(created_at)')
+        
+        # CP audit log
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cp_audit_log (
+            id TEXT PRIMARY KEY,
+            action_type TEXT NOT NULL,
+            actor_person_id INTEGER,
+            actor_username TEXT,
+            target_user_id TEXT,
+            target_person_id INTEGER,
+            target_username TEXT,
+            related_report_id TEXT,
+            related_appeal_id TEXT,
+            action_details TEXT,
+            created_at INTEGER NOT NULL
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_audit_action ON cp_audit_log(action_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_audit_actor ON cp_audit_log(actor_person_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_audit_target ON cp_audit_log(target_person_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cp_audit_created ON cp_audit_log(created_at)')
+        
+        # Moderator CP assignments
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS moderator_cp_assignments (
+            id TEXT PRIMARY KEY,
+            person_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            community_id INTEGER NOT NULL,
+            can_review_cp BOOLEAN DEFAULT TRUE,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(person_id, community_id)
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_mod_cp_community ON moderator_cp_assignments(community_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_mod_cp_person ON moderator_cp_assignments(person_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_mod_cp_can_review ON moderator_cp_assignments(can_review_cp)')
+        
         # 프라그마 설정 - 외래 키 활성화 및 저널 모드 WAL로 변경
         cursor.execute("PRAGMA foreign_keys = ON")
         cursor.execute("PRAGMA journal_mode = WAL")
@@ -95,7 +266,7 @@ def init_db():
         
         conn.commit()
         conn.close()
-        logger.info("데이터베이스 초기화 완료")
+        logger.info("데이터베이스 초기화 완료 (CP 시스템 포함)")
     except sqlite3.Error as e:
         logger.error(f"데이터베이스 초기화 오류: {e}")
         raise
@@ -508,9 +679,13 @@ def has_user_made_payment_by_username(username):
 
 # ==================== Membership Functions ====================
 
+# Upload quota constants (20GB = 21474836480 bytes)
+MEMBER_ANNUAL_QUOTA_BYTES = 21_474_836_480
+
 def create_membership(user_id, amount_paid, tx_hash=None):
     """
     새 연간 멤버십 생성 (1년 유효)
+    Also updates user_upload_quotas if exists
     """
     try:
         conn = get_db_connection()
@@ -529,6 +704,22 @@ def create_membership(user_id, amount_paid, tx_hash=None):
                 amount_paid = ?,
                 is_active = TRUE
         ''', (user_id, now, expires_at, amount_paid, now, expires_at, amount_paid))
+        
+        # ===== FIX: Update existing user_upload_quotas if exists =====
+        cursor.execute('''
+            UPDATE user_upload_quotas 
+            SET annual_quota_bytes = ?,
+                membership_type = 'annual',
+                quota_start_date = ?,
+                quota_end_date = ?,
+                updated_at = ?,
+                is_active = TRUE
+            WHERE user_id = ?
+        ''', (MEMBER_ANNUAL_QUOTA_BYTES, now, expires_at, now, user_id))
+        
+        if cursor.rowcount > 0:
+            logger.info(f"사용자 {user_id}의 upload_quotas 업데이트: 20GB 할당")
+        # ===== END FIX =====
         
         # 멤버십 거래 기록 생성
         transaction_id = str(uuid.uuid4())

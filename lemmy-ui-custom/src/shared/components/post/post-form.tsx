@@ -59,6 +59,7 @@ import { isBrowser } from "@utils/browser";
 import isMagnetLink, {
   extractMagnetLinkDownloadName,
 } from "@utils/media/is-magnet-link";
+import { checkUserCPPermissions } from "../../utils/cp-moderation";
 
 const MAX_POST_TITLE_LENGTH = 200;
 
@@ -490,6 +491,24 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
   componentDidMount() {
     if (this.postTitleRef.current) {
       autosize(this.postTitleRef.current);
+    }
+
+    // Check CP permissions - ban users from posting if banned
+    const user = UserService.Instance.myUserInfo;
+    if (user && !this.props.post_view) { // Only check for new posts, not edits
+      checkUserCPPermissions(user.local_user_view.person.name).then(permissions => {
+        if (permissions && permissions.is_banned) {
+          const banEndDate = new Date((permissions.ban_end || 0) * 1000);
+          const msLeft = (permissions.ban_end || 0) * 1000 - Date.now();
+          const daysLeft = msLeft > 0 ? Math.ceil(msLeft / (1000 * 60 * 60 * 24)) : 0;
+          toast(
+            `You are banned from posting until ${banEndDate.toLocaleDateString()} (${daysLeft} days remaining) due to CP violation`,
+            "danger",
+            7000
+          );
+          this.props.onCancel?.();
+        }
+      });
     }
   }
 
@@ -1097,22 +1116,51 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
       });
 
       // PoW 계산 (진행률 콜백 포함)
-      const result = await computeProofOfWork(
-        challenge,
-        i.state.powDifficulty,
-        (progress, attempts) => {
+      // 최대 3번 재시도 (운이 매우 나쁜 경우 대비)
+      let result;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          result = await computeProofOfWork(
+            challenge,
+            i.state.powDifficulty,
+            (progress, attempts) => {
+              i.setState({ 
+                powProgress: progress,
+                powAttempts: attempts
+              });
+            }
+          );
+          break; // 성공하면 루프 탈출
+        } catch (error) {
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            throw error; // 최대 재시도 횟수 초과
+          }
+          
+          // 새 챌린지로 재시도
+          console.warn(`PoW 계산 시간 초과, 재시도 중... (${retryCount}/${maxRetries})`);
+          toast(`계산 시간 초과, 재시도 중... (${retryCount}/${maxRetries})`, "info");
+          
+          const timestamp = Date.now();
+          const random = Math.random().toString(36).substring(2);
+          challenge = `${timestamp}-${random}`;
+          
           i.setState({ 
-            powProgress: progress,
-            powAttempts: attempts
+            powChallenge: challenge,
+            powProgress: 0,
+            powAttempts: 0
           });
         }
-      );
+      }
 
       // 계산 완료
       i.setState({
-        powNonce: result.nonce,
-        powHash: result.hash,
-        powAttempts: result.attempts,
+        powNonce: result!.nonce,
+        powHash: result!.hash,
+        powAttempts: result!.attempts,
         powComputing: false,
         powProgress: 100
       });

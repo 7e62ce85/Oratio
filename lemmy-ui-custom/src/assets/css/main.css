@@ -511,6 +511,19 @@ br.big {
   min-height: 250px;
 }
 
+/* Footer/Bottom Ad Styles */
+.ad-footer {
+  margin: 20px auto;
+  max-width: 728px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ad-footer.ad-large {
+  min-height: 90px;
+}
+
 /* Ad Content Wrapper */
 .ad-content-wrapper {
   width: 100%;
@@ -529,12 +542,12 @@ br.big {
 /* Responsive Ad Styles */
 @media (max-width: 768px) {
   .ad-header.ad-large {
-    max-width: 320px;
+    max-width: 100%;
     min-height: 50px;
   }
   
   .ad-header.ad-medium {
-    max-width: 320px;
+    max-width: 100%;
     min-height: 50px;
   }
   
@@ -545,6 +558,20 @@ br.big {
   .ad-container {
     margin: 5px 0;
     padding: 5px;
+  }
+  
+  /* Ensure ad images scale properly on mobile */
+  .ad-container img,
+  .ad-content-wrapper img {
+    max-width: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain !important;
+  }
+  
+  /* For horizontal banners (728x90), scale down proportionally */
+  .ad-header img {
+    max-height: 60px;
   }
 }
 

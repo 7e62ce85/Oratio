@@ -13,15 +13,11 @@ from dotenv import load_dotenv
 dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
-    print(f"direct_payment.py: .env 파일을 로드했습니다: {dotenv_path}")
 else:
     # 현재 디렉토리에서 .env 파일 찾기
     local_dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
     if os.path.exists(local_dotenv_path):
         load_dotenv(local_dotenv_path)
-        print(f"direct_payment.py: .env 파일을 로드했습니다: {local_dotenv_path}")
-    else:
-        print("direct_payment.py: .env 파일을 찾을 수 없습니다.")
 
 # 로깅 설정
 logging.basicConfig(

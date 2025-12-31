@@ -188,6 +188,7 @@ services:
     volumes:
       - ./bitcoincash_service:/app
       - ./data/bitcoincash:/data
+      - ./lemmy.hjson:/config/config.hjson:ro
     ports:
       - "8081:8081"
     depends_on:

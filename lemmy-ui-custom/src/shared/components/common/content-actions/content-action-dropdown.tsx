@@ -22,6 +22,9 @@ import ModActionFormModal, {
 import { BanType, CommentNodeView, PurgeType } from "../../../interfaces";
 import { getApubName, hostname } from "@utils/helpers";
 import { tippyMixin } from "../../mixins/tippy-mixin";
+import { submitCPReport } from "../../../utils/cp-moderation";
+import { checkUserHasGoldBadgeSync } from "../../../utils/bch-payment";
+import { toast } from "../../../toast";
 
 interface ContentActionDropdownPropsBase {
   onSave: () => Promise<void>;
@@ -65,6 +68,7 @@ type DialogType =
   | "RemoveDialog"
   | "PurgeDialog"
   | "ReportDialog"
+  | "CPReportDialog"
   | "TransferCommunityDialog"
   | "AppointModDialog"
   | "AppointAdminDialog"
@@ -88,7 +92,11 @@ type DropdownState = { dropdownOpenedOnce: boolean };
 type ContentActionDropdownState = ActionTypeState &
   ShowState &
   RenderState &
-  DropdownState;
+  DropdownState &
+  {
+    cpReportReason: string;
+    cpReportLoading: boolean;
+  };
 
 @tippyMixin
 export default class ContentActionDropdown extends Component<
@@ -102,6 +110,7 @@ export default class ContentActionDropdown extends Component<
     showPurgeDialog: false,
     showRemoveDialog: false,
     showReportDialog: false,
+    showCPReportDialog: false,
     showTransferCommunityDialog: false,
     showViewVotesDialog: false,
     renderAppointAdminDialog: false,
@@ -110,9 +119,12 @@ export default class ContentActionDropdown extends Component<
     renderPurgeDialog: false,
     renderRemoveDialog: false,
     renderReportDialog: false,
+    renderCPReportDialog: false,
     renderTransferCommunityDialog: false,
     renderViewVotesDialog: false,
     dropdownOpenedOnce: false,
+    cpReportReason: "",
+    cpReportLoading: false,
   };
 
   constructor(props: ContentActionDropdownProps, context: any) {
@@ -121,6 +133,7 @@ export default class ContentActionDropdown extends Component<
     this.toggleModDialogShow = this.toggleModDialogShow.bind(this);
     this.hideAllDialogs = this.hideAllDialogs.bind(this);
     this.toggleReportDialogShow = this.toggleReportDialogShow.bind(this);
+    this.toggleCPReportDialogShow = this.toggleCPReportDialogShow.bind(this);
     this.toggleRemoveShow = this.toggleRemoveShow.bind(this);
     this.toggleBanFromCommunityShow =
       this.toggleBanFromCommunityShow.bind(this);
@@ -134,6 +147,7 @@ export default class ContentActionDropdown extends Component<
     this.toggleViewVotesShow = this.toggleViewVotesShow.bind(this);
     this.wrapHandler = this.wrapHandler.bind(this);
     this.handleDropdownToggleClick = this.handleDropdownToggleClick.bind(this);
+    this.handleCPReport = this.handleCPReport.bind(this);
   }
 
   render() {
@@ -275,6 +289,15 @@ export default class ContentActionDropdown extends Component<
                         label={I18NextService.i18n.t("create_report")}
                         onClick={this.toggleReportDialogShow}
                         noLoading
+                      />
+                    </li>
+                    <li>
+                      <ActionButton
+                        icon="alert-triangle"
+                        label="Report CP"
+                        onClick={this.toggleCPReportDialogShow}
+                        noLoading
+                        iconClass="text-danger"
                       />
                     </li>
                     <li>
@@ -626,6 +649,58 @@ export default class ContentActionDropdown extends Component<
     this.toggleModDialogShow("AppointAdminDialog");
   }
 
+  toggleCPReportDialogShow() {
+    this.toggleModDialogShow("CPReportDialog");
+  }
+
+  async handleCPReport(reason: string) {
+    const user = UserService.Instance.myUserInfo;
+    if (!user) return;
+
+    this.setState({ cpReportLoading: true });
+
+    const isPost = this.props.type === "post";
+    const contentId = isPost 
+      ? (this.props as ContentPostProps).postView.post.id
+      : (this.props as ContentCommentProps).commentView.comment.id;
+    
+    const communityId = isPost
+      ? (this.props as ContentPostProps).postView.community.id
+      : (this.props as ContentCommentProps).commentView.community.id;
+
+    const creator = isPost
+      ? (this.props as ContentPostProps).postView.creator
+      : (this.props as ContentCommentProps).commentView.creator;
+
+    const result = await submitCPReport({
+      content_type: isPost ? 'post' : 'comment',
+      content_id: contentId,
+      community_id: communityId,
+      reporter_user_id: user.local_user_view.person.name,
+      reporter_person_id: user.local_user_view.person.id,
+      reporter_username: user.local_user_view.person.name,
+      reporter_is_member: checkUserHasGoldBadgeSync(user.local_user_view.person),
+      creator_user_id: creator.name,
+      creator_person_id: creator.id,
+      creator_username: creator.name,
+      reason: reason || undefined
+    });
+
+    this.setState({ 
+      cpReportLoading: false,
+      showCPReportDialog: false,
+      cpReportReason: ""
+    });
+
+    if (result.success) {
+      toast(result.message || "Content reported and hidden", "success");
+      // Refresh the page to show hidden content
+      setTimeout(() => window.location.reload(), 1000);
+    } else {
+      toast(result.message || "Failed to report content", "danger");
+    }
+  }
+
   toggleViewVotesShow() {
     this.toggleModDialogShow("ViewVotesDialog");
   }
@@ -792,6 +867,36 @@ export default class ContentActionDropdown extends Component<
             id={id}
             show={showViewVotesDialog}
             onCancel={this.hideAllDialogs}
+          />
+        )}
+        {this.state.renderCPReportDialog && (
+          <ConfirmationModal
+            message={
+              <>
+                <p className="text-danger fw-bold mb-3">
+                  <Icon icon="alert-triangle" classes="me-2" />
+                  ⚠️ Warning: This will report child pornography content
+                </p>
+                <p className="mb-3">
+                  Content will be immediately hidden and reviewed by moderators. 
+                  False reports may result in loss of reporting privileges.
+                </p>
+                <div className="mb-2">
+                  <label className="form-label">Reason (optional)</label>
+                  <textarea
+                    className="form-control"
+                    placeholder="Explain why this is CP..."
+                    value={this.state.cpReportReason}
+                    onInput={(e: any) => this.setState({ cpReportReason: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+              </>
+            }
+            onYes={() => this.handleCPReport(this.state.cpReportReason)}
+            onNo={() => this.setState({ showCPReportDialog: false, cpReportReason: "" })}
+            show={this.state.showCPReportDialog}
+            loading={this.state.cpReportLoading}
           />
         )}
       </>

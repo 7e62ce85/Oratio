@@ -17,14 +17,23 @@ from jwt_utils import extract_user_info_from_jwt
 from routes.invoice import invoice_bp
 from routes.api import api_bp
 from routes.membership import membership_bp
+from routes.cp import cp_bp  # CP moderation system
+from middleware.cp_post_blocker import cp_blocker_bp  # CP post access control
 
 # 서비스 모듈 가져오기
 from services.background_tasks import start_background_tasks
 from services.electron_cash import electron_cash
 
+# 데이터베이스 초기화
+from models import init_db
+
 # Flask 애플리케이션 초기화
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
+
+# 데이터베이스 초기화 (앱 시작 시 자동 실행)
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+init_db()
 
 # 외부에서 electron_cash를 참조할 수 있도록 전역으로 노출
 # 이를 통해 `from app import electron_cash` 구문이 동작합니다
@@ -47,10 +56,16 @@ def forward_to_payout_wallet():
 app.register_blueprint(invoice_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(membership_bp)
+app.register_blueprint(cp_bp)  # CP moderation system
+app.register_blueprint(cp_blocker_bp)  # CP post access control
 
 # Upload quota blueprint
 from routes.upload import upload_bp
 app.register_blueprint(upload_bp)
+
+# Advertisement system blueprint
+from routes.ads import ads_bp
+app.register_blueprint(ads_bp)
 
 # 정적 파일 제공
 @app.route('/static/<path:path>')

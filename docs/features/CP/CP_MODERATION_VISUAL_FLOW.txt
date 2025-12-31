@@ -1,0 +1,380 @@
+# CP Moderation System - Visual Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        CP MODERATION SYSTEM FLOW                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: REPORTING                                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+User A (Any User)
+    │
+    ├─ Sees CP Content (Post/Comment)
+    │
+    ├─ Clicks "Report CP" Button ────────────────┐
+    │                                             │
+    ▼                                             ▼
+┌──────────────┐                          ┌──────────────┐
+│ Permission   │ ─── Can Report? ───────▶ │   Submit     │
+│ Check (API)  │                          │   Report     │
+└──────────────┘                          └──────────────┘
+    │ Yes                                        │
+    │                                            │
+    ▼                                            ▼
+┌──────────────────────────────────────────────────────┐
+│ ✅ Report Created                                    │
+│ ✅ Content Immediately Hidden (from regular users)   │
+│ ✅ Notification Sent to All Community Moderators    │
+└──────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: MODERATOR REVIEW                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Moderator
+    │
+    ├─ Opens Moderator Review Panel (/cp/moderator-review)
+    │
+    ├─ Sees Pending Reports List
+    │
+    ├─ Views Content (still visible to moderators)
+    │
+    ├─ Makes Decision:
+    │
+    ├────────────────┬────────────────────────────────────────┐
+    │                │                                        │
+    ▼                ▼                                        ▼
+┌──────────┐   ┌──────────┐                          ┌──────────┐
+│  CP      │   │  NOT CP  │                          │  SKIP    │
+│ CONFIRMED│   │          │                          │  (Wait)  │
+└──────────┘   └──────────┘                          └──────────┘
+    │                │                                        │
+    │                │                                        │
+    ▼                ▼                                        ▼
+┌──────────────┐  ┌──────────────────┐              ┌──────────────┐
+│ CONSEQUENCES │  │  CONSEQUENCES    │              │  No Action   │
+│              │  │                  │              │              │
+│ • Creator    │  │ • Reporter loses │              │ • Report     │
+│   BANNED     │  │   report ability │              │   stays      │
+│   (3 months) │  │                  │              │   pending    │
+│              │  │ • Content can be │              │              │
+│ • Content    │  │   unhidden       │              └──────────────┘
+│   stays      │  │                  │
+│   hidden     │  │ • Reporter can   │
+│              │  │   appeal (if     │
+│ • Creator    │  │   membership)    │
+│   can appeal │  │                  │
+│   (if member)│  │                  │
+└──────────────┘  └──────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: RE-REPORTING & ESCALATION                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+After Moderator Approves as "Not CP":
+
+User B (Free)          User C (Membership)
+    │                          │
+    ├─ Tries to Re-report     ├─ Re-reports Same Content
+    │                          │
+    ▼                          ▼
+┌──────────┐            ┌──────────────────┐
+│ ❌ BLOCKED│            │ ✅ ALLOWED        │
+│          │            │                  │
+│ Cannot   │            │ → ESCALATES TO   │
+│ re-report│            │   ADMIN REVIEW   │
+└──────────┘            └──────────────────┘
+                               │
+                               ▼
+                        ┌─────────────────┐
+                        │ Admin Review    │
+                        │ Queue           │
+                        │                 │
+                        │ ⏰ Auto-delete  │
+                        │ in 7 days if    │
+                        │ not reviewed    │
+                        └─────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: ADMIN REVIEW                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Admin
+    │
+    ├─ Opens Admin Control Panel (/cp/admin-panel)
+    │
+    ├─ Tab 1: Pending Reports
+    │    │
+    │    ├─ Reviews escalated cases
+    │    │
+    │    └─ Makes Final Decision:
+    │         │
+    │         ├─ "Approve" (Not CP) → Content permanently approved
+    │         │                      → Cannot be re-reported
+    │         │
+    │         └─ "Reject" (Confirm CP) → Content permanently hidden
+    │                                  → Creator remains banned
+    │
+    ├─ Tab 2: Manage Users
+    │    │
+    │    ├─ Search Username
+    │    │
+    │    └─ Manual Actions:
+    │         ├─ Ban User
+    │         ├─ Unban User
+    │         ├─ Revoke Report Ability
+    │         └─ Restore Report Ability
+    │
+    └─ Tab 3: Review Appeals
+         │
+         ├─ See appeals from membership users
+         │
+         └─ Approve or Reject Appeal
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: APPEALS SYSTEM                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Membership User (Banned or Lost Report Ability)
+    │
+    ├─ Opens Appeal Form (/cp/appeal)
+    │
+    ├─ Checks Status:
+    │    │
+    │    ├─ Banned? → Can appeal ban
+    │    └─ Lost report ability? → Can appeal loss
+    │
+    ├─ Submits Appeal with Reason
+    │
+    ▼
+┌────────────────────────────────────┐
+│ Appeal Created                     │
+│                                    │
+│ → Admin sees in "Appeals" tab     │
+│ → Admin reviews and decides       │
+│                                    │
+│   ✅ Approve Appeal               │
+│   → Restore privileges            │
+│                                    │
+│   ❌ Reject Appeal                │
+│   → Privileges remain restricted  │
+└────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ AUTOMATIC PROCESSES (Background Tasks)                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Every 15 seconds:
+
+┌─────────────────────┐         ┌─────────────────────┐
+│ Auto-Unban          │         │ Auto-Delete         │
+│                     │         │                     │
+│ • Check banned      │         │ • Check admin cases │
+│   users             │         │   older than 7 days │
+│                     │         │                     │
+│ • If ban expired    │         │ • If not reviewed   │
+│   (3 months passed) │         │   → DELETE content  │
+│   → Restore access  │         │   → Close case      │
+└─────────────────────┘         └─────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ USER JOURNEY EXAMPLES                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│ SCENARIO A: Legitimate CP Report                                 │
+└──────────────────────────────────────────────────────────────────┘
+
+User A reports → Content hidden → Moderator confirms CP →
+Creator banned 3 months → Creator appeals (if member) →
+Admin reviews appeal → Decides to uphold or restore
+
+Result: ✅ CP content removed, violator punished
+
+
+┌──────────────────────────────────────────────────────────────────┐
+│ SCENARIO B: False CP Report                                      │
+└──────────────────────────────────────────────────────────────────┘
+
+User A reports → Content hidden → Moderator says "Not CP" →
+Reporter (User A) loses report ability → User A appeals (if member) →
+Admin reviews appeal → Decides to restore or uphold
+
+Result: ✅ False reporter penalized, legitimate content restored
+
+
+┌──────────────────────────────────────────────────────────────────┐
+│ SCENARIO C: Controversial Case (Escalation)                      │
+└──────────────────────────────────────────────────────────────────┘
+
+User A reports → Moderator says "Not CP" → Content unhidden →
+User B (membership) re-reports → Escalates to admin →
+Admin makes final decision → No more appeals
+
+Result: ✅ Admin has final say on difficult cases
+
+
+┌──────────────────────────────────────────────────────────────────┐
+│ SCENARIO D: Banned User Tries to Post                            │
+└──────────────────────────────────────────────────────────────────┘
+
+User clicks "New Post" → Post form opens →
+Permission check (API call) → User is banned →
+Form closes, error shown: "Banned until [DATE]" →
+User cannot post/comment until ban expires
+
+Result: ✅ Banned users cannot create content
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FRONTEND COMPONENTS STRUCTURE                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+src/shared/
+│
+├── utils/
+│   └── cp-moderation.ts ─────────┐
+│       • checkUserCPPermissions() │ All API
+│       • submitCPReport()         │ communication
+│       • getPendingReports()      │ goes through
+│       • reviewCPReport()         │ these
+│       • submitCPAppeal()         │ functions
+│       • getCPNotifications()     │
+│       • adminBanUser()           │
+│       • etc...                   │
+│                                  │
+└── components/                    │
+    │                              │
+    ├── post/                      │
+    │   └── post-listing.tsx       │
+    │       • Shows CP Report btn ─┤
+    │       • Shows hidden badge   │
+    │                              │
+    ├── comment/                   │
+    │   └── comment-node.tsx       │
+    │       • Shows CP Report btn ─┤
+    │       • Shows hidden badge   │
+    │                              │
+    ├── cp/                        │
+    │   ├── moderator-review-panel.tsx
+    │   │    • Fetch reports ──────┤
+    │   │    • Review interface    │
+    │   │                          │
+    │   ├── admin-control-panel.tsx
+    │   │    • Manage users ───────┤
+    │   │    • Review appeals      │
+    │   │                          │
+    │   ├── appeal-form.tsx        │
+    │   │    • Submit appeals ─────┤
+    │   │                          │
+    │   └── cp-notifications.tsx   │
+    │        • Show CP alerts ─────┤
+    │                              │
+    └── app/                       │
+        └── navbar.tsx             │
+            • CP notification badge┤
+            • Link to review panels┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DATABASE RELATIONSHIPS                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+user_cp_permissions
+    ├── username (PK)
+    ├── can_report_cp
+    ├── is_banned
+    ├── ban_end
+    └── has_cp_review_permission
+
+cp_reports
+    ├── id (PK)
+    ├── content_type (post/comment)
+    ├── content_id
+    ├── reporter_username ──→ user_cp_permissions.username
+    ├── creator_username ───→ user_cp_permissions.username
+    ├── status (pending/reviewed)
+    ├── escalation_level (moderator/admin)
+    └── content_hidden
+
+cp_reviews
+    ├── id (PK)
+    ├── report_id ─────────→ cp_reports.id
+    ├── reviewer_username ─→ user_cp_permissions.username
+    ├── decision (cp_confirmed/not_cp/admin_approved/admin_rejected)
+    └── created_at
+
+cp_appeals
+    ├── id (PK)
+    ├── username ──────────→ user_cp_permissions.username
+    ├── appeal_type (ban/report_ability)
+    ├── status (pending/approved/rejected)
+    └── reason
+
+cp_notifications
+    ├── id (PK)
+    ├── person_id
+    ├── notification_type
+    ├── is_read
+    └── created_at
+
+cp_audit_log
+    ├── id (PK)
+    ├── action_type
+    ├── actor_username
+    ├── target_username
+    └── action_details
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ IMPLEMENTATION ROADMAP                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Week 1: Core Infrastructure
+├── Day 1-2: Create cp-moderation.ts utility
+├── Day 3: Add CP report buttons to posts/comments
+└── Day 4-5: Add permission checks
+
+Week 2: Moderation Features
+├── Day 1-2: Build moderator review panel
+├── Day 3: Integrate notifications
+└── Day 4-5: Testing moderator flows
+
+Week 3: Admin & Appeals
+├── Day 1-2: Build admin control panel
+├── Day 3: Build appeal form
+└── Day 4-5: Full system testing
+
+Total: ~15 days (2-3 weeks) for complete implementation
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ KEY METRICS TO MONITOR                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Daily Metrics:
+├── Total CP reports submitted
+├── Reports confirmed as CP
+├── Reports rejected as not CP
+├── Active bans
+├── Lost report ability users
+├── Pending moderator reviews
+├── Pending admin reviews
+└── Appeals submitted
+
+Weekly Metrics:
+├── Average response time (report → review)
+├── False report rate
+├── Appeal success rate
+└── Auto-deleted cases (unreviewed after 7 days)
+
+```
+

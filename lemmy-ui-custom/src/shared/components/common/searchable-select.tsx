@@ -107,7 +107,7 @@ export class SearchableSelect extends Component<
           role="combobox"
           className="form-select d-inline-block text-start"
           aria-haspopup="listbox"
-          aria-controls="searchable-select-input"
+          aria-controls={`${id}-input`}
           aria-activedescendant={options[selectedIndex].label}
           aria-expanded={false}
           data-bs-toggle="dropdown"
@@ -130,7 +130,7 @@ export class SearchableSelect extends Component<
             </span>
             <input
               type="text"
-              id="searchable-select-input"
+              id={`${id}-input`}
               className="form-control"
               ref={this.searchInputRef}
               onInput={linkEvent(this, handleSearch)}
