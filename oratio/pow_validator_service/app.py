@@ -13,10 +13,11 @@ from typing import Optional, Dict, Any
 
 app = Flask(__name__)
 
-# 설정
-POW_DIFFICULTY = 20  # 기본 난이도
-POW_MAX_AGE_SECONDS = 600  # 10분
-LEMMY_BACKEND_URL = "http://lemmy:8536"  # Docker 네트워크 내부
+# 설정 (환경변수 우선, 없으면 기본값 사용)
+import os
+POW_DIFFICULTY = int(os.environ.get('POW_DIFFICULTY', '16'))  # 최소 난이도 (적응형 난이도: 클라이언트가 16~18 사이에서 결정)
+POW_MAX_AGE_SECONDS = int(os.environ.get('POW_MAX_AGE_SECONDS', '600'))  # 10분
+LEMMY_BACKEND_URL = os.environ.get('LEMMY_BACKEND_URL', 'http://lemmy:8536')  # Docker 네트워크 내부
 
 # PoW 검증 결과
 class PowVerificationResult:
@@ -96,6 +97,23 @@ def is_challenge_valid(challenge: str, max_age_seconds: int = POW_MAX_AGE_SECOND
     
     except (ValueError, IndexError):
         return False
+
+
+def filter_hop_by_hop_headers(response_headers):
+    """
+    프록시 응답에서 hop-by-hop 헤더를 제거.
+    Content-Encoding, Transfer-Encoding 등이 남으면
+    ERR_CONTENT_DECODING_FAILED 오류 발생.
+    """
+    hop_by_hop = {
+        'content-encoding', 'transfer-encoding', 'connection',
+        'keep-alive', 'proxy-authenticate', 'proxy-authorization',
+        'te', 'trailers', 'upgrade'
+    }
+    return [
+        (key, value) for key, value in response_headers.items()
+        if key.lower() not in hop_by_hop
+    ]
 
 
 def verify_proof_of_work(
@@ -191,8 +209,8 @@ def register_with_pow():
             timeout=30
         )
         
-        # Lemmy 응답 그대로 반환
-        return response.content, response.status_code, response.headers.items()
+        # Lemmy 응답 반환 (hop-by-hop 헤더 제거로 ERR_CONTENT_DECODING_FAILED 방지)
+        return response.content, response.status_code, filter_hop_by_hop_headers(response.headers)
     
     except requests.RequestException as e:
         app.logger.error(f"Lemmy backend request failed: {e}")
@@ -257,16 +275,21 @@ def create_post_with_pow():
         lemmy_data.pop('pow_nonce', None)
         lemmy_data.pop('pow_hash', None)
         
-        # Lemmy 백엔드로 전달
+        # Lemmy 백엔드로 전달 (Accept-Encoding 제거: requests가 자동 디코딩하므로 gzip 응답 받으면 안됨)
+        forward_headers = {
+            k: v for k, v in request.headers
+            if k.lower() not in ('host', 'content-length', 'accept-encoding', 'transfer-encoding')
+        }
+        forward_headers['Content-Type'] = 'application/json'
         response = requests.post(
             f"{LEMMY_BACKEND_URL}/api/v3/post",
             json=lemmy_data,
-            headers=dict(request.headers),  # 인증 헤더 등을 그대로 전달
+            headers=forward_headers,
             timeout=30
         )
         
-        # Lemmy 응답 그대로 반환
-        return response.content, response.status_code, response.headers.items()
+        # Lemmy 응답 반환 (hop-by-hop 헤더 제거로 ERR_CONTENT_DECODING_FAILED 방지)
+        return response.content, response.status_code, filter_hop_by_hop_headers(response.headers)
     
     except requests.RequestException as e:
         app.logger.error(f"Lemmy backend request failed: {e}")

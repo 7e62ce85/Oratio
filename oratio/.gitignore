@@ -26,6 +26,7 @@ electron-cash-data/
 # 환경 변수 파일 (sensitive)
 .env
 .env.*
+!.env.example
 *.env
 
 # 보안 관련 파일
@@ -40,6 +41,9 @@ electron-cash-data/
 *.pem
 *.key
 wallet_*.sh
+
+# 예외: 배포용 예제 파일 (.example 접미사)
+!*.example
 
 # 백업 파일
 *.bak

@@ -295,27 +295,42 @@ export class Post extends Component<PostRouteProps, PostState> {
     const token = (this.fetchPostToken = Symbol());
     this.setState({ postRes: LOADING_REQUEST });
     const postId = getIdFromProps(props);
-    // Check CP reported-content list first — if content is reported/hidden, block direct access
-    try {
-      const { posts } = await getReportedContentIds();
-      const isReported = posts.has(postId);
-      const user = UserService.Instance.myUserInfo;
 
-      // If reported and user is not admin, block access (show failed state)
-      if (isReported) {
-        const isAdmin = !!(user && user.local_user_view && user.local_user_view.person && user.local_user_view.person.admin);
-        if (!isAdmin) {
-          // Return a failed request state so UI shows error/404-like message
-          const failedState = { state: "failed", err: new Error("Content unavailable (removed or under review)") } as any;
-          if (token === this.fetchPostToken) {
-            this.setState({ postRes: failedState });
-          }
-          return;
+    // CP access check: call backend directly (not cached list) to ensure
+    // creator and all non-admin/non-mod users are blocked immediately
+    try {
+      const cpResp = await fetch(`/payments/api/cp/check-post-access/${postId}`, {
+        credentials: 'include',  // send JWT cookie
+      });
+      if (cpResp.status === 403) {
+        console.log(`[CP CHECK CSR] Post ${postId} blocked`);
+        const failedState = { state: "failed", err: new Error("Content unavailable (removed or under review)") } as any;
+        if (token === this.fetchPostToken) {
+          this.setState({ postRes: failedState });
         }
+        return;
       }
     } catch (err) {
-      // If CP service check fails, continue to fetch the post (fail open)
-      console.error("Error checking CP reported content IDs:", err);
+      // If CP service is down, fall back to cached list check
+      console.error("[CP CHECK CSR] Service error, falling back to cached check:", err);
+      try {
+        const { posts } = await getReportedContentIds();
+        const isReported = posts.has(postId);
+        const user = UserService.Instance.myUserInfo;
+
+        if (isReported) {
+          const isAdmin = !!(user && user.local_user_view && user.local_user_view.person && user.local_user_view.person.admin);
+          if (!isAdmin) {
+            const failedState = { state: "failed", err: new Error("Content unavailable (removed or under review)") } as any;
+            if (token === this.fetchPostToken) {
+              this.setState({ postRes: failedState });
+            }
+            return;
+          }
+        }
+      } catch (err2) {
+        console.error("Error in fallback CP check:", err2);
+      }
     }
 
     const postRes = await HttpService.client.getPost({

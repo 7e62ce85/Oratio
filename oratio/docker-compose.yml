@@ -15,6 +15,8 @@ services:
       - ./nginx_production.conf:/etc/nginx/nginx.conf:ro,Z
       - ./proxy_params:/etc/nginx/proxy_params:ro,Z
       - ./nginx/js:/etc/nginx/js:ro,Z
+      # 공개 정적 파일 (PDF 등) - https://oratio.space/files/
+      - ../files:/usr/share/nginx/html/files:ro,Z
       # Let's Encrypt certificates and webroot
       - ./data/certbot/conf:/etc/letsencrypt:ro,Z
       - ./data/certbot/www:/var/www/certbot:ro,Z
@@ -44,6 +46,8 @@ services:
     depends_on:
       - postgres
       - pictrs
+    extra_hosts:
+      - "oratio.space:172.18.0.12"
     env_file:
       - .env
 
@@ -146,7 +150,7 @@ services:
     container_name: oratio-pow-validator-1
     restart: always
     environment:
-      - POW_DIFFICULTY=20
+      - POW_DIFFICULTY=17
       - POW_MAX_AGE_SECONDS=600
       - LEMMY_BACKEND_URL=http://lemmy:8536
     depends_on:

@@ -43,6 +43,14 @@ oratio/electron-cash-data/
 *.key
 wallet_*.sh
 
+# 예외: 실제 비밀번호가 아닌 UI 컴포넌트 (파일명에 password가 포함될 뿐)
+!**/password-input.tsx
+!**/password-change.tsx
+
+# 예외: 배포용 예제 파일 (.example 접미사)
+!*.example
+!**/*.example
+
 # 백업 파일
 *.bak
 *backup*

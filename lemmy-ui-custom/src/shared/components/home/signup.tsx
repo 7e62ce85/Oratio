@@ -28,7 +28,7 @@ import PasswordInput from "../common/password-input.tsx";
 import { RouteComponentProps } from "inferno-router/dist/Route";
 import { 
   computeProofOfWork, 
-  POW_DIFFICULTY_PRESETS
+  getAdaptiveDifficulty,
 } from "../../utils/proof-of-work";
 
 interface State {
@@ -77,7 +77,7 @@ export class Signup extends Component<
     powComputing: false,
     powProgress: 0,
     powAttempts: 0,
-    powDifficulty: 20, // 기본 난이도 (약 10초 예상)
+    powDifficulty: 19, // 난이도 19 (약 4-5초 예상)
   };
 
   loadingSettled() {
@@ -415,7 +415,7 @@ export class Signup extends Component<
           )}
           <small className="form-text text-muted d-block mt-2">
             To prevent spam, we perform an automatic verification check.
-            This runs in your browser and takes about 10 seconds.
+            This starts automatically when you begin filling out the form and takes about 10 seconds.
           </small>
         </div>
       </div>
@@ -546,9 +546,20 @@ export class Signup extends Component<
     }
   }
 
+  /**
+   * 입력이 시작되면 PoW 자동 계산을 트리거
+   * 이미 계산 완료되었거나 계산 중이면 무시
+   */
+  maybeAutoStartPoW(i: Signup) {
+    if (!i.state.powHash && !i.state.powComputing) {
+      i.handleComputePoW(i);
+    }
+  }
+
   handleRegisterUsernameChange(i: Signup, event: any) {
     i.state.form.username = event.target.value.trim();
     i.setState(i.state);
+    i.maybeAutoStartPoW(i);
   }
 
   handleRegisterEmailChange(i: Signup, event: any) {
@@ -557,16 +568,19 @@ export class Signup extends Component<
       i.state.form.email = undefined;
     }
     i.setState(i.state);
+    i.maybeAutoStartPoW(i);
   }
 
   handleRegisterPasswordChange(i: Signup, event: any) {
     i.state.form.password = event.target.value;
     i.setState(i.state);
+    i.maybeAutoStartPoW(i);
   }
 
   handleRegisterPasswordVerifyChange(i: Signup, event: any) {
     i.state.form.password_verify = event.target.value;
     i.setState(i.state);
+    i.maybeAutoStartPoW(i);
   }
 
   handleRegisterShowNsfwChange(i: Signup, event: any) {
@@ -577,10 +591,12 @@ export class Signup extends Component<
   handleRegisterCaptchaAnswerChange(i: Signup, event: any) {
     i.state.form.captcha_answer = event.target.value;
     i.setState(i.state);
+    i.maybeAutoStartPoW(i);
   }
 
   handleAnswerChange(val: string) {
     this.setState(s => ((s.form.answer = val), s));
+    this.maybeAutoStartPoW(this);
   }
 
   handleHoneyPotChange(i: Signup, event: any) {
@@ -608,6 +624,12 @@ export class Signup extends Component<
         powHash: undefined
       });
 
+      // 기기 성능 감지 및 적응형 난이도 설정
+      const adaptiveResult = await getAdaptiveDifficulty(i.state.powDifficulty);
+      const actualDifficulty = adaptiveResult.difficulty;
+      
+      console.log(`[PoW] Using adaptive difficulty: ${actualDifficulty} (device: ${adaptiveResult.deviceType}, est: ${adaptiveResult.estimatedTime.toFixed(1)}s)`);
+
       // PoW 계산 (진행률 콜백 포함)
       // 최대 3번 재시도 (운이 매우 나쁜 경우 대비)
       let result;
@@ -618,7 +640,7 @@ export class Signup extends Component<
         try {
           result = await computeProofOfWork(
             challenge,
-            i.state.powDifficulty,
+            actualDifficulty,
             (progress, attempts) => {
               i.setState({ 
                 powProgress: progress,

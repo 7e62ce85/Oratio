@@ -251,11 +251,11 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
       const { appealText, submitting, submitted, anonUsername, anonIsMember } = this.state as any;
 
       return (
-        <div className="card">
-          <div className="card-header bg-danger text-white">
-            <h4 className="mb-0">
+        <div className="card border-danger">
+          <div className="card-header border-danger" style={{ backgroundColor: "var(--bs-card-bg, #303030)" }}>
+            <h4 className="mb-0 text-danger">
               <Icon icon="alert-triangle" classes="me-2" />
-              Submit CP Ban Appeal (Not logged in)
+              Submit Ban Appeal (Not logged in)
             </h4>
           </div>
           <div className="card-body">
@@ -387,9 +387,9 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
     const hasGoldBadge = checkUserHasGoldBadgeSync(user);
 
     return (
-      <div className="card">
-        <div className="card-header bg-danger text-white">
-          <h4 className="mb-0">
+      <div className="card border-danger">
+        <div className="card-header border-danger" style={{ backgroundColor: "var(--bs-card-bg, #303030)" }}>
+          <h4 className="mb-0 text-danger">
             <Icon icon="alert-triangle" classes="me-2" />
             Submit CP Ban Appeal
           </h4>

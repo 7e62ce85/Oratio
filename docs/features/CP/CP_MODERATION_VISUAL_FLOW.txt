@@ -130,11 +130,27 @@ Admin
     │         ├─ Revoke Report Ability
     │         └─ Restore Report Ability
     │
-    └─ Tab 3: Review Appeals
+    ├─ Tab 3: Review Appeals
+    │    │
+    │    ├─ See appeals from membership users
+    │    │
+    │    └─ Approve or Reject Appeal
+    │
+    └─ (2026-03-24) Profile Page Actions
          │
-         ├─ See appeals from membership users
+         ├─ Admin clicks any username → Profile page
          │
-         └─ Approve or Reject Appeal
+         ├─ Same actions available as Tab 2:
+         │    ├─ Ban / Unban User
+         │    ├─ Revoke / Restore Report Ability
+         │    └─ View CP Permission Status (badge)
+         │
+         ├─ Actions sync with CP DB & Admin Panel
+         │    ├─ Calls CP admin API endpoints
+         │    ├─ Backend resolves person_id via Lemmy
+         │    └─ Clears client cache & refreshes
+         │
+         └─ Result: Admin CP Panel ↔ Profile = consistent state
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -234,6 +250,30 @@ User cannot post/comment until ban expires
 Result: ✅ Banned users cannot create content
 
 
+┌──────────────────────────────────────────────────────────────────┐
+│ SCENARIO E: Admin Manages User from Profile (2026-03-24)         │
+└──────────────────────────────────────────────────────────────────┘
+
+Admin clicks username → Profile page loads →
+CP permissions fetched (is_banned, can_report) →
+Admin sees CP status badges + action buttons →
+
+  Option 1: Ban/Unban
+    Click "Ban" → Calls CP admin /ban API + Lemmy ban →
+    CP DB updated, cache cleared, badge refreshed →
+    Same result as Admin CP Panel > Manage Users > Ban
+
+  Option 2: Revoke Report Ability
+    Click "Revoke Report" → Calls CP admin /revoke-report API →
+    CP DB updated, cache cleared, badge refreshed
+
+  Option 3: Restore Report Ability
+    Click "Restore Report" → Calls CP admin /restore API →
+    CP DB updated, Lemmy unban attempted, badge refreshed
+
+Result: ✅ Profile actions = Admin CP Panel actions (fully synced)
+
+
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ FRONTEND COMPONENTS STRUCTURE                                                │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -277,6 +317,16 @@ src/shared/
     │   │                          │
     │   └── cp-notifications.tsx   │
     │        • Show CP alerts ─────┤
+    │                              │
+    ├── person/                    │
+    │   └── profile.tsx            │
+    │       • (2026-03-24 added)   │
+    │       • Fetch CP permissions─┤
+    │       • Admin: Ban/Unban btn │
+    │       • Admin: Revoke/       │
+    │         Restore Report btn   │
+    │       • Syncs with CP DB ────┤
+    │       • Clears cache on act  │
     │                              │
     └── app/                       │
         └── navbar.tsx             │

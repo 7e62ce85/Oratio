@@ -1,49 +1,52 @@
 {
-  # for more info about the config, check out the documentation
-  # https://join-lemmy.org/docs/en/administration/configuration.html
+  # Lemmy configuration - https://join-lemmy.org/docs/en/administration/configuration.html
+  # Copy this file to lemmy.hjson and fill in your values:
+  #   cp lemmy.hjson.example lemmy.hjson
 
   database: {
     host: postgres
     port: 5432
     user: "lemmy"
-    password: "uXKSidyGrbcfCBH909j4kcCimTK5sS4v"
+    password: "CHANGE_ME"       # Must match POSTGRES_PASSWORD in .env
     database: "lemmy"
     pool_size: 5
   }
-  hostname: "oratio.space"
-  
+
+  # Change to your domain
+  hostname: "YOUR_DOMAIN"
+
   bind: "0.0.0.0"
   port: 8536
-  cert_path: "/etc/letsencrypt/live/oratio.space/fullchain.pem"
-  key_path: "/etc/letsencrypt/live/oratio.space/privkey.pem"
-  
+
+  # SSL cert paths (mounted from certbot volume)
+  # Comment these out if running without SSL initially
+  # cert_path: "/etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem"
+  # key_path: "/etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem"
+
   pictrs: {
     url: "http://pictrs:8080/"
-    api_key: "15JpMF0Xv1NfoJPsY9aG"
+    api_key: "CHANGE_ME"        # Must match PICTRS__SERVER__API_KEY in docker-compose.yml
   }
-  
+
   email: {
     smtp_server: "email-service:1025"
-    smtp_from_address: "noreply@oratio.space"
+    smtp_from_address: "noreply@YOUR_DOMAIN"
     tls_type: "none"
   }
-  
-  # 이메일 인증 활성화
+
   registration_mode: "RequireApplication"
   require_email_verification: true
   application_email_admins: true
-  
+
   federation: {
     enabled: false
   }
-  
-  # 보안 설정
+
   captcha: {
     enabled: true
     difficulty: "medium"
   }
-  
-  # 추가 보안 설정
+
   rate_limit: {
     message: 180
     message_per_second: 60

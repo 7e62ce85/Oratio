@@ -1,6 +1,6 @@
 # CP (아동 포르노그래피) 콘텐츠 관리 시스템
 
-> **버전**: v2.6 | **생성일**: 2025-11-07 | **최종 업데이트**: 2025-12-05 | **상태**: ✅ **운영 중**
+> **버전**: v2.6 | **생성일**: 2025-11-07 | **최종 업데이트**: 2026-03-24 | **상태**: ✅ **운영 중**
 
 ---
 
@@ -707,6 +707,8 @@ API가 권한 검증 → 신고 생성 → 콘텐츠 즉시 숨김
 - 전체 권한 상태 보기
 - 수동 작업: 차단/차단 해제, 신고 능력 박탈/복원, 모더레이터 권한 부여/철회
 
+> **참고 (2026-03-24)**: Admin이 다른 사용자의 프로필 페이지(username 클릭)에서도 동일한 차단/차단 해제, 신고 능력 박탈/복원 작업을 수행할 수 있음. 프로필 페이지의 관리 액션은 Admin CP Control Panel과 동기화되며, CP DB 상태가 일관되게 유지됨.
+
 **탭 3: 이의제기**
 - 멤버십 사용자가 제출한 이의제기(appeal) 목록 표시 및 처리
 - 단, Admin이 이미 해당 사례에서 "Confirm CP"를 선택하여 최종 확정한 경우에는 그 사건에 대한 이의제기는 수락되지 않습니다.
@@ -776,6 +778,8 @@ API가 권한 검증 → 신고 생성 → 콘텐츠 즉시 숨김
 1. 사용자 이름 검색
 2. 권한 보기: 신고 가능, 차단됨, 차단 횟수 등
 3. 수동 작업: 차단, 차단 해제, 신고 박탈, 신고 복원
+
+> **참고 (2026-03-24)**: Admin은 프로필 페이지에서도 위 작업 수행 가능 — 사용자 이름 클릭 → 프로필 → CP 관리 버튼 사용. Admin CP와 프로필 간 CP 상태 자동 동기화됨.
 
 ---
 
@@ -852,6 +856,7 @@ POST /api/cp/admin/user/<username>/ban
 POST /api/cp/admin/user/<username>/revoke-report
 POST /api/cp/admin/user/<username>/restore
 ```
+> **참고 (2026-03-24)**: 위 엔드포인트는 이제 `person_id`/`username` 필드가 body에 없어도 동작함. URL의 `<username>`으로 Lemmy에서 `person_id`를 자동 조회하고, CP DB에 해당 사용자 row가 없으면 `ensure_user_permissions()`로 자동 생성 후 업데이트.
 
 **알림**
 ```http
@@ -1254,6 +1259,14 @@ docker-compose logs --tail=50 lemmy-ui | grep "HOME SSR"
 
 ## 📝 변경 로그
 
+### v2.6 (2026-03-24)
+- ✅ **Admin 프로필 페이지 CP 관리 통합**: Admin이 사용자 프로필(username 클릭)에서 차단/차단 해제, 신고 능력 박탈/복원 가능
+- ✅ **Admin CP ↔ 프로필 동기화**: 프로필 액션이 CP DB 및 Admin Control Panel과 일관되게 동작
+- ✅ **백엔드 Admin 엔드포인트 강화**: `person_id`/`username` body 필드 누락 시 URL에서 fallback, Lemmy에서 `person_id` 자동 조회
+- ✅ **Lemmy Integration 헬퍼 추가**: `get_user_info_by_username()`, `get_person_id_by_username()` — username으로 person_id 조회
+- ✅ **ensure_user_permissions() 사전 호출**: Admin 엔드포인트가 UPDATE 전에 row 존재를 보장 (silent no-op 방지)
+- ✅ **프론트엔드 profile.tsx 수정**: Admin이 다른 유저 프로필 볼 때 CP 권한 fetch, 관리 버튼 표시, 액션 후 캐시 갱신
+
 ### v2.5 (2025-11-30)
 - ✅ **성능 최적화**: reported-content-ids API 응답 시간 90% 단축
 - ✅ 복합 인덱스 추가 (content_hidden, content_type, content_id)
@@ -1306,10 +1319,10 @@ docker-compose logs --tail=50 lemmy-ui | grep "HOME SSR"
 
 ---
 
-**문서 버전**: 2.5  
-**시스템 버전**: v2.5 **운영 중**  
-**상태**: ✅ 완전 배포 완료, 성능 최적화 완료  
-**마지막 업데이트**: 2025-11-30  
+**문서 버전**: 2.6  
+**시스템 버전**: v2.6 **운영 중**  
+**상태**: ✅ 완전 배포 완료, Admin 프로필 CP 관리 통합 완료  
+**마지막 업데이트**: 2026-03-24  
 **배포**: oratio.space
 
 ---

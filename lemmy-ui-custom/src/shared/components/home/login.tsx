@@ -1,5 +1,5 @@
 import { setIsoData } from "@utils/app";
-import { isBrowser, refreshTheme } from "@utils/browser";
+import { clearAuthCookie, isBrowser, refreshTheme } from "@utils/browser";
 import { getQueryParams } from "@utils/helpers";
 import { Component, linkEvent } from "inferno";
 import { RouteComponentProps } from "inferno-router/dist/Route";
@@ -133,6 +133,38 @@ async function handleLoginSubmit(i: Login, event: any) {
       }
 
       case "success": {
+        // CP BAN CHECK: Even if Lemmy login succeeds, check if user is CP-banned
+        // Lemmy's site ban does NOT block login, so we must enforce it here
+        try {
+          const perms = await checkUserCPPermissions(username_or_email);
+          const isBannedVal = perms?.is_banned as any;
+          const userIsCPBanned = isBannedVal === true || isBannedVal === 1 || isBannedVal === "1";
+
+          if (perms && userIsCPBanned && perms.ban_end) {
+            const now = Math.floor(Date.now() / 1000);
+            const daysLeft = Math.ceil((perms.ban_end - now) / (24 * 60 * 60));
+            const banEndDate = new Date(perms.ban_end * 1000).toISOString().split('T')[0];
+
+            // Immediately clear the session — do NOT let banned user proceed
+            if (isBrowser()) {
+              clearAuthCookie();
+            }
+
+            const banMsg =
+              `CP 위반으로 인해 ${banEndDate}까지 로그인이 차단되었습니다 (${daysLeft}일 남음). ` +
+              `멤버십 사용자는 /cp/appeal 에서 이의제기할 수 있습니다.\n\n` +
+              `You are banned from logging in until ${banEndDate} (${daysLeft} days remaining) due to CP violation. ` +
+              `Membership users can appeal at /cp/appeal`;
+
+            toast(banMsg, "danger");
+            i.setState({ loginRes: { state: "failed", err: { message: "site_ban" } } as any });
+            break;
+          }
+        } catch (err) {
+          // If CP service is down, allow login (fail-open for availability)
+          console.error("[LOGIN] CP ban check failed, allowing login:", err);
+        }
+
         handleLoginSuccess(i, loginRes.data);
         break;
       }
@@ -264,7 +296,7 @@ export class Login extends Component<LoginRouteProps, State> {
             />
           </div>
           <div className="mb-3 row">
-            <div className="col-sm-10">
+            <div className="col-sm-10 offset-sm-2 d-flex align-items-center justify-content-between">
               <button type="submit" className="btn btn-secondary">
                 {this.state.loginRes.state === "loading" ? (
                   <Spinner />
@@ -272,13 +304,10 @@ export class Login extends Component<LoginRouteProps, State> {
                   I18NextService.i18n.t("login")
                 )}
               </button>
+              <a href="/cp/appeal" className="btn btn-outline-primary">Banned?</a>
             </div>
           </div>
         </form>
-        <div className="alert alert-info mt-4">
-          <strong>ℹ️ Banned Users:</strong> If you are a membership user and cannot log in due to a ban, 
-          you can submit an appeal at <a href="/cp/appeal" className="alert-link">/cp/appeal</a> without logging in.
-        </div>
       </div>
     );
   }

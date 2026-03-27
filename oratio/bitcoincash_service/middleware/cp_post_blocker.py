@@ -123,7 +123,39 @@ def is_lemmy_community_moderator(person_id: int) -> bool:
 _blocked_cache = {'post_ids': set(), 'timestamp': 0}
 # Cache for moderator-accessible posts (pending review at moderator level)
 _mod_accessible_cache = {'post_ids': set(), 'timestamp': 0}
+# Cache for blocked post creator person_ids {post_id: creator_person_id}
+_blocked_creator_cache = {'mapping': {}, 'timestamp': 0}
 _CACHE_TTL = 5  # seconds
+
+
+def get_blocked_post_creator_map():
+    """Get mapping of blocked post_id -> creator_person_id.
+    
+    Used to explicitly block the creator from accessing their own reported post.
+    Uses in-memory cache with 5-second TTL.
+    """
+    import time
+    now = time.time()
+    
+    if now - _blocked_creator_cache['timestamp'] < _CACHE_TTL:
+        return _blocked_creator_cache['mapping']
+    
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT content_id, creator_person_id FROM cp_reports
+            WHERE content_type = 'post' AND content_hidden = 1
+        ''')
+        mapping = {row[0]: row[1] for row in cursor.fetchall()}
+        conn.close()
+        
+        _blocked_creator_cache['mapping'] = mapping
+        _blocked_creator_cache['timestamp'] = now
+        return mapping
+    except Exception as e:
+        logger.error(f"Error fetching blocked post creators: {e}")
+        return _blocked_creator_cache['mapping'] if _blocked_creator_cache['mapping'] else {}
 
 def get_blocked_post_ids():
     """Get list of post IDs that should be blocked (content_hidden=1)
@@ -258,6 +290,15 @@ def check_post_access(post_id):
                     # Post is not blocked at all - allow normal access
                     logger.info(f"✅ [CP POST BLOCKER] Moderator access to post {post_id} (not blocked) - ALLOWED")
                     return jsonify({"allowed": True, "moderator": True}), 200
+
+            # Explicit creator check: block the content creator from accessing their own reported post
+            creator_map = get_blocked_post_creator_map()
+            if post_id in creator_map and creator_map[post_id] == person_id:
+                logger.info(f"❌ [CP POST BLOCKER] CREATOR (person_id={person_id}) blocked from own reported post {post_id}")
+                return jsonify({
+                    "allowed": False,
+                    "reason": "Content unavailable (removed or under review)"
+                }), 403
         except Exception as e:
             logger.error(f"Error decoding JWT: {e}")
     
@@ -334,6 +375,12 @@ def check_post_uri():
                     # Not blocked - normal access
                     logger.info(f"✅ [CP POST BLOCKER] Moderator access to post {post_id} (not blocked) - ALLOWED")
                     return '', 200
+
+            # Explicit creator check: block the content creator from accessing their own reported post
+            creator_map = get_blocked_post_creator_map()
+            if post_id in creator_map and creator_map[post_id] == person_id:
+                logger.info(f"❌ [CP POST BLOCKER] CREATOR (person_id={person_id}) blocked from own reported post {post_id} (URI check)")
+                return '', 403
         except Exception as e:
             logger.error(f"Error decoding JWT: {e}")
     

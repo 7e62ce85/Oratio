@@ -119,6 +119,81 @@ export async function verifyProofOfWork(
 }
 
 /**
+ * 기기 성능을 감지하여 적응형 난이도 반환
+ * 모바일/저사양 기기에서는 난이도를 낮춤
+ * @param baseDifficulty - 기본 난이도 (데스크톱 기준)
+ * @returns 조정된 난이도
+ */
+export async function getAdaptiveDifficulty(baseDifficulty: number = 18): Promise<{
+  difficulty: number;
+  deviceType: 'high-end' | 'mid-range' | 'low-end' | 'mobile';
+  estimatedTime: number;
+}> {
+  // 1. 모바일 기기 감지
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+  
+  // 2. CPU 코어 수 확인
+  const cores = navigator.hardwareConcurrency || 2;
+  
+  // 3. 메모리 확인 (가능한 경우)
+  const memory = (navigator as any).deviceMemory || 4; // GB
+  
+  // 4. 벤치마크: 1000번 해시 계산 시간 측정
+  const benchmarkStart = performance.now();
+  for (let i = 0; i < 1000; i++) {
+    await sha256(`benchmark-${i}`);
+  }
+  const benchmarkTime = performance.now() - benchmarkStart;
+  const hashesPerSecond = Math.floor(1000 / (benchmarkTime / 1000));
+  
+  // 5. 기기 분류 및 난이도 조정
+  let deviceType: 'high-end' | 'mid-range' | 'low-end' | 'mobile';
+  let difficultyAdjustment: number;
+  
+  if (isMobile) {
+    // 모바일 기기
+    deviceType = 'mobile';
+    if (hashesPerSecond > 50000) {
+      difficultyAdjustment = -1; // 고성능 모바일
+    } else if (hashesPerSecond > 20000) {
+      difficultyAdjustment = -2; // 중급 모바일
+    } else {
+      difficultyAdjustment = -3; // 저사양 모바일
+    }
+  } else {
+    // 데스크톱
+    if (hashesPerSecond > 100000 && cores >= 8 && memory >= 8) {
+      deviceType = 'high-end';
+      difficultyAdjustment = 0; // 기본 난이도 유지
+    } else if (hashesPerSecond > 50000 && cores >= 4) {
+      deviceType = 'mid-range';
+      difficultyAdjustment = -1; // 약간 낮춤
+    } else {
+      deviceType = 'low-end';
+      difficultyAdjustment = -2; // 많이 낮춤
+    }
+  }
+  
+  // 6. 최종 난이도 계산 (최소 16, 최대 baseDifficulty)
+  const finalDifficulty = Math.max(17, Math.min(baseDifficulty, baseDifficulty + difficultyAdjustment));
+  
+  // 7. 예상 소요 시간 계산
+  const expectedAttempts = Math.pow(2, finalDifficulty);
+  const estimatedTime = expectedAttempts / hashesPerSecond;
+  
+  console.log(`[PoW] Device: ${deviceType}, Cores: ${cores}, Memory: ${memory}GB, ` +
+    `Hash/s: ${hashesPerSecond}, Difficulty: ${baseDifficulty} → ${finalDifficulty}, ` +
+    `Est. time: ${estimatedTime.toFixed(1)}s`);
+  
+  return {
+    difficulty: finalDifficulty,
+    deviceType,
+    estimatedTime
+  };
+}
+/**
  * 난이도에 따른 예상 소요 시간 계산 (초 단위)
  * @param difficulty - 난이도 (비트 수)
  * @returns 예상 소요 시간 (초)

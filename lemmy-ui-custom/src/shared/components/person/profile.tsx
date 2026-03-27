@@ -94,6 +94,14 @@ import { MomentTime } from "../common/moment-time";
 import { SortSelect } from "../common/sort-select";
 import { UserBadges } from "../common/user-badges";
 import { checkUserHasGoldBadgeSync } from "../../utils/bch-payment";
+import {
+  checkUserCPPermissions,
+  adminBanUser,
+  adminRestoreUser,
+  adminRevokeReportAbility,
+  clearCPPermissionsCache,
+  CPPermissions,
+} from "../../utils/cp-moderation";
 import { CommunityLink } from "../community/community-link";
 import { PersonDetails } from "./person-details";
 import { PersonListing } from "./person-listing";
@@ -124,6 +132,9 @@ interface ProfileState {
   siteRes: GetSiteResponse;
   isIsomorphic: boolean;
   showRegistrationDialog: boolean;
+  // CP Moderation System integration
+  cpPermissions?: CPPermissions | null;
+  cpActionInProgress: boolean;
 }
 
 interface ProfileProps {
@@ -211,6 +222,8 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
     isIsomorphic: false,
     showRegistrationDialog: false,
     registrationRes: EMPTY_REQUEST,
+    cpPermissions: undefined,
+    cpActionInProgress: false,
   };
   
   creditUpdateListener?: () => void;
@@ -263,6 +276,9 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
     this.handleModBanSubmit = this.handleModBanSubmit.bind(this);
     this.handleRegistrationShow = this.handleRegistrationShow.bind(this);
     this.handleRegistrationClose = this.handleRegistrationClose.bind(this);
+    this.handleCPRevokeReport = this.handleCPRevokeReport.bind(this);
+    this.handleCPRestoreReport = this.handleCPRestoreReport.bind(this);
+    this.fetchCPPermissions = this.fetchCPPermissions.bind(this);
 
     // Only fetch the data if coming from another route
     if (FirstLoadService.isFirstLoad) {
@@ -282,6 +298,11 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
   async componentWillMount() {
     if (!this.state.isIsomorphic && isBrowser()) {
       await this.fetchUserData(this.props, true);
+    }
+    
+    // Fetch CP permissions for this user (admin only)
+    if (isBrowser() && amAdmin() && !this.amCurrentUser) {
+      this.fetchCPPermissions();
     }
     
     // Listen for credit cache updates to refresh gold badge display
@@ -323,6 +344,12 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
       reload
     ) {
       this.fetchUserData(nextProps, reload || newUsername);
+    }
+    
+    // Refresh CP permissions when navigating to a different user
+    if (newUsername && isBrowser() && amAdmin()) {
+      this.setState({ cpPermissions: undefined });
+      this.fetchCPPermissions(nextProps.match.params.username);
     }
   }
 
@@ -657,7 +684,14 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
       showBanDialog,
       showRegistrationDialog,
       registrationRes,
+      cpPermissions,
+      cpActionInProgress,
     } = this.state;
+
+    // CP ban 상태를 Lemmy ban 상태와 결합
+    const isCPBanned = cpPermissions?.is_banned ?? false;
+    const isEffectivelyBanned = pv.person.banned || isCPBanned;
+    const canReportCP = cpPermissions?.can_report_cp ?? true;
 
     return (
       pv && (
@@ -761,7 +795,7 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
                 {canMod(pv.person.id, undefined, admins) &&
                   !pv.is_admin &&
                   !showBanDialog &&
-                  (!pv.person.banned ? (
+                  (!isEffectivelyBanned ? (
                     <button
                       className={
                         "d-flex align-self-start btn btn-secondary me-2"
@@ -778,10 +812,49 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
                       }
                       onClick={linkEvent(this, this.handleModBanSubmit)}
                       aria-label={I18NextService.i18n.t("unban")}
+                      disabled={cpActionInProgress}
                     >
                       {capitalizeFirstLetter(I18NextService.i18n.t("unban"))}
                     </button>
                   ))}
+                {/* CP Ban Status Info (Admin only) */}
+                {amAdmin() && cpPermissions && isCPBanned && cpPermissions.ban_end && (
+                  <span className="d-flex align-self-center badge bg-danger me-2" title="CP System Ban">
+                    🛡️ CP Ban Until: {new Date(cpPermissions.ban_end * 1000).toLocaleDateString()}
+                  </span>
+                )}
+                {/* CP Report Ability Control (Admin only) */}
+                {amAdmin() && !this.amCurrentUser && cpPermissions && (
+                  <>
+                    {canReportCP ? (
+                      <button
+                        className="d-flex align-self-start btn btn-warning me-2"
+                        onClick={linkEvent(this, this.handleCPRevokeReport)}
+                        disabled={cpActionInProgress}
+                        title="Revoke CP Report Ability"
+                      >
+                        {cpActionInProgress ? (
+                          <Spinner />
+                        ) : (
+                          <>⚠️ Revoke Report</>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        className="d-flex align-self-start btn btn-info me-2"
+                        onClick={linkEvent(this, this.handleCPRestoreReport)}
+                        disabled={cpActionInProgress}
+                        title="Restore CP Report Ability"
+                      >
+                        {cpActionInProgress ? (
+                          <Spinner />
+                        ) : (
+                          <>✅ Restore Report</>
+                        )}
+                      </button>
+                    )}
+                  </>
+                )}
                 {amAdmin() && (
                   <>
                     <button
@@ -1033,6 +1106,92 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
     this.setState({ showRegistrationDialog: false });
   }
 
+  // CP Moderation: Fetch CP permissions for the displayed user
+  async fetchCPPermissions(username?: string) {
+    const targetUsername = username || this.props.match.params.username;
+    if (!targetUsername) return;
+    
+    try {
+      const permissions = await checkUserCPPermissions(targetUsername);
+      this.setState({ cpPermissions: permissions });
+    } catch (error) {
+      console.error("Failed to fetch CP permissions:", error);
+      this.setState({ cpPermissions: null });
+    }
+  }
+
+  // CP Moderation: Revoke report ability
+  async handleCPRevokeReport(i: Profile) {
+    const myUser = UserService.Instance.myUserInfo;
+    if (!myUser) return;
+
+    const personRes = i.state.personRes;
+    if (personRes.state !== "success") return;
+
+    const person = personRes.data.person_view.person;
+    i.setState({ cpActionInProgress: true });
+
+    try {
+      const result = await adminRevokeReportAbility(
+        person.name,
+        myUser.local_user_view.person.id,
+        myUser.local_user_view.person.name,
+        "Admin revoke from profile"
+      );
+
+      if (result.success) {
+        toast("Report ability revoked", "success");
+        clearCPPermissionsCache(person.name);
+        await i.fetchCPPermissions();
+      } else {
+        toast(result.message || "Failed to revoke report ability", "danger");
+      }
+    } catch (error) {
+      toast("Network error", "danger");
+    }
+
+    i.setState({ cpActionInProgress: false });
+  }
+
+  // CP Moderation: Restore report ability
+  async handleCPRestoreReport(i: Profile) {
+    const myUser = UserService.Instance.myUserInfo;
+    if (!myUser) return;
+
+    const personRes = i.state.personRes;
+    if (personRes.state !== "success") return;
+
+    const person = personRes.data.person_view.person;
+    i.setState({ cpActionInProgress: true });
+
+    try {
+      const result = await adminRestoreUser(
+        person.name,
+        myUser.local_user_view.person.id,
+        myUser.local_user_view.person.name,
+        false, // restore_ban
+        true,  // restore_report
+        "Admin restore report ability from profile"
+      );
+
+      if (result.success) {
+        if (result.warning) {
+          toast(`⚠️ ${result.warning}`, "warning");
+        } else {
+          toast(result.message || "Report ability restored", "success");
+        }
+        clearCPPermissionsCache(person.name);
+        await i.fetchCPPermissions();
+      } else {
+        toast(result.message || "Failed to restore report ability", "danger");
+      }
+    } catch (error) {
+      toast("Network error", "danger");
+    }
+
+    i.setState({ cpActionInProgress: false });
+  }
+
   async handleModBanSubmit(i: Profile, event: any) {
     event.preventDefault();
     const { removeData, banReason, banExpireDays } = i.state;
@@ -1041,13 +1200,15 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
 
     if (personRes.state === "success") {
       const person = personRes.data.person_view.person;
-      const ban = !person.banned;
+      const isCPBanned = i.state.cpPermissions?.is_banned ?? false;
+      const ban = !(person.banned || isCPBanned);
 
       // If its an unban, restore all their data
       if (!ban) {
         i.setState({ removeData: false });
       }
 
+      // Lemmy ban/unban
       const res = await HttpService.client.banPerson({
         person_id: person.id,
         ban,
@@ -1057,6 +1218,40 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
       });
       // TODO
       this.updateBan(res);
+
+      // CP 시스템도 동기화
+      if (amAdmin()) {
+        const myUser = UserService.Instance.myUserInfo;
+        if (myUser) {
+          const adminPersonId = myUser.local_user_view.person.id;
+          const adminUsername = myUser.local_user_view.person.name;
+          
+          if (ban) {
+            // Ban: CP 시스템에도 ban
+            await adminBanUser(
+              person.name,
+              adminPersonId,
+              adminUsername,
+              banReason || "Admin ban from profile"
+            );
+          } else if (isCPBanned) {
+            // Unban: CP 시스템에서도 unban
+            await adminRestoreUser(
+              person.name,
+              adminPersonId,
+              adminUsername,
+              true,  // restore_ban
+              false, // restore_report
+              banReason || "Admin unban from profile"
+            );
+          }
+          
+          // CP permissions 캐시 초기화 및 재조회
+          clearCPPermissionsCache(person.name);
+          await i.fetchCPPermissions();
+        }
+      }
+
       i.setState({ showBanDialog: false });
     }
   }

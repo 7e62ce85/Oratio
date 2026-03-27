@@ -83,10 +83,13 @@ export async function createSsrHtml(
     .join("");
 
   // 환경변수 안전하게 가져오기 (우선순위: Docker > .env > 기본값)
+  // NOTE: process["env"]를 사용하여 webpack DefinePlugin이 빌드 타임에 치환하지 못하게 함
+  // process.env.X 형태는 webpack이 빌드 시점 값으로 하드코딩하기 때문에 런타임 환경변수를 읽을 수 없음
+  const runtimeEnv = process["env"];
   const bchConfig = {
-    API_KEY: process.env.LEMMY_BCH_API_KEY || process.env.LEMMY_API_KEY || "",
-    API_URL: process.env.LEMMY_BCH_API_URL || "https://oratio.space/payments/api/user_credit",
-    PAYMENT_URL: process.env.LEMMY_BCH_PAYMENT_URL || "https://oratio.space/payments/"
+    API_KEY: runtimeEnv.LEMMY_BCH_API_KEY || runtimeEnv.LEMMY_API_KEY || "",
+    API_URL: runtimeEnv.LEMMY_BCH_API_URL || "https://oratio.space/payments/api/user_credit",
+    PAYMENT_URL: runtimeEnv.LEMMY_BCH_PAYMENT_URL || "https://oratio.space/payments/"
   };
 
   // 디버깅을 위한 로그 (운영환경에서는 제거 가능)

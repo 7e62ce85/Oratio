@@ -16,7 +16,7 @@ import { Icon } from "../common/icon";
 import { PictrsImage } from "../common/pictrs-image";
 import { UserBadges } from "../common/user-badges";
 import { checkUserHasGoldBadgeSync, updateCreditCache } from "../../utils/bch-payment";
-import { getCPNotifications } from "../../utils/cp-moderation";
+import { getPendingReports } from "../../utils/cp-moderation";
 import { Subscription } from "rxjs";
 import { tippyMixin } from "../mixins/tippy-mixin";
 import "./bch-button.css";
@@ -79,6 +79,8 @@ function handleLogOut(i: Navbar) {
 
 @tippyMixin
 export class Navbar extends Component<NavbarProps, NavbarState> {
+  // track last known path so we can refresh CP notification counts on navigation
+  lastPath: string = "";
   collapseButtonRef = createRef<HTMLButtonElement>();
   mobileMenuRef = createRef<HTMLDivElement>();
   unreadInboxCountSubscription: Subscription;
@@ -166,6 +168,13 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
             this.fetchCPNotifications();
           }
         }, 1000);
+      }
+
+      // initialize lastPath to current location so we can detect route changes
+      try {
+        if (isBrowser()) this.lastPath = this.currentLocation || "";
+      } catch (e) {
+        this.lastPath = "";
       }
 
       // Poll CP notifications every 30 seconds if user is mod or admin
@@ -291,23 +300,47 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
       const user = UserService.Instance.myUserInfo;
       if (!user) return;
 
-      let moderatorCount = 0;
-      let adminCount = 0;
+      // Use separate variables to avoid race conditions between parallel promises
+      let moderatorReportCount = 0;
+      let adminReportCount = 0;
+      let adminAppealCount = 0;
 
-      const notifications = await getCPNotifications(user.local_user_view.person.id, true);
-      
-      // Count different notification types
-      for (const notif of notifications) {
-        if (notif.notification_type === 'new_report' && UserService.Instance.moderatesSomething) {
-          moderatorCount++;
-        } else if ((notif.notification_type === 'escalated_report' || notif.notification_type === 'appeal_submitted') && amAdmin()) {
-          adminCount++;
-        }
+      // Fetch all counts in parallel, each writing to its own variable
+      const promises: Promise<void>[] = [];
+
+      if (UserService.Instance.moderatesSomething) {
+        promises.push(
+          getPendingReports(undefined, 'moderator')
+            .then(reports => { moderatorReportCount = reports.length; })
+            .catch(() => { /* ignore */ })
+        );
       }
 
+      if (amAdmin()) {
+        promises.push(
+          getPendingReports(undefined, 'admin')
+            .then(reports => { adminReportCount = reports.length; })
+            .catch(() => { /* ignore */ })
+        );
+
+        promises.push(
+          fetch('/api/cp/appeals/pending', {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': getApiKey()
+            }
+          }).then(res => res.ok ? res.json() : { appeals: [] })
+            .then(data => { adminAppealCount = (data.appeals || []).length; })
+            .catch(() => { /* ignore */ })
+        );
+      }
+
+      // Wait for ALL fetches to complete before updating state once
+      await Promise.all(promises);
+
       this.setState({
-        unreadCPModeratorCount: moderatorCount,
-        unreadCPAdminCount: adminCount
+        unreadCPModeratorCount: moderatorReportCount,
+        unreadCPAdminCount: adminReportCount + adminAppealCount
       });
     } catch (error) {
       console.error("[CP] Error fetching CP notifications:", error);
@@ -319,6 +352,19 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
     // This handles the case where user logs in but BCH credit wasn't fetched
     if (UserService.Instance.myUserInfo && this.state.userCredit === 0) {
       this.fetchUserCredit();
+    }
+
+    // If the route changed, refresh CP notification counts so badges update correctly
+    try {
+      if (isBrowser()) {
+        const cur = this.currentLocation || "";
+        if (cur !== this.lastPath) {
+          this.lastPath = cur;
+          this.fetchCPNotifications();
+        }
+      }
+    } catch (e) {
+      // ignore errors reading location
     }
   }
 
@@ -421,7 +467,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                     title="CP Admin Control Panel"
                     onMouseUp={linkEvent(this, handleCollapseClick)}
                   >
-                    <Icon icon="shield" />
+                    <Icon icon="lock" />
                     {this.state.unreadCPAdminCount > 0 && (
                       <span className="mx-1 badge text-bg-danger">
                         {numToSI(this.state.unreadCPAdminCount)}
@@ -490,6 +536,16 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
             ref={this.mobileMenuRef}
           >
             <ul id="navbarLinks" className="me-auto navbar-nav">
+              <li className="nav-item">
+                <NavLink
+                  to="/about"
+                  className="nav-link"
+                  title={I18NextService.i18n.t("about")}
+                  onMouseUp={linkEvent(this, handleCollapseClick)}
+                >
+                  {I18NextService.i18n.t("about")}
+                </NavLink>
+              </li>
               <li className="nav-item">
                 <NavLink
                   to="/communities"
@@ -673,7 +729,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                         title="CP Admin Control Panel"
                         onMouseUp={linkEvent(this, handleCollapseClick)}
                       >
-                        <Icon icon="shield" />
+                        <Icon icon="lock" />
                         <span className="badge text-bg-danger d-inline ms-1 d-md-none ms-md-0">
                           CP Admin
                         </span>

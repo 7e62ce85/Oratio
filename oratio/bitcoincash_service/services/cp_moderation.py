@@ -21,6 +21,7 @@ BAN_DURATION_SECONDS = 90 * 24 * 60 * 60  # 3 months in seconds
 AUTO_DELETE_DURATION_SECONDS = 7 * 24 * 60 * 60  # 1 week in seconds
 
 REPORT_STATUS_PENDING = 'pending'
+REPORT_STATUS_MODERATOR_CONFIRMED = 'moderator_confirmed'  # Mod confirmed CP → awaiting appeal (NOT shown in admin pending reports)
 REPORT_STATUS_MODERATOR_REVIEW = 'moderator_review'
 REPORT_STATUS_ADMIN_REVIEW = 'admin_review'
 REPORT_STATUS_APPROVED = 'approved'
@@ -293,11 +294,55 @@ def revoke_report_ability(user_id: str, person_id: int, username: str,
     return True
 
 
+def _unban_user_in_lemmy(person_id: int, username: str, reason: str = "Ban lifted") -> bool:
+    """Helper: Unban a user in Lemmy PostgreSQL via API. Returns True on success."""
+    logger.info(f"✅ [CP UNBAN] Unbanning user in Lemmy: person_id={person_id}, username={username}")
+    try:
+        from lemmy_integration import LemmyAPI
+        import os
+
+        lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+        lemmy_admin_username = os.environ.get('LEMMY_ADMIN_USER', 'admin')
+        lemmy_admin_password = os.environ.get('LEMMY_ADMIN_PASS', '')
+
+        if not lemmy_admin_password:
+            logger.warning(f"⚠️  [CP UNBAN] No admin password - cannot unban user in Lemmy")
+            return False
+
+        lemmy_api = LemmyAPI(lemmy_api_url)
+        lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
+
+        if not lemmy_api.login_as_admin():
+            logger.error(f"❌ [CP UNBAN] Failed to login as admin to unban user")
+            return False
+
+        success = lemmy_api.ban_person(
+            person_id=person_id,
+            ban=False,  # Unban
+            reason=reason,
+            remove_data=False
+        )
+
+        if success:
+            logger.info(f"✅ [CP UNBAN] User {username} unbanned in Lemmy successfully")
+        else:
+            logger.error(f"❌ [CP UNBAN] Failed to unban user {username} in Lemmy")
+        return success
+
+    except Exception as e:
+        logger.error(f"❌ [CP UNBAN] Error unbanning user in Lemmy: {e}")
+        import traceback
+        logger.error(f"❌ [CP UNBAN] Traceback: {traceback.format_exc()}")
+        return False
+
+
 def restore_user_privileges(user_id: str, restore_ban: bool = False, 
                            restore_report: bool = False,
                            restored_by_person_id: int = None,
-                           restored_by_username: str = None) -> bool:
-    """Restore user privileges (admin action)"""
+                           restored_by_username: str = None) -> dict:
+    """Restore user privileges (admin action).
+    Returns dict: {'success': bool, 'lemmy_unban': bool|None, 'warning': str|None}
+    """
     now = int(time.time())
     updates = []
     params = []
@@ -311,7 +356,7 @@ def restore_user_privileges(user_id: str, restore_ban: bool = False,
         params.extend([True])
     
     if not updates:
-        return False
+        return {'success': False, 'lemmy_unban': None, 'warning': 'Nothing to restore'}
     
     updates.append("updated_at = ?")
     params.append(now)
@@ -331,49 +376,179 @@ def restore_user_privileges(user_id: str, restore_ban: bool = False,
     conn.close()
     
     # UNBAN USER IN LEMMY if restoring ban
+    lemmy_unban_result = None
+    warning = None
     if restore_ban and user_info:
         person_id = user_info['person_id']
         username = user_info['username']
-        logger.info(f"✅ [CP UNBAN] Unbanning user in Lemmy: person_id={person_id}, username={username}")
-        try:
-            from lemmy_integration import LemmyAPI
-            import os
-            
-            lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
-            lemmy_admin_username = os.environ.get('LEMMY_ADMIN_USER', 'admin')
-            lemmy_admin_password = os.environ.get('LEMMY_ADMIN_PASS', '')
-            
-            if lemmy_admin_password:
-                lemmy_api = LemmyAPI(lemmy_api_url)
-                lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
-                
-                if lemmy_api.login_as_admin():
-                    # Unban user in Lemmy
-                    success = lemmy_api.ban_person(
-                        person_id=person_id,
-                        ban=False,  # Unban
-                        reason="Appeal approved - privileges restored",
-                        remove_data=False
-                    )
-                    
-                    if success:
-                        logger.info(f"✅ [CP UNBAN] User {username} unbanned in Lemmy successfully")
-                    else:
-                        logger.error(f"❌ [CP UNBAN] Failed to unban user {username} in Lemmy")
-                else:
-                    logger.error(f"❌ [CP UNBAN] Failed to login as admin to unban user")
-            else:
-                logger.warning(f"⚠️  [CP UNBAN] No admin password - cannot unban user in Lemmy")
-        except Exception as e:
-            logger.error(f"❌ [CP UNBAN] Error unbanning user in Lemmy: {e}")
-            import traceback
-            logger.error(f"❌ [CP UNBAN] Traceback: {traceback.format_exc()}")
+        lemmy_unban_result = _unban_user_in_lemmy(
+            person_id, username, reason="Admin CP panel - privileges restored"
+        )
+        if not lemmy_unban_result:
+            warning = (f"SQLite unban 성공, but Lemmy PostgreSQL unban 실패! "
+                       f"Admin Settings > Banned Users에서 수동으로 '{username}' 추방취소 필요")
     
     # Log audit
     log_audit('privileges_restored', restored_by_person_id, restored_by_username,
-              user_id, action_details={'restore_ban': restore_ban, 'restore_report': restore_report})
+              user_id, action_details={
+                  'restore_ban': restore_ban, 
+                  'restore_report': restore_report,
+                  'lemmy_unban': lemmy_unban_result
+              })
     
-    return True
+    return {'success': True, 'lemmy_unban': lemmy_unban_result, 'warning': warning}
+
+
+def _restore_reported_content(user_id: str, admin_username: str):
+    """Restore (un-remove) all CP-reported content for a user when their appeal is approved.
+    
+    Only restores content that was removed (not purged). Purged content cannot be recovered.
+    Also updates CP report records to mark content as unhidden.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Find all reports where content was hidden and pending admin review (not yet purged)
+    cursor.execute('''
+        SELECT id, content_type, content_id
+        FROM cp_reports
+        WHERE creator_user_id = ? AND content_hidden = 1
+        ORDER BY created_at DESC
+    ''', (user_id,))
+    
+    reports = cursor.fetchall()
+    
+    if not reports:
+        conn.close()
+        logger.info(f"📝 [APPEAL RESTORE] No hidden content found for user {user_id}")
+        return
+    
+    try:
+        from lemmy_integration import LemmyAPI
+        import os
+        
+        lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+        lemmy_admin_username = os.environ.get('LEMMY_ADMIN_USER', 'admin')
+        lemmy_admin_password = os.environ.get('LEMMY_ADMIN_PASS', '')
+        
+        lemmy_api = None
+        if lemmy_admin_password:
+            lemmy_api = LemmyAPI(lemmy_api_url)
+            lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
+            if not lemmy_api.login_as_admin():
+                logger.error(f"❌ [APPEAL RESTORE] Failed to login as admin")
+                lemmy_api = None
+        
+        for report in reports:
+            report_id = report['id']
+            content_type = report['content_type']
+            content_id = report['content_id']
+            
+            # Try to un-remove in Lemmy (will fail silently for purged content)
+            restored_in_lemmy = False
+            if lemmy_api:
+                try:
+                    restore_reason = f"Appeal approved by admin {admin_username}"
+                    if content_type == 'post':
+                        restored_in_lemmy = lemmy_api.remove_post(content_id, removed=False, reason=restore_reason)
+                    elif content_type == 'comment':
+                        restored_in_lemmy = lemmy_api.remove_comment(content_id, removed=False, reason=restore_reason)
+                    
+                    if restored_in_lemmy:
+                        logger.info(f"✅ [APPEAL RESTORE] {content_type} #{content_id} restored in Lemmy")
+                    else:
+                        logger.warning(f"⚠️  [APPEAL RESTORE] Could not restore {content_type} #{content_id} (may have been purged)")
+                except Exception as e:
+                    logger.error(f"❌ [APPEAL RESTORE] Error restoring {content_type} #{content_id}: {e}")
+            
+            # Update CP report: mark content as unhidden, change status to approved
+            cursor.execute('''
+                UPDATE cp_reports
+                SET content_hidden = 0, status = ?, auto_delete_at = NULL
+                WHERE id = ?
+            ''', (REPORT_STATUS_APPROVED, report_id))
+            
+            logger.info(f"📝 [APPEAL RESTORE] CP report {report_id} marked as approved/unhidden")
+        
+        conn.commit()
+    except Exception as e:
+        logger.error(f"❌ [APPEAL RESTORE] Error in content restoration: {e}")
+    finally:
+        conn.close()
+
+
+def _purge_reported_content(user_id: str, admin_username: str):
+    """Permanently purge all CP-reported content for a user when appeal is rejected.
+    
+    This is the final action: content is permanently removed from Lemmy.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Find all reports where content is still hidden (removed but not yet purged)
+    cursor.execute('''
+        SELECT id, content_type, content_id
+        FROM cp_reports
+        WHERE creator_user_id = ? AND content_hidden = 1
+        ORDER BY created_at DESC
+    ''', (user_id,))
+    
+    reports = cursor.fetchall()
+    
+    if not reports:
+        conn.close()
+        logger.info(f"📝 [APPEAL REJECT PURGE] No hidden content found for user {user_id}")
+        return
+    
+    try:
+        from lemmy_integration import LemmyAPI
+        import os
+        
+        lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+        lemmy_admin_username = os.environ.get('LEMMY_ADMIN_USER', 'admin')
+        lemmy_admin_password = os.environ.get('LEMMY_ADMIN_PASS', '')
+        
+        lemmy_api = None
+        if lemmy_admin_password:
+            lemmy_api = LemmyAPI(lemmy_api_url)
+            lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
+            if not lemmy_api.login_as_admin():
+                logger.error(f"❌ [APPEAL REJECT PURGE] Failed to login as admin")
+                lemmy_api = None
+        
+        for report in reports:
+            report_id = report['id']
+            content_type = report['content_type']
+            content_id = report['content_id']
+            
+            purged = False
+            if lemmy_api:
+                try:
+                    purge_reason = f"Appeal rejected - CP confirmed by admin {admin_username}"
+                    if content_type == 'post':
+                        purged = lemmy_api.purge_post(content_id, reason=purge_reason)
+                    elif content_type == 'comment':
+                        purged = lemmy_api.purge_comment(content_id, reason=purge_reason)
+                    
+                    if purged:
+                        logger.info(f"✅ [APPEAL REJECT PURGE] {content_type} #{content_id} PURGED from Lemmy")
+                    else:
+                        logger.warning(f"⚠️  [APPEAL REJECT PURGE] Could not purge {content_type} #{content_id}")
+                except Exception as e:
+                    logger.error(f"❌ [APPEAL REJECT PURGE] Error purging {content_type} #{content_id}: {e}")
+            
+            # Update CP report: mark as auto_deleted
+            cursor.execute('''
+                UPDATE cp_reports
+                SET status = ?, auto_delete_at = NULL
+                WHERE id = ?
+            ''', (REPORT_STATUS_AUTO_DELETED, report_id))
+        
+        conn.commit()
+    except Exception as e:
+        logger.error(f"❌ [APPEAL REJECT PURGE] Error in content purge: {e}")
+    finally:
+        conn.close()
 
 
 # ==========================================
@@ -414,6 +589,10 @@ def create_cp_report(content_type: str, content_id: int, community_id: int,
     # If content was approved by admin, no one can re-report
     if existing and existing['review_decision'] == REVIEW_DECISION_ADMIN_APPROVED:
         raise PermissionError("Content approved by admin cannot be reported again")
+    
+    # If moderator already confirmed CP (creator banned, awaiting appeal), no one can re-report
+    if existing and existing['status'] == REPORT_STATUS_MODERATOR_CONFIRMED:
+        raise PermissionError("Content has already been confirmed as CP by a moderator. Creator has been banned.")
     
     # Set auto-delete time for admin-level reports
     auto_delete_at = None
@@ -546,18 +725,32 @@ def review_cp_report(report_id: str, reviewer_person_id: int, reviewer_username:
     ''', (review_id, report_id, reviewer_person_id, reviewer_username, reviewer_role, decision, notes, now))
     
     # Update report
-    # Default: if CP confirmed by moderator/admin, mark for permanent removal
+    # Moderator cp_confirmed: escalate to admin with 7-day window (remove, not purge)
+    # Admin rejected: final purge
     new_status = REPORT_STATUS_REJECTED
     content_hidden = 1  # Default: keep hidden
 
-    if decision == REVIEW_DECISION_CP_CONFIRMED or decision == REVIEW_DECISION_ADMIN_REJECTED:
-        # Treat moderator/admin CP confirmation as final removal request.
-        # Use AUTO_DELETED status to indicate content must be removed permanently.
+    if decision == REVIEW_DECISION_CP_CONFIRMED:
+        # Moderator confirmed CP → mark as moderator_confirmed (NOT pending)
+        # This will NOT appear in admin pending reports.
+        # Creator gets banned, can appeal via appeal system.
+        # If admin does not review via appeal within 7 days, content auto-purged.
+        new_status = REPORT_STATUS_MODERATOR_CONFIRMED
+        content_hidden = 1
+    elif decision == REVIEW_DECISION_ADMIN_REJECTED:
+        # Admin final decision: this IS CP → permanent purge now
         new_status = REPORT_STATUS_AUTO_DELETED
         content_hidden = 1
     elif decision == REVIEW_DECISION_NOT_CP or decision == REVIEW_DECISION_ADMIN_APPROVED:
         new_status = REPORT_STATUS_APPROVED  # Not CP, unhide it
         content_hidden = 0  # Mark as not hidden anymore
+
+    # For moderator cp_confirmed: set escalation to admin + 7-day auto_delete timer
+    auto_delete_at_value = None
+    new_escalation = None
+    if decision == REVIEW_DECISION_CP_CONFIRMED:
+        auto_delete_at_value = now + AUTO_DELETE_DURATION_SECONDS  # 7 days from now
+        new_escalation = ESCALATION_ADMIN
     
     cursor.execute('''
         UPDATE cp_reports
@@ -565,18 +758,28 @@ def review_cp_report(report_id: str, reviewer_person_id: int, reviewer_username:
             reviewed_at = ?, review_decision = ?, review_notes = ?, content_hidden = ?
         WHERE id = ?
     ''', (new_status, reviewer_person_id, reviewer_username, now, decision, notes, content_hidden, report_id))
+
+    # If moderator confirmed CP, set escalation to admin + 7-day auto_delete timer
+    # Status stays as moderator_confirmed (NOT pending) so it does NOT appear in admin pending reports
+    if decision == REVIEW_DECISION_CP_CONFIRMED:
+        cursor.execute('''
+            UPDATE cp_reports
+            SET escalation_level = ?, auto_delete_at = ?, status = ?
+            WHERE id = ?
+        ''', (ESCALATION_ADMIN, auto_delete_at_value, REPORT_STATUS_MODERATOR_CONFIRMED, report_id))
     
     conn.commit()
     conn.close()
     
     # Handle consequences based on decision
-    if decision == REVIEW_DECISION_CP_CONFIRMED or decision == REVIEW_DECISION_ADMIN_REJECTED:
-        # Ban content creator for 3 months
+    if decision == REVIEW_DECISION_CP_CONFIRMED:
+        # Moderator confirmed CP → ban creator + REMOVE (not purge) content
+        # Content stays in Lemmy DB but hidden — admin can still review
         ban_user(report['creator_user_id'], report['creator_person_id'], 
                 report['creator_username'], reviewer_person_id, reviewer_username)
         
-        # NOW remove content in Lemmy (moderator confirmed it's CP)
-        logger.info(f"🚫 [CP REVIEW] CP confirmed - removing content from Lemmy")
+        logger.info(f"🚫 [CP REVIEW] Moderator CP confirmed - REMOVING (not purging) content from Lemmy")
+        logger.info(f"� [CP REVIEW] Content escalated to admin. Admin has 7 days to review.")
         try:
             from lemmy_integration import LemmyAPI
             import os
@@ -590,18 +793,85 @@ def review_cp_report(report_id: str, reviewer_person_id: int, reviewer_username:
                 lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
                 
                 if lemmy_api.login_as_admin():
-                    cp_reason = f"Child pornography confirmed by {reviewer_username}"
+                    cp_reason = f"CP reported - pending admin review (confirmed by moderator {reviewer_username})"
                     success = False
                     
-                    # Use PURGE for permanent deletion (not just remove which admins can still see)
+                    # Use REMOVE (not purge!) so admin can still see and appeal can restore
+                    if report['content_type'] == 'post':
+                        success = lemmy_api.remove_post(report['content_id'], removed=True, reason=cp_reason)
+                    elif report['content_type'] == 'comment':
+                        success = lemmy_api.remove_comment(report['content_id'], removed=True, reason=cp_reason)
+                    
+                    if success:
+                        logger.info(f"✅ [CP REVIEW] Content REMOVED in Lemmy (admin can still view for review)")
+                    else:
+                        logger.error(f"❌ [CP REVIEW] Failed to remove content from Lemmy")
+                else:
+                    logger.error(f"❌ [CP REVIEW] Failed to login as admin")
+            else:
+                logger.warning(f"⚠️  [CP REVIEW] No admin password - cannot remove from Lemmy")
+        except Exception as e:
+            logger.error(f"❌ [CP REVIEW] Error removing content: {e}")
+
+    elif decision == REVIEW_DECISION_ADMIN_REJECTED:
+        # Admin final decision: this IS CP → permanent PURGE now
+        ban_user(report['creator_user_id'], report['creator_person_id'], 
+                report['creator_username'], reviewer_person_id, reviewer_username)
+        
+        # 2-1: If this is a re-report (previous_report_id exists), the original reporter
+        # had their report ability revoked by mod's "not_cp" decision. Since admin now
+        # confirms it IS CP, the original reporter was RIGHT → restore their report ability.
+        if report.get('previous_report_id'):
+            prev_report = get_cp_report(report['previous_report_id'])
+            if prev_report and prev_report.get('review_decision') == REVIEW_DECISION_NOT_CP:
+                original_reporter_user_id = prev_report['reporter_user_id']
+                original_reporter_perms = get_user_permissions(original_reporter_user_id)
+                if original_reporter_perms and not original_reporter_perms.get('can_report_cp', True):
+                    restore_user_privileges(
+                        original_reporter_user_id,
+                        restore_ban=False,
+                        restore_report=True,
+                        restored_by_person_id=reviewer_person_id,
+                        restored_by_username=reviewer_username
+                    )
+                    logger.info(f"✅ [CP REVIEW] Original reporter {prev_report['reporter_username']} "
+                                f"report ability RESTORED (admin confirmed CP, mod was wrong)")
+                    # Notify the original reporter
+                    if original_reporter_perms.get('person_id'):
+                        create_notification(
+                            original_reporter_perms['person_id'],
+                            prev_report['reporter_username'],
+                            'report_ability_restored',
+                            "Report Ability Restored",
+                            "Your CP reporting ability has been restored. "
+                            "An admin confirmed the content you reported was indeed CP. Thank you for your report."
+                        )
+        
+        logger.info(f"🚫 [CP REVIEW] Admin confirmed CP - PURGING content permanently from Lemmy")
+        try:
+            from lemmy_integration import LemmyAPI
+            import os
+            
+            lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+            lemmy_admin_username = os.environ.get('LEMMY_ADMIN_USER', 'admin')
+            lemmy_admin_password = os.environ.get('LEMMY_ADMIN_PASS', '')
+            
+            if lemmy_admin_password:
+                lemmy_api = LemmyAPI(lemmy_api_url)
+                lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
+                
+                if lemmy_api.login_as_admin():
+                    cp_reason = f"Child pornography confirmed by admin {reviewer_username}"
+                    success = False
+                    
+                    # PURGE for permanent deletion
                     if report['content_type'] == 'post':
                         success = lemmy_api.purge_post(report['content_id'], reason=cp_reason)
                     elif report['content_type'] == 'comment':
                         success = lemmy_api.purge_comment(report['content_id'], reason=cp_reason)
                     
                     if success:
-                        logger.info(f"✅ [CP REVIEW] Content PERMANENTLY PURGED from Lemmy (invisible to everyone)")
-                        # Ensure our CP report record reflects permanent deletion
+                        logger.info(f"✅ [CP REVIEW] Content PERMANENTLY PURGED from Lemmy")
                         try:
                             conn2 = get_db()
                             cur2 = conn2.cursor()
@@ -612,17 +882,16 @@ def review_cp_report(report_id: str, reviewer_person_id: int, reviewer_username:
                             ''', (REPORT_STATUS_AUTO_DELETED, report_id))
                             conn2.commit()
                             conn2.close()
-                            logger.info(f"✅ [CP REVIEW] CP report {report_id} marked as auto-deleted in local DB")
                         except Exception as e:
-                            logger.error(f"❌ [CP REVIEW] Failed to update cp_reports after Lemmy removal: {e}")
+                            logger.error(f"❌ [CP REVIEW] Failed to update cp_reports after purge: {e}")
                     else:
                         logger.error(f"❌ [CP REVIEW] Failed to purge content from Lemmy")
                 else:
                     logger.error(f"❌ [CP REVIEW] Failed to login as admin")
             else:
-                logger.warning(f"⚠️  [CP REVIEW] No admin password - cannot remove from Lemmy")
+                logger.warning(f"⚠️  [CP REVIEW] No admin password - cannot purge from Lemmy")
         except Exception as e:
-            logger.error(f"❌ [CP REVIEW] Error removing content: {e}")
+            logger.error(f"❌ [CP REVIEW] Error purging content: {e}")
     
     elif decision == REVIEW_DECISION_NOT_CP or decision == REVIEW_DECISION_ADMIN_APPROVED:
         # Content is not CP - unhide it in Lemmy for all users who hid it
@@ -693,7 +962,45 @@ def create_appeal(user_id: str, person_id: int, username: str, appeal_type: str,
     conn = get_db()
     cursor = conn.cursor()
     
-    # Check if user already appealed within 7 days (only count pending appeals)
+    # Get current ban_start to scope appeal blocks to the CURRENT ban period only.
+    # If user was unbanned and re-banned, previous appeal rejections should not block new appeals.
+    current_ban_start = None
+    cursor.execute('SELECT ban_start FROM user_cp_permissions WHERE user_id = ?', (user_id,))
+    ban_row = cursor.fetchone()
+    if ban_row:
+        current_ban_start = ban_row[0] or 0
+    
+    # Block 1: If admin already made a final decision (admin_rejected) on the user's content
+    # DURING THE CURRENT BAN PERIOD, the case is permanently closed — no appeal allowed.
+    # Once ban expires/is lifted and user gets re-banned, this block resets.
+    if appeal_type == APPEAL_TYPE_BAN and current_ban_start:
+        cursor.execute('''
+            SELECT COUNT(*) FROM cp_reports
+            WHERE creator_user_id = ? AND review_decision = ? AND reviewed_at >= ?
+        ''', (user_id, REVIEW_DECISION_ADMIN_REJECTED, current_ban_start))
+        admin_final_count = cursor.fetchone()[0]
+        if admin_final_count > 0:
+            conn.close()
+            raise PermissionError("Your case has been permanently decided by an admin. No further appeals are allowed.")
+    
+    # Block 2: If a previous appeal was already rejected by admin DURING THE CURRENT BAN PERIOD,
+    # no more appeals allowed. Resets when ban expires/is lifted.
+    if current_ban_start:
+        cursor.execute('''
+            SELECT COUNT(*) FROM cp_appeals
+            WHERE user_id = ? AND appeal_type = ? AND status = 'rejected' AND created_at >= ?
+        ''', (user_id, appeal_type, current_ban_start))
+    else:
+        cursor.execute('''
+            SELECT COUNT(*) FROM cp_appeals
+            WHERE user_id = ? AND appeal_type = ? AND status = 'rejected'
+        ''', (user_id, appeal_type))
+    rejected_appeal_count = cursor.fetchone()[0]
+    if rejected_appeal_count > 0:
+        conn.close()
+        raise PermissionError("Your previous appeal was rejected by an admin. No further appeals are allowed.")
+    
+    # Block 3: Check if user already has a pending appeal (prevent spam)
     cursor.execute('''
         SELECT COUNT(*) FROM cp_appeals
         WHERE user_id = ? AND appeal_type = ? AND created_at > ? AND status = 'pending'
@@ -704,15 +1011,16 @@ def create_appeal(user_id: str, person_id: int, username: str, appeal_type: str,
         conn.close()
         raise PermissionError("You already have a pending appeal. Please wait for admin review before submitting another.")
     
-    # For ban appeals, check if the ban is from admin-confirmed CP report
-    # If so, check if it's within 7 days of the review
+    # For ban appeals, check if it's within 7 days of the moderator cp_confirmed decision
+    # The 7-day window starts when moderator confirms CP (which is when content gets removed
+    # and escalated to admin). After 7 days, content is auto-purged and appeal is no longer possible.
     if appeal_type == APPEAL_TYPE_BAN:
         cursor.execute('''
-            SELECT r.reviewed_at, rv.decision
+            SELECT r.reviewed_at, r.auto_delete_at, rv.decision
             FROM cp_reports r
             JOIN cp_reviews rv ON r.id = rv.report_id
             WHERE r.creator_user_id = ? 
-            AND rv.decision IN ('admin_rejected', 'cp_confirmed')
+            AND rv.decision = 'cp_confirmed'
             ORDER BY rv.created_at DESC
             LIMIT 1
         ''', (user_id,))
@@ -720,6 +1028,7 @@ def create_appeal(user_id: str, person_id: int, username: str, appeal_type: str,
         
         if recent_review:
             reviewed_at = recent_review[0]
+            auto_delete_at = recent_review[1]
             if reviewed_at:
                 days_since_review = (now - reviewed_at) / (24 * 60 * 60)
                 if days_since_review > 7:
@@ -789,6 +1098,50 @@ def review_appeal(appeal_id: str, admin_person_id: int, admin_username: str,
         restore_report = appeal['appeal_type'] == APPEAL_TYPE_REPORT_ABILITY
         restore_user_privileges(appeal['user_id'], restore_ban, restore_report,
                                admin_person_id, admin_username)
+        
+        # If ban appeal approved, also restore (un-remove) the reported content in Lemmy
+        if restore_ban:
+            _restore_reported_content(appeal['user_id'], admin_username)
+            
+            # 2-2: Ban appeal approved = CP was NOT real = original reporter filed false report
+            # Find the original report and revoke the reporter's ability
+            try:
+                conn_appeal = get_db()
+                cursor_appeal = conn_appeal.cursor()
+                # Find the CP report where this user was the creator and mod confirmed CP
+                cursor_appeal.execute('''
+                    SELECT r.reporter_user_id, r.reporter_person_id, r.reporter_username
+                    FROM cp_reports r
+                    JOIN cp_reviews rv ON r.id = rv.report_id
+                    WHERE r.creator_user_id = ? AND rv.decision = ?
+                    ORDER BY rv.created_at DESC
+                    LIMIT 1
+                ''', (appeal['user_id'], REVIEW_DECISION_CP_CONFIRMED))
+                original_report_info = cursor_appeal.fetchone()
+                conn_appeal.close()
+                
+                if original_report_info:
+                    orig_reporter_user_id = original_report_info['reporter_user_id']
+                    orig_reporter_person_id = original_report_info['reporter_person_id']
+                    orig_reporter_username = original_report_info['reporter_username']
+                    
+                    # Revoke the original reporter's report ability (false report confirmed by admin)
+                    revoke_report_ability(
+                        orig_reporter_user_id,
+                        orig_reporter_person_id,
+                        orig_reporter_username,
+                        admin_person_id,
+                        admin_username
+                    )
+                    logger.info(f"⛔ [APPEAL] Original reporter {orig_reporter_username} "
+                                f"report ability REVOKED (admin approved appeal = CP was false report)")
+            except Exception as e:
+                logger.error(f"❌ [APPEAL] Error revoking original reporter's ability: {e}")
+    
+    elif decision == 'uphold_decision':
+        # Appeal rejected: admin upholds the CP decision → purge content now
+        if appeal['appeal_type'] == APPEAL_TYPE_BAN:
+            _purge_reported_content(appeal['user_id'], admin_username)
     
     # Notify user
     create_notification(
@@ -904,6 +1257,12 @@ def check_expired_bans():
             WHERE user_id = ?
         ''', (False, now, user['user_id']))
         
+        # Also unban in Lemmy PostgreSQL
+        _unban_user_in_lemmy(
+            user['person_id'], user['username'], 
+            reason="Auto-unban: ban period expired"
+        )
+        
         # Notify user
         create_notification(
             user['person_id'], user['username'], 'ban_expired',
@@ -913,7 +1272,7 @@ def check_expired_bans():
         # Log audit
         log_audit('ban_expired', None, 'system', user['user_id'], user['person_id'], user['username'])
         
-        logger.info(f"Auto-unbanned user {user['username']} (ID: {user['user_id']})")
+        logger.info(f"Auto-unbanned user {user['username']} (ID: {user['user_id']}) in SQLite + Lemmy")
     
     conn.commit()
     conn.close()
@@ -922,27 +1281,64 @@ def check_expired_bans():
 
 
 def check_auto_delete_reports():
-    """Auto-delete unreviewed admin-level CP cases after 1 week"""
+    """Auto-delete unreviewed admin-level CP cases after 1 week.
+    
+    After moderator confirms CP, report is escalated to admin with a 7-day window.
+    If admin does not review within 7 days, this task permanently purges the content.
+    """
     now = int(time.time())
     
     conn = get_db()
     cursor = conn.cursor()
     
-    # Find reports to auto-delete
+    # Find reports to auto-delete (admin-escalated, still pending or moderator_confirmed, past 7-day deadline)
     cursor.execute('''
         SELECT id, content_type, content_id, creator_username 
         FROM cp_reports
-        WHERE escalation_level = ? AND status = ? AND auto_delete_at <= ?
-    ''', (ESCALATION_ADMIN, REPORT_STATUS_PENDING, now))
+        WHERE escalation_level = ? AND status IN (?, ?) AND auto_delete_at IS NOT NULL AND auto_delete_at <= ?
+    ''', (ESCALATION_ADMIN, REPORT_STATUS_PENDING, REPORT_STATUS_MODERATOR_CONFIRMED, now))
     
     reports_to_delete = cursor.fetchall()
     
     for report in reports_to_delete:
         cursor.execute('''
             UPDATE cp_reports
-            SET status = ?, reviewed_at = ?
+            SET status = ?, reviewed_at = ?, auto_delete_at = NULL
             WHERE id = ?
         ''', (REPORT_STATUS_AUTO_DELETED, now, report['id']))
+        
+        # Actually PURGE the content from Lemmy now
+        try:
+            from lemmy_integration import LemmyAPI
+            import os
+            
+            lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+            lemmy_admin_username = os.environ.get('LEMMY_ADMIN_USER', 'admin')
+            lemmy_admin_password = os.environ.get('LEMMY_ADMIN_PASS', '')
+            
+            if lemmy_admin_password:
+                lemmy_api = LemmyAPI(lemmy_api_url)
+                lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
+                
+                if lemmy_api.login_as_admin():
+                    purge_reason = f"Auto-purge: admin did not review within 7 days"
+                    success = False
+                    
+                    if report['content_type'] == 'post':
+                        success = lemmy_api.purge_post(report['content_id'], reason=purge_reason)
+                    elif report['content_type'] == 'comment':
+                        success = lemmy_api.purge_comment(report['content_id'], reason=purge_reason)
+                    
+                    if success:
+                        logger.info(f"✅ [AUTO-DELETE] Content {report['content_type']} #{report['content_id']} PURGED from Lemmy (7-day deadline passed)")
+                    else:
+                        logger.error(f"❌ [AUTO-DELETE] Failed to purge {report['content_type']} #{report['content_id']} from Lemmy")
+                else:
+                    logger.error(f"❌ [AUTO-DELETE] Failed to login as admin for auto-purge")
+            else:
+                logger.warning(f"⚠️  [AUTO-DELETE] No admin password - cannot purge from Lemmy")
+        except Exception as e:
+            logger.error(f"❌ [AUTO-DELETE] Error purging content: {e}")
         
         # Log audit
         log_audit('report_auto_deleted', None, 'system', None, None, None, report['id'],

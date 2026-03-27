@@ -271,7 +271,7 @@ export async function submitCPAppeal(
       const error = await response.json();
       return { 
         success: false, 
-        message: error.detail || 'Failed to submit appeal' 
+        message: error.detail || error.error || 'Failed to submit appeal' 
       };
     }
 
@@ -430,7 +430,7 @@ export async function adminRestoreUser(
   restoreBan: boolean,
   restoreReport: boolean,
   reason?: string
-): Promise<{ success: boolean; message?: string }> {
+): Promise<{ success: boolean; message?: string; warning?: string }> {
   try {
     const response = await fetch(
       `${getCPApiUrl()}/admin/user/${username}/restore`,
@@ -458,7 +458,12 @@ export async function adminRestoreUser(
       };
     }
 
-    return { success: true };
+    const data = await response.json();
+    return { 
+      success: true, 
+      message: data.message,
+      warning: data.warning 
+    };
   } catch (error) {
     console.error("Error restoring user:", error);
     return { success: false, message: 'Network error' };

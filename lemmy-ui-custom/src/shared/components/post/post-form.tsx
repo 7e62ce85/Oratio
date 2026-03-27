@@ -24,7 +24,7 @@ import {
 } from "lemmy-js-client";
 import {
   computeProofOfWork,
-  POW_DIFFICULTY_PRESETS
+  getAdaptiveDifficulty,
 } from "../../utils/proof-of-work";
 import {
   validateUpload,
@@ -221,6 +221,7 @@ function handlePostUrlChange(i: PostForm, event: any) {
   }));
 
   i.fetchPageTitle();
+  maybeAutoStartPoW(i);
 }
 
 function handlePostUrlBlur(i: PostForm, event: any) {
@@ -377,9 +378,21 @@ function handleImageUpload(i: PostForm, event: any) {
     });
 }
 
+/**
+ * 입력이 시작되면 PoW 자동 계산을 트리거
+ * 이미 계산 완료되었거나 계산 중이면 무시
+ * 게시글 수정 시에는 PoW가 필요없으므로 무시
+ */
+function maybeAutoStartPoW(i: PostForm) {
+  if (!i.props.post_view && !i.state.powHash && !i.state.powComputing) {
+    i.handleComputePoW(i);
+  }
+}
+
 function handlePostNameChange(i: PostForm, event: any) {
   i.setState(s => ((s.form.name = event.target.value), s));
   i.fetchSimilarPosts();
+  maybeAutoStartPoW(i);
 }
 
 function handlePostNameBlur(i: PostForm, event: any) {
@@ -418,7 +431,7 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
     powComputing: false,
     powProgress: 0,
     powAttempts: 0,
-    powDifficulty: 20, // 기본 난이도 (약 3-10초)
+    powDifficulty: 19, // 난이도 19 (약 4-5초)
   };
 
   postTitleRef = createRef<HTMLTextAreaElement>();
@@ -993,6 +1006,7 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
 
   handlePostBodyChange(val: string) {
     this.setState(s => ((s.form.body = val), s));
+    maybeAutoStartPoW(this);
   }
 
   handlePostBodyBlur(val: string) {
@@ -1088,7 +1102,7 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
           )}
           <small className="form-text text-muted d-block mt-2">
             To prevent spam posts, we perform an automatic verification check.
-            This runs in your browser and takes about 10 seconds.
+            This starts automatically when you begin writing and takes about 10 seconds.
           </small>
         </div>
       </div>
@@ -1115,6 +1129,12 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
         powHash: undefined
       });
 
+      // 기기 성능 감지 및 적응형 난이도 설정
+      const adaptiveResult = await getAdaptiveDifficulty(i.state.powDifficulty);
+      const actualDifficulty = adaptiveResult.difficulty;
+      
+      console.log(`[PoW] Using adaptive difficulty: ${actualDifficulty} (device: ${adaptiveResult.deviceType}, est: ${adaptiveResult.estimatedTime.toFixed(1)}s)`);
+
       // PoW 계산 (진행률 콜백 포함)
       // 최대 3번 재시도 (운이 매우 나쁜 경우 대비)
       let result;
@@ -1125,7 +1145,7 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
         try {
           result = await computeProofOfWork(
             challenge,
-            i.state.powDifficulty,
+            actualDifficulty,
             (progress, attempts) => {
               i.setState({ 
                 powProgress: progress,

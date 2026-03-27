@@ -42,6 +42,7 @@ interface AdminControlPanelState {
   reports: CPReport[];
   appeals: CPAppeal[];
   loading: boolean;
+  loadingAppeals: boolean;
   userSearchQuery: string;
   searchedUserPermissions: CPPermissions | null;
   actionInProgress: boolean;
@@ -53,6 +54,7 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
     reports: [],
     appeals: [],
     loading: false,
+    loadingAppeals: false,
     userSearchQuery: '',
     searchedUserPermissions: null,
     actionInProgress: false
@@ -76,6 +78,9 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
     }
 
     await this.loadReports();
+    // Also pre-load appeals so we can show a count preview in the tabs
+    // (non-blocking - don't await to avoid delaying page render)
+    this.loadAppeals();
   }
 
   async loadReports() {
@@ -85,7 +90,7 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
   }
 
   async loadAppeals() {
-    this.setState({ loading: true });
+    this.setState({ loadingAppeals: true });
     try {
       const response = await fetch('/api/cp/appeals/pending', {
         headers: {
@@ -96,15 +101,15 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
       
       if (response.ok) {
         const data = await response.json();
-        this.setState({ appeals: data.appeals || [], loading: false });
+        this.setState({ appeals: data.appeals || [], loadingAppeals: false });
       } else {
         toast("Failed to load appeals", "danger");
-        this.setState({ appeals: [], loading: false });
+        this.setState({ appeals: [], loadingAppeals: false });
       }
     } catch (error) {
       console.error('Failed to load appeals:', error);
       toast("Error loading appeals", "danger");
-      this.setState({ appeals: [], loading: false });
+      this.setState({ appeals: [], loadingAppeals: false });
     }
   }
 
@@ -206,7 +211,11 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
     this.setState({ actionInProgress: false });
 
     if (result?.success) {
-      toast("Action completed successfully", "success");
+      if (result.warning) {
+        toast(`⚠️ ${result.warning}`, "warning");
+      } else {
+        toast(result.message || "Action completed successfully", "success");
+      }
       await this.handleSearchUser(); // Refresh user data
     } else {
       toast(result?.message || "Action failed", "danger");
@@ -269,8 +278,9 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
             
             <div className="alert alert-warning small mb-3">
               <Icon icon="alert-triangle" classes="me-2" />
-              This case was escalated to admin review. A moderator previously marked it as "Not CP" 
-              but a membership user re-reported it.
+              This case requires admin review. The content has been removed (hidden) from public view 
+              but is still accessible to admins. You have <strong>7 days</strong> from escalation to review 
+              before it is auto-purged. Choose "Approve (Not CP)" to restore the content, or "Reject (Confirm CP)" to permanently delete it.
             </div>
             
             <div className="btn-group">
@@ -412,9 +422,9 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
   }
 
   renderAppealsTab() {
-    const { appeals, loading, actionInProgress } = this.state;
+    const { appeals, loadingAppeals, actionInProgress } = this.state;
 
-    if (loading) {
+    if (loadingAppeals) {
       return (
         <div className="text-center p-5">
           <Spinner large />
@@ -570,13 +580,12 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
                 <button
                   className={`nav-link ${activeTab === 'appeals' ? 'active' : ''}`}
                   onClick={() => this.setState({ activeTab: 'appeals' }, () => {
-                    if (this.state.activeTab === 'appeals') {
-                      this.loadAppeals();
-                    }
+                    // Only load appeals if we weren't already on the appeals tab
+                    if (activeTab !== 'appeals') this.loadAppeals();
                   })}
                 >
                   <Icon icon="file-text" classes="me-1" />
-                  Appeals
+                  Appeals ({this.state.appeals.length})
                 </button>
               </li>
             </ul>

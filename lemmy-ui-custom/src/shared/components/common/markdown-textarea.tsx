@@ -15,6 +15,13 @@ import {
 } from "../../config";
 import { customEmojisLookup, mdToHtml, setupTribute } from "../../markdown";
 import { HttpService, I18NextService, UserService } from "../../services";
+import {
+  validateUpload,
+  recordUpload,
+  showUploadSizeMessage,
+  shouldPromptForCredit,
+  formatBytes,
+} from "../../utils/upload-quota";
 import { tippyMixin } from "../mixins/tippy-mixin";
 import { pictrsDeleteToast, toast } from "../../toast";
 import { EmojiPicker } from "./emoji-picker";
@@ -456,10 +463,58 @@ export class MarkdownTextArea extends Component<
   }
 
   async uploadSingleImage(i: MarkdownTextArea, image: File) {
+    // Ensure user is logged in and validate quota before uploading
+    const userInfo = UserService.Instance.myUserInfo;
+    if (!userInfo) {
+      toast("Please log in to upload files", "danger");
+      i.setState({ imageUploadStatus: undefined });
+      return;
+    }
+
+    const username = userInfo.local_user_view.person.name;
+    const fileSize = image.size;
+    const filename = image.name;
+
+    // Validate with upload quota service
+    let validation;
+    try {
+      validation = await validateUpload(username, username, fileSize, filename);
+      showUploadSizeMessage(fileSize, filename, validation);
+    } catch (err) {
+      console.error("Upload validation error:", err);
+      toast("Upload validation failed", "danger");
+      i.setState({ imageUploadStatus: undefined });
+      throw err;
+    }
+
+    if (!validation.allowed) {
+      // Not allowed, stop here
+      i.setState({ imageUploadStatus: undefined });
+      return;
+    }
+
+    if (shouldPromptForCredit(validation)) {
+      const confirmed = confirm(
+        `⚠️ Upload Size Notice\n\n` +
+          `This file (${formatBytes(fileSize)}) exceeds your available quota.\n\n` +
+          `Overage: ${formatBytes(validation.overage_bytes || 0)}\n` +
+          `Cost: ${validation.charge_amount_bch} BCH ($${validation.charge_amount_usd})\n\n` +
+          `Do you want to proceed and charge your credit?`,
+      );
+
+      if (!confirmed) {
+        i.setState({ imageUploadStatus: undefined });
+        toast("Upload cancelled", "info");
+        return;
+      }
+    }
+
     const res = await HttpService.client.uploadImage({ image });
+
     if (res.state === "success") {
       if (res.data.msg === "ok") {
-        const imageMarkdown = `![](${res.data.url})`;
+        const uploadUrl = res.data.url;
+        const imageMarkdown = `![](${uploadUrl})`;
         i.setState(({ content }) => ({
           content: content ? `${content}\n${imageMarkdown}` : imageMarkdown,
         }));
@@ -467,6 +522,21 @@ export class MarkdownTextArea extends Component<
         const textarea: any = document.getElementById(i.id);
         autosize.update(textarea);
         pictrsDeleteToast(image.name, res.data.delete_url as string);
+
+        // Record the upload transaction (don't block UI on failure)
+        recordUpload(
+          username,
+          username,
+          filename,
+          fileSize,
+          uploadUrl,
+          image.type,
+          undefined,
+          undefined,
+          false,
+        ).catch(err => {
+          console.error("Failed to record upload transaction:", err);
+        });
       } else if (res.data.msg === "too_large") {
         toast(I18NextService.i18n.t("upload_too_large"), "danger");
         i.setState({ imageUploadStatus: undefined });

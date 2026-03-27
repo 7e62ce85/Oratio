@@ -136,6 +136,29 @@ class LemmyAPI:
         
         return None
     
+    def get_user_info_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """username으로 사용자 정보 조회"""
+        url = f"{self.base_url}/api/v3/user"
+        params = {"username": username}
+        
+        try:
+            response = requests.get(url, params=params, headers=self.get_headers())
+            if response.status_code == 200:
+                return response.json()["person_view"]
+            else:
+                logger.error(f"사용자 정보 조회 실패 (username={username}): {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"사용자 정보 요청 중 오류 발생 (username={username}): {str(e)}")
+        
+        return None
+
+    def get_person_id_by_username(self, username: str) -> Optional[int]:
+        """username으로 person_id 조회"""
+        user_info = self.get_user_info_by_username(username)
+        if user_info and "person" in user_info:
+            return user_info["person"]["id"]
+        return None
+
     def get_username_by_id(self, user_id: int) -> Optional[str]:
         """사용자 ID로 사용자명 조회"""
         user_info = self.get_user_info(user_id)

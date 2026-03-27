@@ -727,17 +727,34 @@ def api_review_appeal(appeal_id):
 def api_admin_ban_user(user_id):
     """Admin: Manually ban a user"""
     try:
-        data = request.json
-        person_id = data.get('person_id')
-        username = data.get('username')
+        data = request.json or {}
+        # person_id and username are optional in body - use user_id from URL as fallback
+        person_id = data.get('person_id') or 0
+        username = data.get('username') or user_id
         admin_person_id = data.get('admin_person_id')
         admin_username = data.get('admin_username')
         reason = data.get('reason', 'Manual admin action')
         
-        if not all([person_id, username, admin_person_id, admin_username]):
-            return jsonify({"error": "Missing required fields"}), 400
+        if not all([admin_person_id, admin_username]):
+            return jsonify({"error": "Missing required fields: admin_person_id, admin_username"}), 400
         
-        # TODO: Add admin authorization check
+        # Resolve person_id from Lemmy if not provided
+        if not person_id or person_id == 0:
+            try:
+                from lemmy_integration import LemmyAPI
+                lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+                lemmy_api = LemmyAPI(lemmy_api_url)
+                resolved_id = lemmy_api.get_person_id_by_username(user_id)
+                if resolved_id:
+                    person_id = resolved_id
+                    logger.info(f"Resolved person_id={person_id} for username={user_id}")
+                else:
+                    logger.warning(f"Could not resolve person_id for username={user_id}, using 0")
+            except Exception as e:
+                logger.warning(f"Failed to resolve person_id: {e}")
+        
+        # Ensure user permissions record exists
+        ensure_user_permissions(user_id, person_id, username)
         
         ban_user(user_id, person_id, username, admin_person_id, admin_username, reason)
         
@@ -752,16 +769,33 @@ def api_admin_ban_user(user_id):
 def api_admin_revoke_report(user_id):
     """Admin: Revoke user's CP reporting ability"""
     try:
-        data = request.json
-        person_id = data.get('person_id')
-        username = data.get('username')
+        data = request.json or {}
+        # person_id and username are optional in body - use user_id from URL as fallback
+        person_id = data.get('person_id') or 0
+        username = data.get('username') or user_id
         admin_person_id = data.get('admin_person_id')
         admin_username = data.get('admin_username')
         
-        if not all([person_id, username, admin_person_id, admin_username]):
-            return jsonify({"error": "Missing required fields"}), 400
+        if not all([admin_person_id, admin_username]):
+            return jsonify({"error": "Missing required fields: admin_person_id, admin_username"}), 400
         
-        # TODO: Add admin authorization check
+        # Resolve person_id from Lemmy if not provided
+        if not person_id or person_id == 0:
+            try:
+                from lemmy_integration import LemmyAPI
+                lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+                lemmy_api = LemmyAPI(lemmy_api_url)
+                resolved_id = lemmy_api.get_person_id_by_username(user_id)
+                if resolved_id:
+                    person_id = resolved_id
+                    logger.info(f"Resolved person_id={person_id} for username={user_id}")
+                else:
+                    logger.warning(f"Could not resolve person_id for username={user_id}, using 0")
+            except Exception as e:
+                logger.warning(f"Failed to resolve person_id: {e}")
+        
+        # Ensure user permissions record exists
+        ensure_user_permissions(user_id, person_id, username)
         
         revoke_report_ability(user_id, person_id, username, admin_person_id, admin_username)
         
@@ -776,7 +810,7 @@ def api_admin_revoke_report(user_id):
 def api_admin_restore_privileges(user_id):
     """Admin: Restore user privileges"""
     try:
-        data = request.json
+        data = request.json or {}
         restore_ban = data.get('restore_ban', False)
         # Accept both 'restore_report' and 'restore_report_ability' for compatibility
         restore_report = data.get('restore_report', False) or data.get('restore_report_ability', False)
@@ -786,12 +820,34 @@ def api_admin_restore_privileges(user_id):
         if not (restore_ban or restore_report):
             return jsonify({"error": "Must specify what to restore"}), 400
         
-        # TODO: Add admin authorization check
+        # Ensure user permissions record exists (resolve person_id from Lemmy if needed)
+        person_id = 0
+        try:
+            from lemmy_integration import LemmyAPI
+            lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+            lemmy_api = LemmyAPI(lemmy_api_url)
+            resolved_id = lemmy_api.get_person_id_by_username(user_id)
+            if resolved_id:
+                person_id = resolved_id
+        except Exception as e:
+            logger.warning(f"Failed to resolve person_id for restore: {e}")
         
-        restore_user_privileges(user_id, restore_ban, restore_report, 
+        ensure_user_permissions(user_id, person_id, user_id)
+        
+        result = restore_user_privileges(user_id, restore_ban, restore_report, 
                                admin_person_id, admin_username)
         
-        return jsonify({"success": True, "message": "Privileges restored"}), 200
+        response = {"success": True, "message": "Privileges restored"}
+        
+        # result is now a dict with 'warning' if Lemmy unban failed
+        if isinstance(result, dict):
+            if result.get('warning'):
+                response["warning"] = result['warning']
+                response["message"] = "Privileges restored (SQLite only - Lemmy unban failed)"
+            if result.get('lemmy_unban') is True:
+                response["message"] = "Privileges restored (SQLite + Lemmy)"
+        
+        return jsonify(response), 200
     except Exception as e:
         logger.error(f"Error restoring privileges: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500

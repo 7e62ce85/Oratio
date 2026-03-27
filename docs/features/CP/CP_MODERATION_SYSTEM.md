@@ -483,11 +483,9 @@ POST /api/cp/background/run-tasks
 
 ### Frontend Components    "creator_person_id": 789,
 
-    "creator_username": "violator",
+#### 1. CP Report Button    "creator_username": "violator",
 
-#### 1. CP Report Button    "reason": "Contains inappropriate content"
-
-**File**: `content-action-dropdown.tsx`    }'
+**File**: `content-action-dropdown.tsx`    "reason": "Contains inappropriate content"
 
 **Route**: Three-dot menu on posts/comments  ```
 
@@ -905,13 +903,23 @@ SELECT   const user = UserService.Instance.myUserInfo;
 
       if (perms.is_banned) {
 
-### v2.0 (2025-11-07)        const banEnd = new Date(perms.ban_end * 1000);
+      const banEnd = new Date(perms.ban_end * 1000);
 
-- ✅ Complete frontend implementation        toast(`You are banned until ${banEnd.toLocaleDateString()}`, 'danger');
+        toast(`You are banned until ${banEnd.toLocaleDateString()}`, 'danger');
 
-- ✅ All UI components deployed        this.props.onCancel?.();
+      }
 
-- ✅ Backend fix: Permissions endpoint returns defaults      }
+    }
+
+  }
+
+### v2.0 (2025-11-07)}
+
+- ✅ Complete frontend implementation        const user = UserService.Instance.myUserInfo;
+
+- ✅ All UI components deployed        if (user) {
+
+- ✅ Backend fix: Permissions endpoint returns defaults      this.checkUserStatus(user.local_user_view.person.name);
 
 - ✅ Production tested on oratio.space    }
 
@@ -1357,3 +1365,27 @@ AUTO_DELETE_DURATION_SECONDS = 7 * 24 * 60 * 60  # 1 week
 **Status**: ✅ Deployed - Stabilization Phase  
 **Last Updated**: 2025-11-22  
 **Deployment**: oratio.space
+
+---
+
+## Developer notes — programming changes (2026-03-24)
+
+Short summary for engineers:
+
+- Backend: Made CP admin endpoints more tolerant of frontend payloads. Endpoints under `oratio/bitcoincash_service/routes/cp.py` now accept an empty JSON body (`request.json or {}`), require the admin identity fields, and will resolve a target user's `person_id` from the URL or via Lemmy lookup when the client omits it. Each admin endpoint now calls `ensure_user_permissions()` before updating the SQLite CP row to avoid silent no-op updates.
+
+- Lemmy integration: Added helpers `get_user_info_by_username()` / `get_person_id_by_username()` in `oratio/bitcoincash_service/lemmy_integration.py` to resolve person IDs from usernames when incoming requests don't include `person_id`.
+
+- Frontend: Updated `lemmy-ui-custom/src/shared/components/person/profile.tsx` to fetch CP permissions for the viewed profile when the current user is an admin, and to expose the same ban/revoke/restore controls that exist in the Admin CP Control Panel. Actions call the CP admin APIs and then clear the client permissions cache and re-fetch to keep UI state consistent.
+
+- Robustness: Ban/unban flows will attempt to call Lemmy admin endpoints when a `person_id` can be resolved; failures there produce a `warning` flag so the UI can surface partial success (SQLite updated, Lemmy action failed).
+
+Why this change: a number of 400 (Bad Request) errors occurred when admin UI callers omitted `person_id` or other optional fields. These server-side fallbacks avoid requiring callers to duplicate identifiers already present in the URL and make the Admin CP and profile flows consistent.
+
+Notes & follow-ups:
+
+- Rebuild/deploy: After pulling these changes, restart or rebuild the `bitcoincash-service` container and rebuild the `lemmy-ui` frontend to see the UI updates.
+- Validate: Test the following flows as an admin: ban/unban via Admin CP, ban/unban via profile, revoke/restore report ability via Admin CP, revoke/restore via profile. Confirm CP DB (`user_cp_permissions`) reflects changes and that UI badges update.
+- Env: Ensure Lemmy admin credentials in the Oratio `.env` are correct (e.g. `LEMMY_ADMIN_USER` / `LEMMY_ADMIN_PASS`) so Lemmy ban/unban calls succeed.
+
+---

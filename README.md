@@ -1,567 +1,533 @@
-### 2. Bitcoin Cash Payment Service
+# Oratio — Lemmy Forum + Bitcoin Cash Payment Platform
 
-- Flask-based API service for handling BCH payments
-- Features:
-  - Invoice generation and management
-  - Payment verification and transaction monitoring
-  - User credit management
-  - QR code generation for mobile payments
-  - Integration with Lemmy API for user credit application
-  - RESTful API endpoints for UI integration
-- Database: SQLite with WAL journaling mode
-- Located in `./oratio/bitcoincash_service` (relative to the repo root)
--- Serves as the Bitcoin Cash wallet backend
-- Manages:
-  - Address generation
-  - Balance checking
-  - Transaction verification
-  - Payment forwarding
-  - RPC interface for the payment service
-- Wallet data is commonly stored under `./oratio/data/electron_cash` in this repo layout (adjust to your host mount).
-### 4. Nginx Configuration
+A **Lemmy** community forum with integrated **Bitcoin Cash (BCH) payments**, content moderation, membership system, and advertisement platform. Runs on Docker Compose with 11 services.
 
-- Reverse proxy for both Lemmy and the payment service
-- Configuration for handling both HTTP and HTTPS traffic
-- Static file serving for BCH UI assets
-- Configuration files typically live in `./oratio/nginx` in this repository (adjust for your deployment).
-# Lemmy with Bitcoin Cash Payment Integration
-
-This project implements a **Lemmy** community platform with **Bitcoin Cash (BCH) Payment Integration** using an Electron Cash wallet. It runs in Docker containers and provides a complete solution for accepting BCH payments within a Lemmy forum installation. Nginx is used as a reverse proxy with optional Let's Encrypt SSL.
-
-## 🌐 **Live Services**
-- **Main Site**: https://oratio.space
-- **Payment Service**: https://payments.oratio.space
-- **Status**: Stable production environment
-
-## 📋 Table of Contents
-
-- [Project Overview](#project-overview)
-- [System Architecture](#system-architecture)
-- [Features](#features)
-- [UI Integration](#ui-integration)
-- [Installation and Configuration](#installation-and-configuration)
-  - [1. Prerequisites](#1-prerequisites)
-  - [2. Setup Instructions](#2-setup-instructions)
-  - [3. Configuration Options](#3-configuration-options)
-- [Components](#components)
-  - [1. Lemmy Core](#1-lemmy-core)
-  - [2. Bitcoin Cash Payment Service](#2-bitcoin-cash-payment-service)
-  - [3. Electron Cash Integration](#3-electron-cash-integration)
-  - [4. Nginx Configuration](#4-nginx-configuration)
-- [Database Structure](#database-structure)
-- [API Endpoints](#api-endpoints)
-- [Payment Processing Flow](#payment-processing-flow)
-- [Backup and Maintenance](#backup-and-maintenance)
-- [Security Considerations](#security-considerations)
-- [Environment Variables Configuration](#environment-variables-configuration)
-- [Troubleshooting](#troubleshooting)
-- [Technical Notes](#technical-notes)
-- [Future Improvements](#future-improvements)
-- [Development Workflow](#development-workflow)
+> **한국어 버전**: [README_KOR.md](README_KOR.md)
 
 ---
 
-## Project Overview
+## Table of Contents
 
-This project integrates Bitcoin Cash payments with the Lemmy community platform, providing:
+- [How This Project Is Built](#how-this-project-is-built)
+- [System Architecture](#system-architecture)
+- [Installation Guide (Linux)](#installation-guide-linux)
+- [Installation Guide (Windows — WSL2)](#installation-guide-windows--wsl2)
+- [Post-Installation Checklist](#post-installation-checklist)
+- [API Reference](#api-reference)
+- [Database Structure](#database-structure)
+- [Environment Variables](#environment-variables)
+- [Troubleshooting](#troubleshooting)
+- [Backup & Maintenance](#backup--maintenance)
+- [Contributing](#contributing)
+- [License](#license)
 
-### **🚀 Current / Example Production Status**
-- Example domain used in documentation: oratio.space
-- SSL: documentation refers to Let's Encrypt usage; apply your own certificates in production
-- Typical deployment (docs): 7 containers (proxy, lemmy-ui, lemmy, postgres, pictrs, bitcoincash-service, electron-cash)
+---
 
-### **💰 Payment Features**
-- **Payment Processing**: Complete BCH payment processing using Electron Cash
-- **User Credit Management**: System for tracking user payments and credits
-- **Invoice Generation**: Dynamic invoice creation with QR codes
-- **Payment Verification**: Automated transaction monitoring and verification
-- **Multiple Payment Modes**: Both direct payments and address-specific payments
+## How This Project Is Built
 
-### **🎨 User Interface**
-- **Integrated UI**: Seamless integration with Lemmy's user interface
-- **Real-time Credit Display**: Live BCH credit balance in navigation bar
-- **Payment Button**: Bitcoin Cash payment button in main navigation
-- **Mobile Friendly**: Responsive design supporting all devices
+This project is **not** a rewrite of Lemmy. It uses the official Lemmy backend as-is and adds custom services around it:
 
-### **🔧 Technology Stack**
-- **Backend**: Flask (Python) + Electron Cash
-- **Frontend**: Lemmy UI (Inferno.js) + Custom BCH components
-- **Database**: PostgreSQL (Lemmy) + SQLite (Payments)
-- **Containers**: Docker Compose with 7 services
-- **Proxy**: Nginx with SSL termination
+| Component | Source | Modified? | Language |
+|-----------|--------|-----------|----------|
+| **lemmy** (backend) | `dessalines/lemmy:0.19.8` official Docker image | ❌ No — used as-is | Rust |
+| **lemmy-ui** (frontend) | Lemmy UI open-source fork | ✅ Yes — BCH button, credit display, PoW captcha added | TypeScript/Inferno.js |
+| **bitcoincash-service** | Built from scratch | ✅ 100% custom | Python/Flask |
+| **pow-validator** | Built from scratch | ✅ 100% custom | Python |
+| **email-service** | Built from scratch | ✅ 100% custom | Python |
+| **electron-cash** | Electron Cash open-source + custom Dockerfile | ⚠️ Wrapped | Python |
+| **nginx, postgres, pictrs, postfix, certbot** | Official images | ❌ Config only | — |
 
-The implementation uses Flask (Python) for the payment service and integrates with the Rust-based Lemmy platform through a custom UI overlay.
+### Repository Structure
+
+```
+Oratio/                              ← repo root
+├── lemmy-ui-custom/                 ← 📦 Custom frontend (builds into Docker image)
+│   ├── src/                         ←   Inferno.js components, BCH UI integration
+│   ├── Dockerfile                   ←   Multi-stage build
+│   └── package.json
+├── oratio/                          ← 📦 Infrastructure + all custom backend services
+│   ├── docker-compose.yml           ←   All 11 containers defined here
+│   ├── .env                         ←   Secrets (generated by refresh_passwords.sh)
+│   ├── lemmy.hjson                  ←   Lemmy core config
+│   ├── nginx_production.conf        ←   Nginx reverse proxy config
+│   ├── bitcoincash_service/         ←   Flask payment/moderation/membership/ads API
+│   ├── pow_validator_service/       ←   PoW bot prevention service
+│   ├── email-service/               ←   Resend API email proxy
+│   ├── electron_cash/               ←   BCH wallet Docker build
+│   ├── data/                        ←   Persistent data (wallet, certbot, payments DB)
+│   └── volumes/                     ←   Docker volume mounts (postgres, pictrs)
+├── docs/                            ← Additional documentation
+├── files/                           ← Static files served by nginx (PDFs, etc.)
+├── README.md                        ← This file
+└── README_KOR.md                    ← Korean version
+```
+
+**Key relationship**: `oratio/docker-compose.yml` builds `lemmy-ui` from `../lemmy-ui-custom/`. All `docker compose` commands run from `oratio/`.
 
 ---
 
 ## System Architecture
 
-The system running on **oratio.space** consists of 7 interconnected Docker containers:
+11 interconnected Docker services:
 
-### **🏗️ Container Structure**
 ```
-┌─────────────────────┐    ┌─────────────────────┐
-│   nginx (proxy)     │    │   lemmy-ui          │
-│   Port: 80,443      │────│   (Custom BCH UI)   │
-│   SSL Termination   │    │                     │
-└─────────────────────┘    └─────────────────────┘
-           │                           │
-           ▼                           ▼
-┌─────────────────────┐    ┌─────────────────────┐
-│   lemmy (core)      │    │   bitcoincash-      │
-│   Rust Backend      │    │   service           │
-│   Port: 8536        │    │   Flask API         │
-└─────────────────────┘    │   Port: 8081        │
-           │                └─────────────────────┘
-           ▼                           │
-┌─────────────────────┐                ▼
-│   postgres          │    ┌─────────────────────┐
-│   User Data         │    │   electron-cash     │
-│   Forums, Users     │    │   BCH Wallet        │
-└─────────────────────┘    │   Port: 7777        │
-           │                └─────────────────────┘
-           ▼
-┌─────────────────────┐
-│   pictrs            │
-│   Image Service     │
-│                     │
-└─────────────────────┘
-```
+                        ┌──────────────────────┐
+                        │   certbot            │
+                        │   SSL auto-renew     │
+                        └──────────────────────┘
+                                   │ (shared volume: letsencrypt)
+                                   ▼
+┌──────────────────────┐   ┌──────────────────────┐
+│   nginx (proxy)      │──▶│   lemmy-ui           │
+│   Port: 80, 443      │   │   Custom frontend    │
+│   SSL termination    │   │   Port: 1234         │
+└──────────────────────┘   └──────────────────────┘
+    │       │       │                  │
+    │       │       ▼                  ▼
+    │       │  ┌──────────────────────┐   ┌──────────────────────┐
+    │       │  │  pow-validator       │   │  bitcoincash-service │
+    │       │  │  Bot prevention      │   │  Flask API           │
+    │       │  │  Port: 5001         │   │  Port: 8081          │
+    │       │  └──────────────────────┘   └──────────────────────┘
+    │       │             │                        │
+    │       ▼             ▼                        ▼
+    │  ┌──────────────────────┐   ┌──────────────────────┐
+    │  │   lemmy              │   │   electron-cash      │
+    │  │   Official backend   │   │   BCH wallet (RPC)   │
+    │  │   Port: 8536         │   │   Port: 7777         │
+    │  └──────────────────────┘   └──────────────────────┘
+    │             │
+    ▼             ▼
+┌──────────────────────┐   ┌──────────────────────┐
+│   postgres           │   │   pictrs             │
+│   Forum database     │   │   Image hosting      │
+│   Port: 5432         │   │   Port: 8080         │
+└──────────────────────┘   └──────────────────────┘
 
-### **🔄 Data Flow**
-1. **User Requests** → Nginx (SSL termination) → Lemmy UI
-2. **BCH Payments** → Payment Service → Electron Cash → Blockchain
-3. **Credit Queries** → API (Flask) → SQLite → Real-time UI updates
-4. **Forum Data** → Lemmy Core → PostgreSQL
-
-### **📊 Service Status** (Production)
-```
-NAME                  STATUS         PORTS
-proxy                 Up             80→80, 443→443
-lemmy-ui              Up (healthy)   1234
-lemmy                 Up             8536
-postgres              Up (healthy)   5432
-pictrs                Up             8080
-bitcoincash-service   Up             8081
-electron-cash         Up             7777
+┌──────────────────────┐   ┌──────────────────────┐
+│   email-service      │   │   postfix            │
+│   Resend API proxy   │   │   Internal SMTP      │
+│   Port: 1025, 8025   │   │   relay              │
+└──────────────────────┘   └──────────────────────┘
 ```
 
-All components communicate securely through Docker networking, with all external traffic protected by SSL through Nginx.
+### Service Summary
+
+| # | Service | Role | Port |
+|---|---------|------|------|
+| 1 | **proxy** (nginx) | Reverse proxy, SSL, routing | 80, 443 |
+| 2 | **certbot** | Let's Encrypt auto-renewal | — |
+| 3 | **lemmy** | Forum backend (official Rust image) | 8536 |
+| 4 | **lemmy-ui** | Custom frontend with BCH integration | 1234 |
+| 5 | **pictrs** | Image hosting & processing | 8080 |
+| 6 | **postgres** | PostgreSQL for forum data | 5432 |
+| 7 | **postfix** | Internal mail relay | — |
+| 8 | **pow-validator** | PoW bot prevention (registration + posts) | 5001 |
+| 9 | **bitcoincash-service** | Payment, moderation, membership, ads API | 8081 |
+| 10 | **email-service** | Resend API proxy (SMTP port-block workaround) | 1025, 8025 |
+| 11 | **electron-cash** | BCH HD wallet with RPC interface | 7777 |
+
+### Request Flow
+1. **Browser** → nginx (SSL) → lemmy-ui (frontend)
+2. **Registration / New post** → nginx → pow-validator (PoW check) → lemmy (backend)
+3. **BCH payment** → nginx `/payments/` → bitcoincash-service → electron-cash → blockchain
+4. **Content report** → nginx `/api/cp/` → bitcoincash-service (CP moderation)
+5. **Membership / Ads** → nginx `/api/membership/` or `/api/ads/` → bitcoincash-service
+6. **Email verification** → lemmy → email-service (Resend API) → user inbox
 
 ---
 
-## Features
+## Installation Guide (Linux)
 
-### **💳 Bitcoin Cash Payments**
-- **Real-time Invoice Generation**: Instant payment address creation with QR codes
-- **Automatic Transaction Monitoring**: Auto-detection of payment confirmations on blockchain
-- **Multiple Confirmation Levels**: Configurable confirmation requirements (current: 1 confirmation)
-- **Secure Address Management**: Electron Cash-based HD wallet system
+> All commands run from `oratio/` (where `docker-compose.yml` lives) unless stated otherwise.
 
-### **👤 User Credit System**
-- **Real-time Balance Display**: "Credit Balance: X BCH" shown in navigation dropdown
-- **Transaction History Tracking**: Transparent management of all deposit/withdrawal records
-- **API-based Queries**: Secure API key authentication for credit information access
+### 1. Prerequisites
 
-### **🔐 Security and Stability**
-- **SSL/TLS Security**: All communications encrypted with Let's Encrypt certificates
-- **API Key Authentication**: Secure access to sensitive endpoints
-- **Transaction Forwarding**: Optional automatic forwarding of received funds to central wallet
-- **Fault Tolerance**: Automatic retry mechanisms during network interruptions
+**Server requirements:**
+- OS: Ubuntu 22.04+ or Debian 12+ (any Linux with Docker)
+- RAM: 2 GB minimum (4 GB+ recommended)
+- Disk: 20 GB+ SSD
+- Ports 80 and 443 open
+- A registered domain name with DNS pointing to this server
 
-### **🎨 User Interface**
-- **Integrated Design**: BCH payment components perfectly integrated with Lemmy UI
-- **Mobile Optimized**: Responsive design working on all devices
-- **Real-time Updates**: Live payment status checking via JavaScript
-- **Multi-language Support**: Full Korean interface support
-
-### **⚙️ Management Features**
-- **Environment Variable Management**: Docker Compose-based configuration system
-- **Log Monitoring**: Structured log collection from all services
-- **Automatic Backup**: Wallet and database backup scripts
-- **Health Checks**: Automatic service status monitoring and restart
-
----
-
-## UI 통합
-
-### **💚 BCH 결제 버튼**
-- **위치**: 메인 네비게이션 바에 눈에 띄게 표시
-- **디자인**: Bitcoin Cash 로고가 포함된 녹색 테마 버튼
-- **기능**: `https://payments.oratio.space`로 직접 연결
-- **반응형**: 데스크톱 및 모바일 인터페이스 완벽 지원
-
-### **💰 사용자 크레딧 표시**
-- **위치**: 네비게이션 바의 사용자 드롭다운 메뉴
-- **실시간 업데이트**: 현재 BCH 크레딧 잔액을 API로 실시간 조회
-- **한국어 지원**: "보유 크레딧: X BCH" 형식으로 표시
-- **보안**: API 키 기반 인증으로 안전한 데이터 통신
-
-### **🔧 환경변수 통합**
-현재 시스템은 Docker 빌드 시점과 런타임에서 환경변수를 완벽하게 처리합니다:
-
-```dockerfile
-# 빌드 시점 환경변수
-ARG LEMMY_API_KEY
-ARG LEMMY_BCH_PAYMENT_URL
-ARG LEMMY_BCH_API_URL
-
-# 런타임 환경변수
-ENV LEMMY_API_KEY=${LEMMY_API_KEY}
-ENV LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL}
-ENV LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL}
-```
-
-### **⚡ JavaScript 통합**
-- **클라이언트 구성**: `window.__BCH_CONFIG__`를 통한 동적 설정
-- **서버사이드 렌더링**: SSR 중 환경변수 올바른 처리
-- **에러 핸들링**: 포괄적인 오류 로깅 및 폴백 시스템
-
----
-
-## 설치 및 구성
-
-### **1. 사전 요구사항**
-
-#### **🖥️ 서버 사양**
-- **OS**: Ubuntu 20.04+ 또는 Debian 11+
-- **RAM**: 최소 2GB (권장 4GB+)
-- **저장공간**: 최소 20GB SSD
-- **네트워크**: 고정 IP 주소 및 도메인
-
-#### **🛠️ 필수 소프트웨어**
+**Install Docker:**
 ```bash
-# Docker 및 Docker Compose 설치
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER
+# Log out and back in for group change to take effect
 
-# Docker Compose 설치
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
+# Verify Docker Compose v2 is available
+docker compose version
 ```
 
-#### **🌐 DNS 설정**
-```bash
-# 도메인 관리 패널에서 A 레코드 설정
-your-domain.com           A    [서버 IP]
-www.your-domain.com       A    [서버 IP] 
-payments.your-domain.com  A    [서버 IP]
-```
+**DNS records** (set in your domain registrar):
 
-### **2. 설정 지침**
+| Record | Type | Value |
+|--------|------|-------|
+| `your-domain.com` | A | `<server IP>` |
+| `www.your-domain.com` | A | `<server IP>` |
 
-#### **📥 Project clone / local checkout**
-If you are working from a remote repository, clone it and then change into the `oratio` subdirectory. If you already have this repository checked out locally, `cd` into the project root.
+> Payment service is at `https://your-domain.com/payments/` (subpath) — no separate subdomain needed.
+
+### 2. Clone & Enter Project
 
 ```bash
-# If cloning from a remote repo (replace URL with your fork/remote)
-git clone <your-repo-url>
+git clone https://github.com/7e62ce85/Oratio.git
 cd Oratio/oratio
-
-# Or, from an existing local checkout
-cd /path/to/Oratio/oratio
 ```
 
-#### **🔐 환경변수 설정**
+### 3. Generate Secrets & Environment Files
+
+There are two methods. **Method A is recommended.**
+
+#### Method A — Automated (recommended)
+
 ```bash
-# 환경변수 파일 생성
-cp .env.production .env
-
-# 필수 환경변수 설정
-nano .env
+cp refresh_passwords.sh.example refresh_passwords.sh
+nano refresh_passwords.sh
 ```
 
-**필수 환경변수 목록**:
+Edit the `[CHANGE_ME]` section at the top:
 ```bash
-# API 인증
-LEMMY_API_KEY=your_secure_api_key_here
-
-# Bitcoin Cash 설정
-PAYOUT_WALLET=bitcoincash:your_payout_address
-ELECTRON_CASH_PASSWORD=your_secure_password
-
-# 이메일 서비스 (Resend)
-RESEND_API_KEY=your_resend_api_key
-SMTP_FROM_ADDRESS=noreply@your-domain.com
-
-# 관리자 계정
-LEMMY_ADMIN_USER=admin
-LEMMY_ADMIN_PASS=secure_admin_password
+DOMAIN="your-domain.com"
+ADMIN_EMAIL="admin@your-domain.com"
+RESEND_API_KEY_VALUE=""                              # from https://resend.com (optional)
+PAYOUT_WALLET_ADDRESS="bitcoincash:qYourAddress"     # BCH payout address
+SMTP_FROM="noreply@your-domain.com"
 ```
 
-#### **🔒 SSL 인증서 발급**
+Then run:
 ```bash
-# Let's Encrypt SSL 인증서 자동 발급
-chmod +x setup_ssl_production.sh
-./setup_ssl_production.sh
+chmod +x refresh_passwords.sh
+./refresh_passwords.sh
 ```
 
-#### **🚀 배포 실행**
+This script will:
+- Auto-generate strong passwords for PostgreSQL, Electron Cash, API key, admin, Flask secret
+- Write `oratio/.env` and `lemmy-ui-custom/.env`
+- Update the password in `lemmy.hjson`
+- Recreate containers with new secrets
+
+#### Method B — Manual
+
 ```bash
-# 프로덕션 배포 스크립트 실행
-chmod +x deploy_production.sh
-./deploy_production.sh
+# 1. Create .env
+cp .env.example .env
+nano .env                    # fill every REQUIRED field
+
+# 2. Create lemmy.hjson
+cp lemmy.hjson.example lemmy.hjson
+nano lemmy.hjson
+#   - password: must match POSTGRES_PASSWORD in .env
+#   - hostname: your domain
+#   - pictrs api_key: must match PICTRS__SERVER__API_KEY in docker-compose.yml
+#   - email smtp_from_address: your sender address
+
+# 3. Share .env with lemmy-ui-custom
+cp .env ../lemmy-ui-custom/.env
 ```
 
-### **3. 구성 옵션**
+### 4. SSL Bootstrap (Let's Encrypt)
 
-#### **⚙️ 핵심 설정 변수**
+**Problem**: Nginx needs certificates to start, but Certbot needs Nginx to answer the ACME challenge.
 
-| 변수명 | 설명 | 기본값 | 예시 |
-|--------|------|--------|------|
-| `MOCK_MODE` | 모의 결제 모드 | `false` | `true/false` |
-| `TESTNET` | BCH 테스트넷 사용 | `false` | `true/false` |
-| `DIRECT_MODE` | 직접 결제 모드 | `false` | `true/false` |
-| `MIN_CONFIRMATIONS` | 최소 확인 수 | `1` | `1-6` |
-| `FORWARD_PAYMENTS` | 자동 전송 활성화 | `true` | `true/false` |
+**Solution**: Use the included bootstrap script:
 
-#### **🔧 고급 설정**
-```yaml
-# docker-compose.yml에서 설정 가능
-bitcoincash-service:
-  environment:
-    - FLASK_ENV=production
-    - MOCK_MODE=false
-    - TESTNET=false
-    - MIN_CONFIRMATIONS=1
-    - DB_PATH=/data/payments.db
-```
-
-### **✅ 배포 완료 확인**
-
-#### **📊 서비스 상태 확인**
 ```bash
-# 모든 컨테이너 상태 확인
-docker-compose ps
+nano init-letsencrypt-simple.sh
+#   - Set domains=(your-domain.com)
+#   - Set email="admin@your-domain.com"
 
-# 로그 확인
-docker-compose logs --tail=50
+chmod +x init-letsencrypt-simple.sh
+./init-letsencrypt-simple.sh
 ```
 
-#### **🌐 웹사이트 접속 테스트**
+What it does:
+1. Downloads recommended TLS parameters
+2. Creates a temporary self-signed (dummy) certificate
+3. Starts Nginx with the dummy cert
+4. Deletes the dummy cert
+5. Requests a real Let's Encrypt certificate (webroot challenge)
+6. Reloads Nginx with the real cert
+
+> **Want to test without SSL first?** Copy `nginx_temp_nossl.conf` as `nginx_internal.conf`, bring up the stack, confirm everything works on HTTP, then run the SSL bootstrap.
+
+### 5. Volume Permissions
+
 ```bash
-# SSL 인증서 확인
+# pictrs runs as UID 991
+mkdir -p volumes/pictrs
+sudo chown -R 991:991 volumes/pictrs
+
+# Wallet data
+mkdir -p data/electron_cash
+
+# Payment database
+mkdir -p data/bitcoincash
+
+# Certbot (usually created by init script, but just in case)
+mkdir -p data/certbot/conf data/certbot/www
+```
+
+### 6. Build & Launch
+
+```bash
+# Build custom images (lemmy-ui, bitcoincash-service, pow-validator, email-service, electron-cash)
+docker compose build
+
+# Start all 11 services
+docker compose up -d
+
+# Watch logs
+docker compose logs -f --tail=50
+```
+
+> **After changing `.env` values that are baked into lemmy-ui at build time** (like `LEMMY_API_KEY`, `LEMMY_BCH_*`), you must rebuild:
+> ```bash
+> docker compose build --no-cache lemmy-ui
+> docker compose up -d
+> ```
+
+### 7. Verify
+
+```bash
+# All containers should show "Up"
+docker compose ps
+
+# Test HTTPS
 curl -I https://your-domain.com
-curl -I https://payments.your-domain.com
 
-# 헬스체크
-curl https://payments.your-domain.com/health
-```
+# Test payment service health
+curl https://your-domain.com/payments/health
 
-**정상 응답 예시**:
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-01-XX:XX:XX",
-  "services": {
-    "database": "healthy",
-    "electron_cash": "connected",
-    "blockchain": "synced"
-  }
-}
+# Expected response:
+# {"status": "ok", "services": {"database": "healthy", "electron_cash": "connected"}}
 ```
 
 ---
 
-## Components
+## Installation Guide (Windows — WSL2)
 
-### 1. Lemmy Core
+For **development and testing only**. Production deployment should use Linux.
 
-- Standard Lemmy installation using Docker containers
-- Community platform with posts, comments, and user interactions
-- Version 0.19.8 of Lemmy and Lemmy-UI with custom BCH integration
-- PostgreSQL database for storing forum data
-- Pictrs service for image handling
+### 1. Enable WSL2
 
-### 2. Bitcoin Cash Payment Service
+```powershell
+# Run in PowerShell as Administrator
+wsl --install -d Ubuntu-22.04
+```
 
-- Flask-based API service for handling BCH payments
-- Features:
-  - Invoice generation and management
-  - Payment verification and transaction monitoring
-  - User credit management
-  - QR code generation for mobile payments
-  - Integration with Lemmy API for user credit application
-  - RESTful API endpoints for UI integration
-- Database: SQLite with WAL journaling mode
-- Located in `./oratio/bitcoincash_service` (relative to the repo root)
+Restart your PC if prompted. Set up a username and password when Ubuntu first launches.
 
-### 3. Electron Cash Integration
+### 2. Install Docker Desktop
 
-- Serves as the Bitcoin Cash wallet backend
-- Manages:
-  - Address generation
-  - Balance checking
-  - Transaction verification
-  - Payment forwarding
-- RPC interface for the payment service
-- Wallet data stored in `./oratio/data/electron_cash` (adjust to your host mount)
+1. Download from https://www.docker.com/products/docker-desktop/
+2. During install, enable **"Use WSL 2 based engine"**
+3. In Docker Desktop → Settings → Resources → WSL Integration → enable your Ubuntu distro
+4. Restart Docker Desktop
 
-### 4. Nginx Configuration
+### 3. Continue in WSL2
 
-- Reverse proxy for both Lemmy and the payment service
-- SSL termination with Let's Encrypt certificates
-- Configuration for handling both HTTP and HTTPS traffic
-- Static file serving for BCH UI assets
-- Located in `./oratio/nginx` (repo-relative path; adjust for deployment)
+Open your Ubuntu terminal (from Start menu or `wsl` in PowerShell):
+
+```bash
+# Verify Docker works inside WSL2
+docker compose version
+
+# Clone and proceed — same steps as Linux from here
+git clone https://github.com/7e62ce85/Oratio.git
+cd Oratio/oratio
+```
+
+From here, follow **[Steps 3–7 from the Linux guide](#3-generate-secrets--environment-files)** above.
+
+### WSL2 Notes
+- File performance is best when the repo lives **inside the WSL2 filesystem** (`~/Oratio`), not on `/mnt/c/`.
+- `localhost` in Windows maps to WSL2, so `https://localhost` will reach Nginx.
+- For SSL testing locally, either skip SSL (use `nginx_temp_nossl.conf`) or use a self-signed cert.
+
+> **macOS**: Docker Desktop for Mac also works. Follow the Linux guide steps 3–7 after installing Docker Desktop.
+
+---
+
+## Post-Installation Checklist
+
+After all containers are running:
+
+- [ ] `docker compose ps` shows 11 services "Up"
+- [ ] `https://your-domain.com` loads Lemmy UI
+- [ ] Can register a new account (PoW captcha appears)
+- [ ] Email verification arrives (if `RESEND_API_KEY` is set)
+- [ ] `https://your-domain.com/payments/` loads payment page
+- [ ] `https://your-domain.com/payments/health` returns `{"status": "ok"}`
+- [ ] BCH credit balance shows in user dropdown menu
+- [ ] Admin can log in with credentials from `.env`
+
+---
+
+## API Reference
+
+The payment service (`bitcoincash-service`, port 8081) exposes the following endpoints. On the main domain they are proxied under `/payments/`, `/api/cp/`, `/api/membership/`, etc.
+
+### Invoice & Payment
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/generate_invoice` | — | Create invoice (params: `amount`, `user_id`) |
+| GET | `/invoice/<invoice_id>` | — | View invoice (QR code, status) |
+| GET | `/check_payment/<invoice_id>` | — | Check payment status |
+| GET | `/payment_success/<invoice_id>` | — | Payment success page |
+
+### User Credit API
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/user_credit/<user_id>` | `X-API-Key` | Credit balance by numeric ID |
+| GET | `/api/user_credit/<username>` | `X-API-Key` | Credit balance by username |
+| GET | `/api/transactions/<user_id>` | `X-API-Key` | Transaction history by ID |
+| GET | `/api/transactions/<username>` | `X-API-Key` | Transaction history by username |
+| GET | `/api/has_payment/<user_id>` | `X-API-Key` | Check if user has payments |
+| GET | `/api/has_payment/<username>` | `X-API-Key` | Check if user has payments |
+| GET | `/health` | — | Health check |
+
+### Membership API (`/api/membership/`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/membership/price` | Current membership price |
+| GET | `/api/membership/status/<username>` | Membership status |
+| GET | `/api/membership/check/<username>` | Is membership active? |
+| POST | `/api/membership/purchase` | Purchase membership |
+| GET | `/api/membership/transactions/<username>` | Membership tx history |
+| POST | `/api/membership/check-expiry` | Trigger expiry check |
+
+### CP (Content Protection) Moderation API (`/api/cp/`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/cp/permissions/by-username/<username>` | User permissions |
+| GET | `/api/cp/permissions/<user_id>` | User permissions by ID |
+| GET | `/api/cp/permissions/revoked` | List revoked users |
+| GET | `/api/cp/permissions/can-report/<user_id>` | Can user report? |
+| POST | `/api/cp/permissions/initialize` | Initialize permissions |
+| GET | `/api/cp/user-reports/<username>` | Reports by user |
+| POST | `/api/cp/report` | Submit report |
+| GET | `/api/cp/report/<report_id>` | Report details |
+| GET | `/api/cp/reports/pending` | Pending reports |
+| GET | `/api/cp/reported-content-ids` | Hidden content IDs |
+| GET | `/api/cp/report/<id>/check-existing` | Check duplicate |
+| POST | `/api/cp/report/<id>/review` | Review report |
+| POST | `/api/cp/appeal` | Submit appeal |
+| GET | `/api/cp/appeals/pending` | Pending appeals |
+| GET | `/api/cp/appeal/<appeal_id>` | Appeal details |
+| POST | `/api/cp/appeals/<id>/review` | Review appeal |
+| POST | `/api/cp/admin/user/<id>/ban` | Ban user (admin) |
+| POST | `/api/cp/admin/user/<id>/revoke-report` | Revoke report ability |
+| POST | `/api/cp/admin/user/<id>/restore` | Restore permissions |
+| GET | `/api/cp/notifications/<person_id>` | User notifications |
+| POST | `/api/cp/notifications/<id>/read` | Mark read |
+| POST | `/api/cp/background/run-tasks` | Trigger background tasks |
+| GET | `/api/cp/health` | CP system health |
+| GET | `/api/cp/check-post-access/<post_id>` | Is post hidden? (nginx auth_request) |
+
+### Upload Quota API (`/api/upload/`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/upload/quota/<user>` | Remaining upload quota |
+| POST | `/api/upload/validate` | Validate before upload |
+| POST | `/api/upload/record` | Record an upload |
+| GET | `/api/upload/history/<user>` | Upload history |
+| GET | `/api/upload/pricing` | Tier pricing |
+| POST | `/api/upload/reset-quota/<user_id>` | Reset quota (admin) |
+
+### Advertisement API (`/api/ads/`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/ads/display` | Get ads to display |
+| POST | `/api/ads/click` | Record click |
+| POST | `/api/ads/confirm` | Confirm display |
+| GET | `/api/ads/stats/sections` | Section stats |
+| GET | `/api/ads/credits/<username>` | Ad credits |
+| POST | `/api/ads/credits/add` | Add credits |
+| POST | `/api/ads/campaigns` | Create campaign |
+| GET | `/api/ads/campaigns/user/<username>` | User's campaigns |
+| GET | `/api/ads/campaigns/<id>` | Campaign details |
+| GET | `/api/ads/admin/pending` | Pending campaigns (admin) |
+| GET | `/api/ads/admin/active` | Active campaigns (admin) |
+| POST | `/api/ads/admin/approve/<id>` | Approve campaign |
+| POST | `/api/ads/admin/reject/<id>` | Reject campaign |
+| GET | `/api/ads/total-budget` | Total budget |
+| GET | `/api/ads/health` | Ad system health |
+| GET | `/api/ads/credits/price` | Credit price |
+| POST | `/api/ads/credits/invoice` | Invoice for credits |
+| GET | `/api/ads/credits/check/<invoice_id>` | Check credit payment |
+| POST | `/api/ads/credits/purchase` | Purchase credits |
+| GET | `/api/ads/credits/balance/<username>` | Credit balance |
+
+### Static Pages
+
+| GET | `/` | Payment service main page |
+| GET | `/help` | BCH guide page |
 
 ---
 
 ## Database Structure
 
-The payment service uses SQLite with the following tables:
+### PostgreSQL (Lemmy — managed by official Lemmy backend)
 
-- **invoices**: Stores payment invoices and their statuses
-  - Fields: id, payment_address, amount, status, created_at, expires_at, paid_at, user_id, tx_hash, confirmations
+Standard Lemmy schema: users, posts, comments, communities, etc. **Not modified.**
 
-- **addresses**: Tracks BCH addresses generated for payments
-  - Fields: address, created_at, used
+### SQLite (Payment Service — `data/bitcoincash/payments.db`)
 
-- **user_credits**: Manages user credit balances
-  - Fields: user_id, credit_balance, last_updated
+13 tables, all auto-created on first startup:
 
-- **transactions**: Records all transaction history
-  - Fields: id, user_id, amount, type, description, created_at, invoice_id
-
----
-
-## API Endpoints
-
-### Payment Service API
-
-- **/generate_invoice**: Create a new payment invoice
-  - Parameters: amount, user_id
-  - Returns: Invoice details with payment address
-
-- **/invoice/<invoice_id>**: View invoice details
-  - Shows QR code and payment status
-
-- **/check_payment/<invoice_id>**: Check payment status
-  - Returns current status of the invoice: pending, paid, completed, expired
-
-- **/api/user_credit/<user_id>**: Get user credit balance
-  - Requires API key authentication
-  - Used by UI for real-time credit display
-
-- **/api/transactions/<user_id>**: Get user transaction history
-  - Requires API key authentication
-
-- **/health**: Service health check endpoint
-
-### UI Integration Endpoints
-
-- **BCH Configuration**: Dynamic configuration injection for client-side scripts
-- **Credit Updates**: Real-time credit balance retrieval
-- **Payment Status**: Live payment status updates for active invoices
+| Table | Purpose |
+|-------|---------|
+| `invoices` | Payment invoices (id, address, amount, status, tx_hash, confirmations) |
+| `addresses` | Generated BCH addresses |
+| `user_credits` | User credit balances |
+| `transactions` | All transaction records (deposits, withdrawals) |
+| `user_memberships` | Annual membership records (user, expiry, amount_paid) |
+| `membership_transactions` | Membership BCH transfer records |
+| `user_cp_permissions` | User moderation permissions (can_report, can_review, ban status) |
+| `cp_reports` | Content reports (type, content_id, reporter, status, escalation) |
+| `cp_reviews` | Report review decisions |
+| `cp_appeals` | User appeals against moderation decisions |
+| `cp_notifications` | Moderation notifications |
+| `cp_audit_log` | Audit trail for all moderation actions |
+| `moderator_cp_assignments` | Moderator-to-community CP review assignments |
 
 ---
 
-## Payment Processing Flow
+## Environment Variables
 
-1. **Invoice Creation**:
-   - User requests an invoice with an amount
-   - System generates a unique BCH address (or uses direct payment address)
-   - QR code is generated for easy mobile payment
+See [`oratio/.env.example`](oratio/.env.example) for the full list with comments.
 
-2. **Payment Monitoring**:
-   - Background service checks for incoming payments
-   - For each pending invoice, the system checks the address balance
-   - When a payment is detected, the transaction is verified
+### Required Variables
 
-3. **Confirmation Process**:
-   - System monitors confirmations for each transaction
-   - When minimum confirmations are reached, payment is marked as complete
-   - User credits are added to their account
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_PASSWORD` | PostgreSQL password (must match `lemmy.hjson`) |
+| `ELECTRON_CASH_PASSWORD` | Electron Cash RPC password |
+| `LEMMY_API_KEY` | Shared secret between UI ↔ payment service |
+| `LEMMY_ADMIN_USER` | Lemmy admin username |
+| `LEMMY_ADMIN_PASS` | Lemmy admin password |
+| `PAYOUT_WALLET` | BCH address for payment forwarding |
+| `FLASK_SECRET_KEY` | Flask session secret |
+| `DOMAIN` | Your domain (e.g. `oratio.space`) |
 
-4. **Credit Application**:
-   - User credits are applied within the Lemmy system
-   - Transaction records are maintained for auditing
+### Optional Variables
 
-5. **Optional Forwarding**:
-   - If enabled, received funds are automatically forwarded to a central wallet
-   - Helps with wallet management and security
-
----
-
-## Backup and Maintenance
-
-# Wallet backup
-
-The repo includes backup scripts. Adjust paths below to where you mount or store container volumes on your host. Common locations in this repository layout:
-
-- `./oratio/data/electron_cash/wallets`
-- `./oratio/data/electron_cash/seed.txt`
-- `./oratio/data/bitcoincash/payments.db`
-
-If your deployment uses `/srv/...` or another host path for volumes, adapt the paths accordingly.
-
-### Transaction Monitoring
-
-A background process continuously monitors transactions and updates payment statuses automatically. This runs within the Bitcoin Cash Payment Service container.
-
-### Database Maintenance
-
-The SQLite database uses WAL journaling mode for better performance and reliability. Regular checkpoints occur automatically, but manual vacuuming may be needed occasionally for optimal performance.
-
----
-
-## Security Considerations
-
-- **Wallet Security**: The Electron Cash wallet requires secure credential management
-- **API Authentication**: API keys protect sensitive endpoints
-- **Transaction Forwarding**: The system can automatically move funds to a designated payout wallet
-- **SSL/TLS**: All connections are secured with SSL/TLS through Nginx
-- **Database Security**: The SQLite database uses proper locking and foreign key constraints
-- **Error Handling**: Comprehensive error handling prevents information leakage
-- **Network Isolation**: Docker networking isolates services appropriately
-
----
-
-## Environment Variables Configuration
-
-### Docker Build Configuration
-
-The system now properly handles environment variables during both build and runtime:
-
-```dockerfile
-# Build-time environment variables
-ARG LEMMY_API_KEY
-ARG LEMMY_BCH_PAYMENT_URL
-ARG LEMMY_BCH_API_URL
-
-# Runtime environment variables
-ENV LEMMY_API_KEY=${LEMMY_API_KEY}
-ENV LEMMY_BCH_PAYMENT_URL=${LEMMY_BCH_PAYMENT_URL}
-ENV LEMMY_BCH_API_URL=${LEMMY_BCH_API_URL}
-```
-
-### Docker Compose Setup
-
-```yaml
-services:
-  lemmy-ui:
-    build:
-      context: ./user/lemmy-ui-custom/
-      args:
-        LEMMY_API_KEY: ${LEMMY_API_KEY}
-        LEMMY_BCH_PAYMENT_URL: ${BCH_PAYMENT_URL}
-        LEMMY_BCH_API_URL: ${BCH_API_URL}
-    environment:
-      - LEMMY_API_KEY=${LEMMY_API_KEY}
-      - LEMMY_BCH_PAYMENT_URL=${BCH_PAYMENT_URL}
-      - LEMMY_BCH_API_URL=${BCH_API_URL}
-```
-
-### Key Environment Variables
-
-- `LEMMY_API_KEY`: API key for secure communication between UI and payment service
-- `LEMMY_BCH_PAYMENT_URL`: URL for the payment service interface
-- `LEMMY_BCH_API_URL`: API endpoint for user credit queries
-- `MOCK_MODE`: Enable/disable mock payment processing
-- `DIRECT_MODE`: Enable direct payment handling mode
-- `MIN_CONFIRMATIONS`: Minimum confirmations required
-- `PAYOUT_WALLET`: Central BCH address for payments
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RESEND_API_KEY` | — | Resend.com API key (for email verification) |
+| `SMTP_FROM_ADDRESS` | — | Email sender address |
+| `ADMIN_EMAIL` | — | Admin email for Let's Encrypt |
+| `MOCK_MODE` | `false` | `true` = fake payments for testing |
+| `TESTNET` | `false` | `true` = use BCH testnet |
+| `MIN_CONFIRMATIONS` | `1` | Required BCH confirmations |
 
 ---
 
@@ -569,295 +535,109 @@ services:
 
 ### Common Issues
 
-- **Environment Variable Problems**: 
-  - Issue: UI shows "undefined" for BCH configuration
-  - Solution: Rebuild Docker images with proper build args
-  - Command: `docker-compose build --no-cache lemmy-ui`
-
-- **Credit Display Issues**:
-  - Issue: User credits not showing in dropdown
-  - Solution: Check API key configuration and network connectivity
-  - Debug: Check browser console for API errors
-
-- **Payment Button Missing**:
-  - Issue: BCH button not visible in navigation
-  - Solution: Verify JavaScript integration and environment variables
-  - Fallback: Floating button appears as backup
-
-- **Connection Problems**: If the Electron Cash RPC service is unreachable, check network settings and credentials
-- **Database Locking**: During high concurrency, the SQLite database may experience locking issues
-- **Transaction Confirmations**: BCH network congestion can delay transaction confirmations
-
-### Logs
-
-- Main logs are available in the `logs` directory
-- Electron Cash logs are in `electron-cash-logs.txt`
-- Bitcoin Cash service logs are in `bitcoincash_service/bch_payment.log`
-- UI integration logs available in browser console
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| UI shows "undefined" for BCH | Build args not passed | `docker compose build --no-cache lemmy-ui && docker compose up -d` |
+| Credits not in dropdown | API key mismatch | Check `LEMMY_API_KEY` is same in `.env` and container: `docker compose exec lemmy-ui printenv \| grep API_KEY` |
+| Electron Cash unreachable | Wrong password or not started | `docker compose logs electron-cash` and check `ELECTRON_CASH_PASSWORD` |
+| SSL error | Cert not issued yet | Run `./init-letsencrypt-simple.sh` |
+| pictrs crashes | Permission issue | `sudo chown -R 991:991 volumes/pictrs` |
+| SQLite locking | High concurrency | Service uses WAL + 30s timeout; restart if persistent |
+| Email not arriving | Missing API key | Set `RESEND_API_KEY` in `.env`, restart `email-service` |
+| `lemmy.hjson` password mismatch | `.env` and hjson out of sync | Use `refresh_passwords.sh` or manually sync |
 
 ### Diagnostic Commands
 
-For debugging, use these commands from the repository root (where `docker-compose.yml` lives, typically `oratio/`):
-
 ```bash
-# From repo root (adjust path if your compose file is elsewhere)
 cd oratio
 
-# Check Bitcoin Cash service logs
-docker-compose logs bitcoincash-service --tail=200
+# Status of all services
+docker compose ps
 
-# Check UI container logs
-docker-compose logs lemmy-ui --tail=200
+# Logs (last 200 lines)
+docker compose logs --tail=200 bitcoincash-service
+docker compose logs --tail=200 lemmy-ui
+docker compose logs --tail=200 lemmy
+docker compose logs --tail=200 electron-cash
 
-# Test environment variables in the UI container
-docker-compose exec lemmy-ui printenv | grep -i BCH
+# Check env vars in running container
+docker compose exec lemmy-ui printenv | grep -i BCH
+docker compose exec bitcoincash-service printenv | grep -i ELECTRON
 
-# Test API connectivity (service commonly listens on 8081 in compose)
-curl -H "X-API-Key: YOUR_API_KEY" http://localhost:8081/api/user_credit/1
+# Test payment API directly
+curl -H "X-API-Key: YOUR_KEY" http://localhost:8081/api/user_credit/1
+
+# Restart single service
+docker compose restart bitcoincash-service
+
+# Full redeployment
+docker compose down && docker compose build && docker compose up -d
 ```
+
+### Log Locations
+
+| Log | Location |
+|-----|----------|
+| All services | `docker compose logs <service>` |
+| BCH payment | Container: `/app/bch_payment.log` |
+| Misc | `oratio/logs/` |
+| Browser-side | DevTools → Console |
 
 ---
 
-## Technical Notes
+## Backup & Maintenance
 
-- The system is designed to handle network interruptions gracefully
-- The direct payment handler provides fallback capabilities when Electron Cash is unavailable
-- Database operations use proper locking and timeout handling
-- External APIs are used as fallbacks for transaction verification
-- Environment variables are properly injected at both build and runtime
-- UI integration uses modern JavaScript patterns with fallback support
-- Real-time credit updates use secure API communication
-- Transaction monitoring occurs in a background thread to avoid blocking the main application
+### What to Back Up
 
-### Recent Improvements (2025)
+| Data | Host Path |
+|------|-----------|
+| Electron Cash wallet | `oratio/data/electron_cash/wallets/` |
+| Wallet seed | `oratio/data/electron_cash/seed.txt` |
+| Payment database | `oratio/data/bitcoincash/payments.db` |
+| PostgreSQL | `oratio/volumes/postgres/` |
+| Pictrs images | `oratio/volumes/pictrs/` |
+| Let's Encrypt certs | `oratio/data/certbot/` |
+| Secrets | `oratio/.env` |
 
-- **Webpack Configuration**: Proper environment variable injection during build process
-- **Docker Integration**: Build-time and runtime environment variable handling
-- **UI Components**: Native React/Inferno components for BCH integration
-- **API Security**: Enhanced API key authentication for UI-service communication
-- **Error Handling**: Comprehensive error logging and user feedback
-- **Responsive Design**: Mobile-friendly payment interfaces
+### Auto-Managed Tasks
 
----
-
-## 📈 **Recent Improvements (2025)**
-
-### **🏗️ Infrastructure Improvements**
-- **Domain Migration**: `localhost` → `oratio.space` production environment setup
-- **SSL Security**: Let's Encrypt automatic certificate issuance system
-- **Docker Optimization**: Stable 7-container operational structure
-- **Nginx Proxy**: High-performance reverse proxy and SSL termination
-
-### **💳 Payment System Improvements**  
-- **UI/UX Enhancement**: Complete integration with Lemmy design system
-- **Real-time Monitoring**: Live payment status updates
-- **Security Enhancement**: API key authentication and no-refund policy implementation
-- **Mobile Optimization**: Responsive QR codes and payment interfaces
-
-### **🔧 Developer Experience Improvements**
-- **Webpack Configuration**: Optimized environment variable injection at build time
-- **TypeScript Support**: Enhanced type safety
-- **ESLint Configuration**: Automated code quality checking
-- **Automation Scripts**: Automated deployment and SSL management
-
-### **📊 Monitoring and Operations**
-- **Health Checks**: Automatic monitoring of all service statuses
-- **Log System**: Structured log collection and management
-- **Backup System**: Automatic wallet and data backup
-- **Update Management**: Zero-downtime service updates
+- **Transaction monitoring**: Background thread in `bitcoincash-service` (no cron needed)
+- **SSL renewal**: `certbot` container runs a 12-hour renewal loop
+- **SQLite WAL checkpoints**: Automatic; manual `VACUUM` after bulk deletions if needed
 
 ---
 
-## 🌟 **Success Stories and Achievements**
+## Contributing
 
-### **📊 Operational Metrics**
-- **Uptime**: 99.9% stability achieved
-- **Response Time**: Average under 200ms
-- **Payment Processing**: Real-time BCH transaction processing
-- **User Experience**: Mobile-friendly interface
+```bash
+git clone https://github.com/7e62ce85/Oratio.git
+cd Oratio/oratio
+cp refresh_passwords.sh.example refresh_passwords.sh
+nano refresh_passwords.sh    # edit [CHANGE_ME] section
+chmod +x refresh_passwords.sh && ./refresh_passwords.sh
+docker compose build && docker compose up -d
+```
 
-### **🔒 Security Achievements**
-- **SSL A+ Grade**: Passed SSL Labs testing
-- **API Security**: Key-based authentication system established
-- **Wallet Security**: HD wallet and auto-forwarding system
-- **Data Protection**: Privacy policy compliance
-
-### **⚡ Performance Optimization**
-- **CDN Utilization**: Fast loading of static files
-- **Caching System**: Improved API response speed
-- **Database**: Query optimization completed
-- **Memory Management**: Efficient resource usage
+Report issues at [GitHub Issues](https://github.com/7e62ce85/Oratio/issues) with:
+- OS and browser info
+- Steps to reproduce
+- Expected vs actual result
+- Relevant logs (remove secrets)
 
 ---
 
-## 🤝 **Contributing**
+## License
 
-### **📝 Development Guidelines**
-```bash
-# Development environment setup
-git clone https://github.com/joshHam/khankorean.git
-cd khankorean
-docker-compose -f docker-compose.dev.yml up -d
+**AGPL-3.0** — See [LICENSE](LICENSE)
 
-# Code quality checks
-npm run lint
-npm run type-check
-
-# Run tests
-npm run test
-docker-compose exec bitcoincash-service python -m pytest
-```
-
-### **🐛 Issue Reporting**
-If you discover issues, please report them to GitHub Issues with the following information:
-- Operating system and browser information
-- Reproduction steps
-- Expected result vs actual result
-- Related logs (excluding personal information)
-
-### **💡 Feature Suggestions**
-We welcome new feature suggestions:
-- Write in user story format
-- Include technical implementation approach
-- Review security and performance impacts
+| Component | License |
+|-----------|---------|
+| Lemmy | AGPL-3.0 |
+| Electron Cash | MIT |
+| Flask | BSD |
+| PostgreSQL | PostgreSQL License |
+| Nginx | 2-clause BSD |
 
 ---
 
-## 📞 **Support and Contact**
-
-### **🔧 Technical Support**
-- **Documentation**: Refer to this README and `/oratio/README_DEPLOYMENT.md`
-- **Log Checking**: `docker-compose logs [service-name]`
-- **Health Check**: `https://payments.your-domain.com/health`
-
-### **📧 Contact**
-- **Developer**: joshHam
-- **GitHub**: https://github.com/joshHam/khankorean
-- **Issue Tracker**: Use GitHub Issues
-
-### **🆘 Emergency Situations**
-In case of service failure, follow these steps:
-1. Check service status: `docker-compose ps`
-2. Check logs: `docker-compose logs --tail=100`
-3. Restart service: `docker-compose restart [service-name]`
-4. Full redeployment if necessary: `./deploy_production.sh`
-
----
-
-## 📄 **License**
-
-This project is distributed under the AGPL-3.0 license. See [LICENSE](LICENSE) file for details.
-
-### **🔗 Open Source Components**
-- **Lemmy**: AGPL-3.0 (https://github.com/LemmyNet/lemmy)
-- **Electron Cash**: MIT License (https://github.com/Electron-Cash/Electron-Cash)
-- **Flask**: BSD License
-- **PostgreSQL**: PostgreSQL License
-- **Nginx**: 2-clause BSD License
-
----
-
-**🎉 Experience the Bitcoin Cash integrated Lemmy community currently operating on oratio.space!**
-
----
-
-> 📋 **Language Versions**
-> - **English**: This file (README.md)
-> - **한국어**: [README_KOR.md](README_KOR.md)
-
-## 🗂️ **Project File Cleanup Guide**
-
-
-### **❌ Recommended files to consider for cleanup**
-
-The documentation lists several legacy or temporary files. Before deleting, create a backup tarball and confirm they are not used in your current deployment.
-
-#### **📄 Document Files (Duplicates/Legacy Versions)**
-```bash
-# Deletable documents
-oratio/readme(v0.01)                    # Initial README version (legacy)
-oratio/readme(20250413)                 # Intermediate README version (legacy)
-oratio/restartingISSUE.md               # Resolved issue report
-oratio/TECHNICAL_SUMMARY.md            # Duplicate technical documentation
-oratio/DOMAIN_CHANGES_SUMMARY.md       # Domain migration completion record
-```
-
-#### **🔧 Development/Test Files**
-```bash
-# Temporary files created during development
-oratio/nginx_dev.conf                   # Development nginx config (unused)
-oratio/nginx_ssl_setup.conf             # Temporary SSL setup file
-oratio/setup_ssl.sh                     # Basic SSL script (production version exists)
-oratio/fix-bitcoincash.sh               # Temporary fix script
-oratio/fix-bitcoincash-service.sh       # Temporary fix script
-```
-
-#### **📝 Log and Temporary Files**
-```bash
-# Log and temporary record files
-oratio/electron-cash-logs.txt           # Legacy logs (logs/ directory in use)
-oratio/transfer_log.txt                 # One-time transfer record
-oratio/lemmy_thumbnail_fix_summary.txt  # Resolved issue record
-```
-
-#### **📧 Email Setup Guides (Duplicates)**
-```bash
-# Duplicate email setup related documents
-oratio/GMAIL_SMTP_SETUP.md              # Gmail setup (currently using Resend)
-oratio/SENDGRID_SETUP.md                # SendGrid setup (currently using Resend)
-oratio/EMAIL_VERIFICATION_GUIDE.md      # Implemented feature guide
-oratio/EMAIL_VERIFICATION_IMPLEMENTATION_SUMMARY.txt
-```
-
-### **✅ Important Files to Keep**
-
-#### **⚙️ Core Operational Files**
-```bash
-oratio/docker-compose.yml               # Main container configuration
-oratio/nginx_production.conf            # Production nginx configuration
-oratio/lemmy.hjson                      # Lemmy core settings
-oratio/deploy_production.sh             # Deployment script
-oratio/setup_ssl_production.sh          # SSL certificate management
-```
-
-#### **📋 Currently Used Documentation**
-```bash
-README.md                               # Main project documentation (this file)
-README_KOR.md                           # Korean version documentation
-oratio/README_DEPLOYMENT.md             # Deployment guide
-oratio/RESEND_SETUP.md                  # Current email service setup
-oratio/bitcoincash_service/TECHNICAL_REPORT.md  # Technical report
-```
-
-### **🧹 File Cleanup Commands**
-
-Use the following commands as a starting point from the repo root (adjust paths to your environment):
-
-```bash
-# From repository root (example: path/to/Oratio)
-cd oratio
-
-# Create a backup tarball before deleting anything
-tar -czf cleanup_backup_$(date +%Y%m%d).tar.gz \
-  README* *ISSUE* *SUMMARY* nginx_dev.conf nginx_ssl_setup.conf \
-  fix-*.sh *.txt EMAIL_*
-
-# Example deletions (only after verifying backups)
-rm -f "readme(v0.01)" "readme(20250413)"
-rm -f restartingISSUE.md TECHNICAL_SUMMARY.md DOMAIN_CHANGES_SUMMARY.md
-rm -f nginx_dev.conf nginx_ssl_setup.conf
-rm -f fix-bitcoincash.sh fix-bitcoincash-service.sh
-rm -f electron-cash-logs.txt transfer_log.txt lemmy_thumbnail_fix_summary.txt
-rm -f GMAIL_SMTP_SETUP.md SENDGRID_SETUP.md
-rm -f EMAIL_VERIFICATION_GUIDE.md EMAIL_VERIFICATION_IMPLEMENTATION_SUMMARY.txt
-
-echo "✅ Unnecessary file cleanup completed (verify backup before deleting)"
-```
-
-### **📊 Expected Disk Space Savings After Cleanup**
-- **Document files**: ~500KB
-- **Log files**: ~50KB  
-- **Configuration files**: ~20KB
-- **Total space saved**: ~570KB
-
-This cleanup will make the project structure clearer and easier to maintain.
+> 📋 **Language Versions**: [English](README.md) · [한국어](README_KOR.md)

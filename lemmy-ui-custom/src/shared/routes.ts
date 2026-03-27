@@ -21,6 +21,7 @@ import {
 } from "./components/home/home";
 import { Instances, InstancesFetchConfig } from "./components/home/instances";
 import { Legal } from "./components/home/legal";
+import { About } from "./components/home/about";
 import {
   Login,
   LoginFetchConfig,
@@ -236,6 +237,7 @@ export const routes: IRoutePropsWithFetch<RouteData, any, any>[] = [
     component: Instances,
     fetchInitialData: Instances.fetchInitialData,
   } as InstancesFetchConfig,
+  { path: `/about`, component: About },
   { path: `/legal`, component: Legal },
   {
     path: `/cp/moderator-review`,
