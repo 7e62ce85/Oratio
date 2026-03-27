@@ -252,6 +252,25 @@ chmod +x init-letsencrypt-simple.sh
 
 > **SSL 없이 먼저 테스트하고 싶다면?** `nginx_temp_nossl.conf`를 `nginx_internal.conf`로 복사하고, 스택을 올려서 HTTP로 확인한 뒤, DNS 준비되면 SSL 부트스트랩 실행.
 
+### 4-1. 추가 `.example` 파일
+
+일부 파일에는 서버별 고유 값(IP 주소, 도메인)이 포함되어 있어 **git에서 추적하지 않습니다**.
+`.example` 버전을 복사한 뒤 본인 환경에 맞게 수정하세요:
+
+```bash
+# Postfix SMTP 설정 스크립트 (선택 — 이메일 자체 호스팅 시에만 필요)
+cp setup_postfix_check.sh.example setup_postfix_check.sh
+nano setup_postfix_check.sh        # SERVER_IP, DOMAIN, MAIL_HOSTNAME 수정
+
+# Postfix DNS 가이드 (참고 문서)
+cp setup_postfix_dns_guide.md.example setup_postfix_dns_guide.md
+
+# SSL 설정 참고 문서
+cp ../docs/SSL_LETSENCRYPT_SETUP.md.example ../docs/SSL_LETSENCRYPT_SETUP.md
+```
+
+> 이 파일들은 `.gitignore`에 등록되어 있어 실제 IP/도메인이 리포지토리에 푸시되지 않습니다.
+
 ### 5. 볼륨 권한 설정
 
 ```bash

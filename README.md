@@ -252,6 +252,25 @@ What it does:
 
 > **Want to test without SSL first?** Copy `nginx_temp_nossl.conf` as `nginx_internal.conf`, bring up the stack, confirm everything works on HTTP, then run the SSL bootstrap.
 
+### 4-1. Additional `.example` Files
+
+Some files contain server-specific values (IP addresses, domain names) and are **not tracked by git**.
+Copy the `.example` version and fill in your own values:
+
+```bash
+# Postfix SMTP setup script (optional — only if self-hosting email)
+cp setup_postfix_check.sh.example setup_postfix_check.sh
+nano setup_postfix_check.sh        # set SERVER_IP, DOMAIN, MAIL_HOSTNAME
+
+# Postfix DNS guide (reference doc)
+cp setup_postfix_dns_guide.md.example setup_postfix_dns_guide.md
+
+# SSL setup reference doc
+cp ../docs/SSL_LETSENCRYPT_SETUP.md.example ../docs/SSL_LETSENCRYPT_SETUP.md
+```
+
+> These files are listed in `.gitignore` so your real IP/domain will never be pushed to the repository.
+
 ### 5. Volume Permissions
 
 ```bash
