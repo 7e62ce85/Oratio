@@ -12,9 +12,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # 서버 정보
-SERVER_IP="70.34.244.93"
-DOMAIN="oratio.space"
-MAIL_HOSTNAME="mail.oratio.space"
+SERVER_IP="YOUR_SERVER_IP"
+DOMAIN="your-domain.com"
+MAIL_HOSTNAME="mail.your-domain.com"
 
 echo ""
 echo "📋 설정 정보:"

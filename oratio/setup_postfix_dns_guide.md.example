@@ -1,9 +1,9 @@
 # Oratio Postfix 자체 SMTP 서버 DNS 설정 가이드
 
 ## 서버 정보
-- **서버 IP**: 70.34.244.93
-- **도메인**: oratio.space
-- **호스트명**: mail.oratio.space
+- **서버 IP**: YOUR_SERVER_IP
+- **도메인**: your-domain.com
+- **호스트명**: mail.your-domain.com
 
 ## 필수 DNS 레코드
 
@@ -11,7 +11,7 @@
 ```
 타입: MX
 호스트: @
-값: mail.oratio.space
+값: mail.your-domain.com
 우선순위: 10
 TTL: 3600
 ```
@@ -20,7 +20,7 @@ TTL: 3600
 ```
 타입: A
 호스트: mail
-값: 70.34.244.93
+값: YOUR_SERVER_IP
 TTL: 3600
 ```
 
@@ -28,21 +28,21 @@ TTL: 3600
 ```
 타입: TXT
 호스트: @
-값: v=spf1 ip4:70.34.244.93 a:mail.oratio.space -all
+값: v=spf1 ip4:YOUR_SERVER_IP a:mail.your-domain.com -all
 TTL: 3600
 ```
 
 **설명:**
 - `v=spf1`: SPF 버전
-- `ip4:70.34.244.93`: 이 IP에서 보낸 이메일 허용
-- `a:mail.oratio.space`: 이 호스트에서 보낸 이메일 허용
+- `ip4:YOUR_SERVER_IP`: 이 IP에서 보낸 이메일 허용
+- `a:mail.your-domain.com`: 이 호스트에서 보낸 이메일 허용
 - `-all`: 나머지는 모두 거부 (엄격)
 
 ### 4. DKIM 레코드 (이메일 서명)
 
 **먼저 DKIM 키 생성 (나중에 설정 단계에서):**
 ```bash
-docker exec -it postfix opendkim-genkey -t -s mail -d oratio.space
+docker exec -it postfix opendkim-genkey -t -s mail -d your-domain.com
 ```
 
 생성 후 다음 레코드 추가:
@@ -57,7 +57,7 @@ TTL: 3600
 ```
 타입: TXT
 호스트: _dmarc
-값: v=DMARC1; p=quarantine; rua=mailto:admin@oratio.space; ruf=mailto:admin@oratio.space; fo=1
+값: v=DMARC1; p=quarantine; rua=mailto:admin@your-domain.com; ruf=mailto:admin@your-domain.com; fo=1
 TTL: 3600
 ```
 
@@ -71,8 +71,8 @@ TTL: 3600
 
 **ISP에 요청해야 합니다:**
 ```
-IP: 70.34.244.93
-PTR: mail.oratio.space
+IP: YOUR_SERVER_IP
+PTR: mail.your-domain.com
 ```
 
 **PTR 없으면 Gmail/Outlook이 스팸으로 분류합니다!**
@@ -83,7 +83,7 @@ PTR: mail.oratio.space
 
 ### 1단계: 기본 레코드부터
 ```
-1. A 레코드 (mail.oratio.space)
+1. A 레코드 (mail.your-domain.com)
 2. MX 레코드
 3. SPF 레코드
 ```
@@ -106,19 +106,19 @@ PTR: mail.oratio.space
 ### 명령어로 확인:
 ```bash
 # MX 레코드
-dig MX oratio.space
+dig MX your-domain.com
 
 # A 레코드
-dig A mail.oratio.space
+dig A mail.your-domain.com
 
 # SPF 레코드
-dig TXT oratio.space | grep spf
+dig TXT your-domain.com | grep spf
 
 # DMARC 레코드
-dig TXT _dmarc.oratio.space
+dig TXT _dmarc.your-domain.com
 
 # PTR 레코드 (역방향)
-dig -x 70.34.244.93
+dig -x YOUR_SERVER_IP
 ```
 
 ### 온라인 도구:

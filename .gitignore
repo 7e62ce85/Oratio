@@ -51,6 +51,12 @@ wallet_*.sh
 !*.example
 !**/*.example
 
+# IP/도메인이 하드코딩된 파일 (로컬 전용, .example 버전이 리포에 올라감)
+oratio/setup_postfix_check.sh
+oratio/setup_postfix_dns_guide.md
+docs/SSL_LETSENCRYPT_SETUP.md
+lemmy-ui-custom/accessibility_tests.sh
+
 # 백업 파일
 *.bak
 *backup*

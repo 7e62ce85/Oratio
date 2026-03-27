@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the Let's Encrypt SSL certificate setup process for the Oratio project running on AWS EC2 with Docker containers.
+This document describes the Let's Encrypt SSL certificate setup process for the Oratio project running on a VPS with Docker containers.
 
 **Date Created**: September 29, 2025  
 **Last Updated**: September 29, 2025  
@@ -14,11 +14,11 @@ This document describes the Let's Encrypt SSL certificate setup process for the 
 
 ### Initial Issue
 - Nginx container (`oratio-proxy-1`) was continuously restarting
-- Error: `cannot load certificate "/etc/letsencrypt/live/oratio.space/fullchain.pem": BIO_new_file() failed`
+- Error: `cannot load certificate "/etc/letsencrypt/live/your-domain.com/fullchain.pem": BIO_new_file() failed`
 - SSL certificates were missing from the expected location
 
 ### Root Cause
-- The nginx configuration was looking for SSL certificates at `/etc/letsencrypt/live/oratio.space/`
+- The nginx configuration was looking for SSL certificates at `/etc/letsencrypt/live/your-domain.com/`
 - The docker-compose.yml was mounting the system's `/etc/letsencrypt` directory which was empty
 - No valid SSL certificates were configured for the domain
 
@@ -58,11 +58,11 @@ volumes:
 
 #### SSL Configuration in nginx_production.conf
 ```nginx
-# SSL 인증서 (Let's Encrypt)
-ssl_certificate /etc/letsencrypt/live/oratio.space/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/oratio.space/privkey.pem;
+# SSL certificates (Let's Encrypt)
+ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
 
-# SSL 설정 최적화
+# SSL optimization
 include /etc/letsencrypt/options-ssl-nginx.conf;
 ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 ```
@@ -92,9 +92,9 @@ Created an automated script that:
 5. **Reloads nginx** with valid certificates
 
 #### Key Script Features
-- **Domain**: `oratio.space` only (subdomains commented out)
+- **Domain**: `your-domain.com` only (subdomains commented out)
 - **RSA Key Size**: 4096 bits
-- **Email**: `admin@oratio.space`
+- **Email**: `admin@your-domain.com`
 - **Auto-renewal**: Configured via certbot container
 
 ---
@@ -102,58 +102,36 @@ Created an automated script that:
 ## Current Configuration Status
 
 ### ✅ Successfully Configured
-- **SSL Certificate**: Valid for `oratio.space`
-- **Certificate Authority**: Let's Encrypt (E8)
-- **Expiry Date**: December 28, 2025 (3 months)
+- **SSL Certificate**: Valid for `your-domain.com`
+- **Certificate Authority**: Let's Encrypt
 - **Nginx**: Running successfully with SSL
 - **Auto-Renewal**: Certbot runs every 12 hours
 
 ### 🔧 Network Access Issue
-**Problem**: External access blocked by AWS Security Groups
+**Problem**: External access may be blocked by cloud provider security groups/firewall
 
-**Status**: HTTPS/HTTP not accessible from external sources due to AWS firewall
-
-**Required Action**: Configure AWS Security Groups to allow:
+**Required Action**: Configure firewall to allow:
 - **Port 80 (HTTP)**: Inbound from `0.0.0.0/0`
 - **Port 443 (HTTPS)**: Inbound from `0.0.0.0/0`
-
-### ⏸️ Temporarily Disabled
-- **www.oratio.space**: DNS not configured (commented out in nginx)
-- **payments.oratio.space**: DNS not configured (commented out in nginx)
 
 ---
 
 ## Certificate Information
 
-### Current Certificate Details
-```
-Subject: CN=oratio.space
-Issuer: C=US; O=Let's Encrypt; CN=E8
-Valid From: September 29, 2025 09:26:53 GMT
-Valid Until: December 28, 2025 09:26:52 GMT
-Key Algorithm: EC/prime256v1 (256/128 Bits)
-Signature Algorithm: ecdsa-with-SHA384
-```
-
 ### Certificate Files Location
-- **Certificate**: `/etc/letsencrypt/live/oratio.space/fullchain.pem`
-- **Private Key**: `/etc/letsencrypt/live/oratio.space/privkey.pem`
-- **Chain**: `/etc/letsencrypt/live/oratio.space/chain.pem`
-- **Certificate Only**: `/etc/letsencrypt/live/oratio.space/cert.pem`
+- **Certificate**: `/etc/letsencrypt/live/your-domain.com/fullchain.pem`
+- **Private Key**: `/etc/letsencrypt/live/your-domain.com/privkey.pem`
+- **Chain**: `/etc/letsencrypt/live/your-domain.com/chain.pem`
+- **Certificate Only**: `/etc/letsencrypt/live/your-domain.com/cert.pem`
 
 ---
 
-## AWS Infrastructure Details
-
-### Server Information
-- **Instance ID**: `i-115613c0669a6fd352787193c4a2da30`
-- **Public IP**: `70.34.244.93`
-- **Platform**: AWS EC2
+## Server Information
+- **Public IP**: YOUR_SERVER_IP
+- **Platform**: VPS (e.g., AWS EC2, Vultr, etc.)
 - **Operating System**: Linux
 
-### Required AWS Configuration
-
-#### Security Group Rules Needed
+### Required Firewall Rules
 ```
 Type    | Protocol | Port Range | Source     | Description
 --------|----------|------------|------------|-------------
@@ -162,38 +140,22 @@ HTTPS   | TCP      | 443        | 0.0.0.0/0  | Allow HTTPS
 SSH     | TCP      | 22         | <your-ip>  | Admin access
 ```
 
-#### AWS CLI Commands (if needed)
-```bash
-# Get Security Group ID
-aws ec2 describe-instances --instance-ids i-115613c0669a6fd352787193c4a2da30 \
-  --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId'
-
-# Add HTTP rule
-aws ec2 authorize-security-group-ingress --group-id sg-xxxxxx \
-  --protocol tcp --port 80 --cidr 0.0.0.0/0
-
-# Add HTTPS rule  
-aws ec2 authorize-security-group-ingress --group-id sg-xxxxxx \
-  --protocol tcp --port 443 --cidr 0.0.0.0/0
-```
-
 ---
 
 ## DNS Configuration
 
-### Current DNS Status
+### Example DNS Records
 ```
-oratio.space        -> 70.34.244.93 ✅ (Configured)
-www.oratio.space    -> Not configured ❌
-payments.oratio.space -> Not configured ❌
+your-domain.com        -> YOUR_SERVER_IP
+www.your-domain.com    -> YOUR_SERVER_IP (optional)
 ```
 
 ### Required DNS Records (for future expansion)
 ```
-Type | Name                  | Value        | TTL
------|----------------------|--------------|----
-A    | www.oratio.space     | 70.34.244.93 | 300
-A    | payments.oratio.space| 70.34.244.93 | 300
+Type | Name                       | Value          | TTL
+-----|---------------------------|----------------|----
+A    | www.your-domain.com       | YOUR_SERVER_IP | 300
+A    | payments.your-domain.com  | YOUR_SERVER_IP | 300
 ```
 
 ---
@@ -221,7 +183,7 @@ docker-compose exec certbot certbot renew --dry-run
 ### Monitoring Commands
 ```bash
 # Check certificate expiry
-openssl x509 -in ./data/certbot/conf/live/oratio.space/fullchain.pem -text -noout | grep "Not After"
+openssl x509 -in ./data/certbot/conf/live/your-domain.com/fullchain.pem -text -noout | grep "Not After"
 
 # Check nginx status
 docker logs oratio-proxy-1 --tail 20
@@ -242,7 +204,7 @@ curl -I https://localhost/
 docker exec oratio-proxy-1 nginx -t
 
 # Check certificate files exist
-ls -la ./data/certbot/conf/live/oratio.space/
+ls -la ./data/certbot/conf/live/your-domain.com/
 ```
 
 #### 2. Certificate Not Found
@@ -262,17 +224,17 @@ netstat -tlnp | grep -E ":80|:443"
 # Test local access
 curl -I https://localhost/
 
-# Check AWS Security Groups via AWS Console
+# Check cloud provider firewall/security groups
 ```
 
 #### 4. SSL Certificate Errors
 ```bash
 # Check certificate validity
-openssl x509 -in ./data/certbot/conf/live/oratio.space/fullchain.pem -text -noout
+openssl x509 -in ./data/certbot/conf/live/your-domain.com/fullchain.pem -text -noout
 
 # Check certificate chain
-openssl verify -CAfile ./data/certbot/conf/live/oratio.space/chain.pem \
-  ./data/certbot/conf/live/oratio.space/cert.pem
+openssl verify -CAfile ./data/certbot/conf/live/your-domain.com/chain.pem \
+  ./data/certbot/conf/live/your-domain.com/cert.pem
 ```
 
 ---
@@ -285,17 +247,17 @@ openssl verify -CAfile ./data/certbot/conf/live/oratio.space/chain.pem \
 
 2. **Update Let's Encrypt script** - modify `init-letsencrypt-simple.sh`:
 ```bash
-domains=(oratio.space www.oratio.space payments.oratio.space)
+domains=(your-domain.com www.your-domain.com payments.your-domain.com)
 ```
 
 3. **Request new certificate**:
 ```bash
 docker-compose run --rm --entrypoint "\
   certbot certonly --webroot -w /var/www/certbot \
-    --email admin@oratio.space \
-    -d oratio.space \
-    -d www.oratio.space \
-    -d payments.oratio.space \
+    --email admin@your-domain.com \
+    -d your-domain.com \
+    -d www.your-domain.com \
+    -d payments.your-domain.com \
     --rsa-key-size 4096 \
     --agree-tos \
     --expand" certbot
@@ -322,7 +284,7 @@ docker-compose exec proxy nginx -s reload
 - **Rate Limiting**: Let's Encrypt has rate limits (20 certs/week per domain)
 
 ### Access Control
-- **Firewall**: AWS Security Groups provide network-level protection
+- **Firewall**: Cloud provider security groups provide network-level protection
 - **Nginx**: Additional application-level security headers configured
 
 ---
@@ -346,8 +308,8 @@ docker-compose exec proxy nginx -s reload
 
 ## Next Steps
 
-1. **Configure AWS Security Groups** to allow ports 80 and 443
-2. **Test external access** to https://oratio.space
+1. **Configure firewall** to allow ports 80 and 443
+2. **Test external access** to https://your-domain.com
 3. **Set up DNS records** for www and payments subdomains (when needed)
 4. **Monitor certificate renewal** process
 5. **Consider backup strategy** for certificates and configuration
@@ -379,7 +341,7 @@ docker exec oratio-proxy-1 nginx -t
 docker-compose exec proxy nginx -s reload
 
 # View certificate details
-openssl x509 -in ./data/certbot/conf/live/oratio.space/fullchain.pem -text -noout
+openssl x509 -in ./data/certbot/conf/live/your-domain.com/fullchain.pem -text -noout
 ```
 
 ---
