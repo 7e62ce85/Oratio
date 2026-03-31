@@ -34,6 +34,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm i
 # Build
 COPY generate_translations.js \
+  custom-translations.json \
   tsconfig.json \
   webpack.config.js \
   .babelrc \

@@ -2,6 +2,18 @@ const fs = require("fs");
 
 const translationDir = "lemmy-translations/translations/";
 const outDir = "src/shared/translations/";
+const customFile = "custom-translations.json";
+
+// Load custom translations (Oratio-specific keys not in upstream lemmy-translations)
+let customTranslations = {};
+try {
+  customTranslations = JSON.parse(fs.readFileSync(customFile, "utf8"));
+  delete customTranslations._comment;
+  console.log(`✅ Loaded custom translations from ${customFile}`);
+} catch (_) {
+  console.log(`ℹ️  No custom translations found (${customFile}), skipping`);
+}
+
 fs.mkdirSync(outDir, { recursive: true });
 fs.readdir(translationDir, (_err, files) => {
   files.forEach(filename => {
@@ -10,6 +22,15 @@ fs.readdir(translationDir, (_err, files) => {
       const json = JSON.parse(
         fs.readFileSync(translationDir + filename, "utf8"),
       );
+
+      // Merge custom translations for this language
+      const custom = customTranslations[lang] || {};
+      for (const key in custom) {
+        if (!(key in json)) {
+          json[key] = custom[key];
+        }
+      }
+
       let data = `export const ${lang} = {\n  translation: {`;
       for (const key in json) {
         if (key in json) {
@@ -30,12 +51,22 @@ fs.readdir(translationDir, (_err, files) => {
 const baseLanguage = "en";
 
 fs.readFile(`${translationDir}${baseLanguage}.json`, "utf8", (_, fileStr) => {
+  const baseJson = JSON.parse(fileStr);
+
+  // Merge custom English keys for type generation
+  const customEn = customTranslations["en"] || {};
+  for (const key in customEn) {
+    if (!(key in baseJson)) {
+      baseJson[key] = customEn[key];
+    }
+  }
+
   const noOptionKeys = [];
   const optionKeys = [];
   const optionRegex = /\{\{(.+?)\}\}/g;
   const optionMap = new Map();
 
-  for (const [key, val] of Object.entries(JSON.parse(fileStr))) {
+  for (const [key, val] of Object.entries(baseJson)) {
     const options = [];
     for (
       let match = optionRegex.exec(val);

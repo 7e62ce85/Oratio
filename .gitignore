@@ -20,6 +20,7 @@ oratio/data/bitcoincash/
 oratio/data/electron_cash/
 oratio/data/electron-cash/
 oratio/electron-cash-data/
+oratio/data/content_importer/
 
 # 기타 캐시 및 임시 파일
 *.swp
@@ -29,6 +30,12 @@ oratio/electron-cash-data/
 .env
 .env.*
 *.env
+
+# refresh_passwords.sh 실제본 (API 키 하드코딩됨, .example 버전이 리포에 올라감)
+oratio/refresh_passwords.sh
+
+# lemmy.hjson 실제본 (DB 비밀번호 + pictrs API 키 포함, .example 버전이 리포에 올라감)
+oratio/lemmy.hjson
 
 # 보안 관련 파일
 *password*

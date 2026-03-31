@@ -1,0 +1,96 @@
+{
+  "_comment": "Custom translation keys for Oratio (not in upstream lemmy-translations). Add new keys here for all supported languages.",
+  "en": {
+    "about": "About"
+  },
+  "ko": {
+    "about": "소개"
+  },
+  "ja": {
+    "about": "概要"
+  },
+  "zh": {
+    "about": "关于"
+  },
+  "zh_Hant": {
+    "about": "關於"
+  },
+  "de": {
+    "about": "Über"
+  },
+  "fr": {
+    "about": "À propos"
+  },
+  "es": {
+    "about": "Acerca de"
+  },
+  "pt": {
+    "about": "Sobre"
+  },
+  "pt_BR": {
+    "about": "Sobre"
+  },
+  "ru": {
+    "about": "О сайте"
+  },
+  "it": {
+    "about": "Informazioni"
+  },
+  "nl": {
+    "about": "Over"
+  },
+  "pl": {
+    "about": "O nas"
+  },
+  "sv": {
+    "about": "Om"
+  },
+  "da": {
+    "about": "Om"
+  },
+  "fi": {
+    "about": "Tietoa"
+  },
+  "ar": {
+    "about": "حول"
+  },
+  "fa": {
+    "about": "درباره"
+  },
+  "vi": {
+    "about": "Giới thiệu"
+  },
+  "id": {
+    "about": "Tentang"
+  },
+  "el": {
+    "about": "Σχετικά"
+  },
+  "cs": {
+    "about": "O nás"
+  },
+  "bg": {
+    "about": "Относно"
+  },
+  "hr": {
+    "about": "O nama"
+  },
+  "ca": {
+    "about": "Sobre"
+  },
+  "eu": {
+    "about": "Honi buruz"
+  },
+  "eo": {
+    "about": "Pri"
+  },
+  "ga": {
+    "about": "Maidir le"
+  },
+  "gl": {
+    "about": "Sobre"
+  },
+  "oc": {
+    "about": "A prepaus"
+  }
+}

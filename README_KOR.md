@@ -1,6 +1,6 @@
 # Oratio — Lemmy 포럼 + Bitcoin Cash 결제 플랫폼
 
-**Lemmy** 커뮤니티 포럼에 **Bitcoin Cash (BCH) 결제**, 콘텐츠 모더레이션, 멤버십 시스템, 광고 플랫폼을 통합한 프로젝트. Docker Compose 11개 서비스로 운영.
+**Lemmy** 커뮤니티 포럼에 **Bitcoin Cash (BCH) 결제**, 콘텐츠 모더레이션, 멤버십 시스템, 광고 플랫폼, **자동 콘텐츠 임포트**를 통합한 프로젝트. Docker Compose 12개 서비스로 운영.
 
 > **English version**: [README.md](README.md)
 
@@ -34,6 +34,7 @@
 | **bitcoincash-service** | 자체 개발 | ✅ 100% 커스텀 | Python/Flask |
 | **pow-validator** | 자체 개발 | ✅ 100% 커스텀 | Python |
 | **email-service** | 자체 개발 | ✅ 100% 커스텀 | Python |
+| **content-importer** | 자체 개발 | ✅ 100% 커스텀 | Python/FastAPI |
 | **electron-cash** | Electron Cash 오픈소스 + 커스텀 Dockerfile | ⚠️ 래핑 | Python |
 | **nginx, postgres, pictrs, postfix, certbot** | 공식 이미지 | ❌ 설정만 | — |
 
@@ -53,6 +54,7 @@ Oratio/                              ← 레포 루트
 │   ├── bitcoincash_service/         ←   Flask 결제/모더레이션/멤버십/광고 API
 │   ├── pow_validator_service/       ←   PoW 봇 방지 서비스
 │   ├── email-service/               ←   Resend API 이메일 프록시
+│   ├── content_importer/            ←   자동 콘텐츠 임포트 봇 (8개 소스 + 댓글)
 │   ├── electron_cash/               ←   BCH 지갑 Docker 빌드
 │   ├── data/                        ←   영구 데이터 (지갑, certbot, 결제 DB)
 │   └── volumes/                     ←   Docker 볼륨 마운트 (postgres, pictrs)
@@ -68,7 +70,7 @@ Oratio/                              ← 레포 루트
 
 ## 시스템 아키텍처
 
-11개 Docker 서비스로 구성:
+12개 Docker 서비스로 구성:
 
 ```
                         ┌──────────────────────┐
@@ -126,6 +128,7 @@ Oratio/                              ← 레포 루트
 | 9 | **bitcoincash-service** | 결제, 모더레이션, 멤버십, 광고 API | 8081 |
 | 10 | **email-service** | Resend API 프록시 (SMTP 포트 차단 우회) | 1025, 8025 |
 | 11 | **electron-cash** | BCH HD 지갑 + RPC 인터페이스 | 7777 |
+| 12 | **content-importer** | 8개 소스 자동 콘텐츠 임포트 + 댓글 가져오기 | 8085 |
 
 ### 요청 흐름
 1. **브라우저** → nginx (SSL) → lemmy-ui (프론트엔드)
@@ -134,6 +137,7 @@ Oratio/                              ← 레포 루트
 4. **콘텐츠 신고** → nginx `/api/cp/` → bitcoincash-service (CP 모더레이션)
 5. **멤버십 / 광고** → nginx `/api/membership/` 또는 `/api/ads/` → bitcoincash-service
 6. **이메일 인증** → lemmy → email-service (Resend API) → 사용자 수신함
+7. **콘텐츠 임포트** → content-importer (8개 소스) → AI 선별 → lemmy API → 게시물 + 인기 댓글
 
 ---
 
@@ -547,6 +551,10 @@ cd Oratio/oratio
 | `MOCK_MODE` | `false` | `true` = 테스트용 가짜 결제 |
 | `TESTNET` | `false` | `true` = BCH 테스트넷 사용 |
 | `MIN_CONFIRMATIONS` | `1` | 필요 BCH 확인 수 |
+| `AI_ENABLED` | `false` | AI 기반 콘텐츠 선별 (Gemini/OpenAI) |
+| `YOUTUBE_API_KEY` | — | YouTube Data API v3 키 (무료: 10k units/day) |
+| `COMMENTS_ENABLED` | `true` | 소스 웹사이트 인기 댓글 자동 임포트 |
+| `COMMENTS_PER_POST` | `3` | 게시물당 가져올 인기 댓글 수 |
 
 ---
 

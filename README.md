@@ -1,6 +1,6 @@
 # Oratio — Lemmy Forum + Bitcoin Cash Payment Platform
 
-A **Lemmy** community forum with integrated **Bitcoin Cash (BCH) payments**, content moderation, membership system, and advertisement platform. Runs on Docker Compose with 11 services.
+A **Lemmy** community forum with integrated **Bitcoin Cash (BCH) payments**, content moderation, membership system, advertisement platform, and **automated content importing**. Runs on Docker Compose with 12 services.
 
 > **한국어 버전**: [README_KOR.md](README_KOR.md)
 
@@ -34,6 +34,7 @@ This project is **not** a rewrite of Lemmy. It uses the official Lemmy backend a
 | **bitcoincash-service** | Built from scratch | ✅ 100% custom | Python/Flask |
 | **pow-validator** | Built from scratch | ✅ 100% custom | Python |
 | **email-service** | Built from scratch | ✅ 100% custom | Python |
+| **content-importer** | Built from scratch | ✅ 100% custom | Python/FastAPI |
 | **electron-cash** | Electron Cash open-source + custom Dockerfile | ⚠️ Wrapped | Python |
 | **nginx, postgres, pictrs, postfix, certbot** | Official images | ❌ Config only | — |
 
@@ -53,6 +54,7 @@ Oratio/                              ← repo root
 │   ├── bitcoincash_service/         ←   Flask payment/moderation/membership/ads API
 │   ├── pow_validator_service/       ←   PoW bot prevention service
 │   ├── email-service/               ←   Resend API email proxy
+│   ├── content_importer/            ←   Auto content import bot (8 sources + comments)
 │   ├── electron_cash/               ←   BCH wallet Docker build
 │   ├── data/                        ←   Persistent data (wallet, certbot, payments DB)
 │   └── volumes/                     ←   Docker volume mounts (postgres, pictrs)
@@ -68,7 +70,7 @@ Oratio/                              ← repo root
 
 ## System Architecture
 
-11 interconnected Docker services:
+12 interconnected Docker services:
 
 ```
                         ┌──────────────────────┐
@@ -126,6 +128,7 @@ Oratio/                              ← repo root
 | 9 | **bitcoincash-service** | Payment, moderation, membership, ads API | 8081 |
 | 10 | **email-service** | Resend API proxy (SMTP port-block workaround) | 1025, 8025 |
 | 11 | **electron-cash** | BCH HD wallet with RPC interface | 7777 |
+| 12 | **content-importer** | Auto content import from 8 sources + comment importing | 8085 |
 
 ### Request Flow
 1. **Browser** → nginx (SSL) → lemmy-ui (frontend)
@@ -134,6 +137,7 @@ Oratio/                              ← repo root
 4. **Content report** → nginx `/api/cp/` → bitcoincash-service (CP moderation)
 5. **Membership / Ads** → nginx `/api/membership/` or `/api/ads/` → bitcoincash-service
 6. **Email verification** → lemmy → email-service (Resend API) → user inbox
+7. **Content import** → content-importer (8 sources) → AI selection → lemmy API → post + comments
 
 ---
 
@@ -547,6 +551,10 @@ See [`oratio/.env.example`](oratio/.env.example) for the full list with comments
 | `MOCK_MODE` | `false` | `true` = fake payments for testing |
 | `TESTNET` | `false` | `true` = use BCH testnet |
 | `MIN_CONFIRMATIONS` | `1` | Required BCH confirmations |
+| `AI_ENABLED` | `false` | AI-based content selection (Gemini/OpenAI) |
+| `YOUTUBE_API_KEY` | — | YouTube Data API v3 key (free: 10k units/day) |
+| `COMMENTS_ENABLED` | `true` | Auto-import top comments from source websites |
+| `COMMENTS_PER_POST` | `3` | Number of top comments imported per post |
 
 ---
 

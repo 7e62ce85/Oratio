@@ -31,7 +31,7 @@ Lemmy → email-service (port 1025) → Resend API → 사용자 이메일
 ### 현재 이메일 서비스 설정
 - **email-service**: SMTP 프록시 (포트 1025)
 - **외부 API**: Resend (https://resend.com)
-- **API Key**: `re_ZKD2wAGP_JK7JSCijcmRw4nQN7jghunYE`
+- **API Key**: `.env`의 `RESEND_API_KEY` 참조
 - **인증된 도메인**: defadb.com
 - **미인증 도메인**: oratio.space, oratio.com
 

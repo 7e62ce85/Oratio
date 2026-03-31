@@ -93,7 +93,7 @@ services:
     image: docker.io/asonix/pictrs:0.5
     hostname: pictrs
     environment:
-      - PICTRS__SERVER__API_KEY=15JpMF0Xv1NfoJPsY9aG
+      - PICTRS__SERVER__API_KEY=${PICTRS_API_KEY:-changeme}
       - PICTRS__MEDIA__ANIMATION__MAX_WIDTH=256
       - PICTRS__MEDIA__ANIMATION__MAX_HEIGHT=256
       - PICTRS__MEDIA__ANIMATION__MAX_AREA=65536
@@ -247,6 +247,45 @@ services:
           memory: 2g
         reservations:
           memory: 512m
+
+  # Content Importer (자동 콘텐츠 수집 서비스 — Phase 1 Bootstrapping)
+  content-importer:
+    build:
+      context: ./content_importer
+      dockerfile: Dockerfile
+    container_name: oratio-content-importer
+    restart: always
+    environment:
+      - LEMMY_API_URL=http://lemmy:8536
+      - LEMMY_BOT_USERNAME=${LEMMY_BOT_USERNAME:-OratioRepostBot}
+      - LEMMY_BOT_PASSWORD=${LEMMY_BOT_PASSWORD}
+      - LEMMY_DEFAULT_COMMUNITY=${LEMMY_DEFAULT_COMMUNITY:-trending}
+      - LEMMY_API_KEY=${LEMMY_API_KEY:-changeme}
+      - IMPORTER_DB_PATH=/data/importer.db
+      - IMPORTER_API_PORT=8085
+      - IMPORT_INTERVAL_MINUTES=${IMPORT_INTERVAL_MINUTES:-360}
+      - IMPORT_ON_STARTUP=${IMPORT_ON_STARTUP:-true}
+      # AI settings (optional — works without AI using score-based ranking)
+      - AI_ENABLED=${AI_ENABLED:-false}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      # Source config override (optional JSON)
+      - IMPORTER_SOURCES=${IMPORTER_SOURCES:-}
+      # Comment importing (score-based top N from source, no AI)
+      - COMMENTS_ENABLED=${COMMENTS_ENABLED:-true}
+      - COMMENTS_PER_POST=${COMMENTS_PER_POST:-3}
+      # YouTube Data API v3 (free, 10k units/day)
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+    volumes:
+      - ./data/content_importer:/data
+    depends_on:
+      - lemmy
+    logging: *default-logging
+    networks:
+      - default
 
 volumes:
   electron_cash_data:
