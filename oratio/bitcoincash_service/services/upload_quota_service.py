@@ -34,19 +34,30 @@ class UploadQuotaService:
         self.db_path = db_path
         self._init_database()
     
+    def _get_conn(self):
+        """Get a SQLite connection with WAL mode and busy timeout"""
+        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        return conn
+    
     def _init_database(self):
         """Initialize database tables if they don't exist"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
             
             # Read and execute migration SQL
             import os
-            migration_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                'migrations',
-                'upload_quota_system.sql'
-            )
+            # Primary: use /migrations volume mount (docker-compose)
+            migration_path = '/migrations/upload_quota_system.sql'
+            if not os.path.exists(migration_path):
+                # Fallback: relative path for local development
+                migration_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                    'migrations',
+                    'upload_quota_system.sql'
+                )
             
             if os.path.exists(migration_path):
                 with open(migration_path, 'r') as f:
@@ -72,7 +83,7 @@ class UploadQuotaService:
             Dict with quota information
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
@@ -273,7 +284,7 @@ class UploadQuotaService:
             if validation['will_charge'] and not use_credit:
                 raise ValueError("Upload requires credit charge. Please check 'Use Credit to Post' to proceed.")
             
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
             
             # Create transaction record
@@ -343,7 +354,7 @@ class UploadQuotaService:
             List of upload transaction dicts
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
@@ -392,7 +403,7 @@ class UploadQuotaService:
             True if quota was reset, False otherwise
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_conn()
             cursor = conn.cursor()
             
             now = int(time.time())

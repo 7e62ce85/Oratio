@@ -133,12 +133,26 @@ class LemmyClient:
 
     # ── Post ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _valid_title(title: str) -> bool:
+        """Lemmy rejects titles without at least one alphanumeric char."""
+        import re
+        stripped = (title or "").strip()
+        if not stripped:
+            return False
+        # Must contain at least one word-character (letter/digit/underscore)
+        return bool(re.search(r"\w", stripped))
+
     def create_post(self, post: NormalizedPost, community_name: str) -> Optional[int]:
         """
         Create a Lemmy post from a NormalizedPost.
 
         Returns the Lemmy post ID or None on failure.
         """
+        if not self._valid_title(post.title):
+            logger.warning("⏭️ Skipping post with invalid title: %r", (post.title or "")[:80])
+            return None
+
         if not self.ensure_logged_in():
             return None
 
@@ -187,8 +201,12 @@ class LemmyClient:
         parts = []
 
         # Source attribution
+        # If source_permalink exists (e.g. upgoat viewpost, reddit comments),
+        # link "Source" to that page. The post URL (title link) stays as the
+        # original external article.
+        source_link_url = post.source_permalink or post.url
         parts.append(
-            f"📰 **Source**: [{post.source}]({post.url}) "
+            f"📰 **Source**: [{post.source}]({source_link_url}) "
             f"| **{post.source_community}**"
         )
 
@@ -204,9 +222,9 @@ class LemmyClient:
         if post.body:
             parts.append(post.body)
 
-        if post.ai_reason:
-            parts.append("")
-            parts.append(f"🤖 *Selected by AI: {post.ai_reason}*")
+        # Embed media (gif/mp4) directly in body for sources like 9GAG
+        if post.media_url and post.media_url.endswith((".mp4", ".webm", ".gif")):
+            parts.append(f"![media]({post.media_url})")
 
         parts.append("")
         parts.append(
@@ -224,14 +242,13 @@ class LemmyClient:
         if not self.ensure_logged_in():
             return None
 
-        # Format: "💬 User69님의 인기 댓글 3위 (⬆️ 1,234):"
-        rank_str = f" {comment.rank}위" if comment.rank else ""
+        # Format: "💬 User69's Top Comment #3 (⬆️ 1,234):"
+        rank_str = f" #{comment.rank}" if comment.rank else ""
         score_label = "replies" if comment.source == "4chan" else "⬆️"
         body = (
-            f"💬 **{comment.author}**님의 인기 댓글{rank_str} "
+            f"💬 **{comment.author}**'s Top Comment{rank_str} "
             f"({comment.source}, {score_label} {comment.score:,}):\n\n"
-            f"> {comment.body}\n\n"
-            f"*— Imported comment by OratioRepostBot*"
+            f"> {comment.body}"
         )
 
         url = f"{self.base}/api/v3/comment"

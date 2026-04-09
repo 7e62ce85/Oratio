@@ -20,6 +20,8 @@ services:
       # Let's Encrypt certificates and webroot
       - ./data/certbot/conf:/etc/letsencrypt:ro,Z
       - ./data/certbot/www:/var/www/certbot:ro,Z
+      # pictrs 이미지 프록시 캐시
+      - nginx_cache:/var/cache/nginx
     restart: always
     logging: *default-logging
     depends_on:
@@ -126,22 +128,6 @@ services:
     env_file:
       - .env
 
-  postfix:
-    image: docker.io/mwader/postfix-relay
-    environment:
-      # 로컬호스트로 변경
-      - POSTFIX_myhostname=localhost
-      - POSTFIX_mydomain=localhost
-      - POSTFIX_myorigin=localhost
-      - POSTFIX_inet_interfaces=all
-      - POSTFIX_inet_protocols=ipv4
-      # SPF, DKIM 설정을 위한 추가 설정
-      - POSTFIX_message_size_limit=10240000
-    restart: "always"
-    logging: *default-logging
-    env_file:
-      - .env
-
   # Proof of Work 검증 서비스 (회원가입 봇 방지)
   pow-validator:
     build:
@@ -192,6 +178,7 @@ services:
     volumes:
       - ./bitcoincash_service:/app
       - ./data/bitcoincash:/data
+      - ./migrations:/migrations:ro
       - ./lemmy.hjson:/config/config.hjson:ro
     ports:
       - "8081:8081"
@@ -279,6 +266,9 @@ services:
       - COMMENTS_PER_POST=${COMMENTS_PER_POST:-3}
       # YouTube Data API v3 (free, 10k units/day)
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      # Rumble 로그인 (댓글 수집용)
+      - RUMBLE_USERNAME=${RUMBLE_USERNAME:-}
+      - RUMBLE_PASSWORD=${RUMBLE_PASSWORD:-}
     volumes:
       - ./data/content_importer:/data
     depends_on:
@@ -289,4 +279,5 @@ services:
 
 volumes:
   electron_cash_data:
+  nginx_cache:
     # Volume for Electron Cash wallet data

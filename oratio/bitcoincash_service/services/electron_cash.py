@@ -7,7 +7,8 @@ import traceback
 import os
 from config import (
     ELECTRON_CASH_URL, ELECTRON_CASH_USER, ELECTRON_CASH_PASSWORD,
-    PAYOUT_WALLET, MOCK_MODE, DIRECT_MODE, logger, EC_AVAILABLE
+    PAYOUT_WALLET, MOCK_MODE, DIRECT_MODE, logger, EC_AVAILABLE,
+    FORWARD_PAYMENTS, MIN_PAYOUT_AMOUNT
 )
 import models
 
@@ -996,9 +997,27 @@ electron_cash = ElectronCashClient()
 # ElectronCash 인증 설정
 setup_electron_cash_auth()
 
-# ElectronCash 모듈 초기화
-if EC_AVAILABLE:
-    init_electron_cash()
+# ElectronCash 모듈 초기화 (백그라운드에서 실행하여 gunicorn 워커 타임아웃 방지)
+import threading
 
-# 연결 테스트
-debug_electron_cash_connection(electron_cash)
+_ec_initialized = False
+_ec_init_lock = threading.Lock()
+
+def _background_init():
+    """ElectronCash 초기화를 백그라운드 스레드에서 실행"""
+    global _ec_initialized
+    try:
+        if EC_AVAILABLE:
+            result = init_electron_cash()
+            if result:
+                _ec_initialized = True
+                debug_electron_cash_connection(electron_cash)
+            else:
+                logger.warning("ElectronCash 초기화 실패 — 백그라운드에서 재시도 예정")
+        else:
+            logger.info("ElectronCash 사용 불가 — 초기화 건너뜀")
+    except Exception as e:
+        logger.error(f"ElectronCash 백그라운드 초기화 오류: {e}")
+
+_init_thread = threading.Thread(target=_background_init, daemon=True)
+_init_thread.start()

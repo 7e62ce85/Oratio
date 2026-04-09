@@ -18,6 +18,7 @@ import requests
 
 from models import NormalizedPost
 from .base import BaseCollector
+from .html_utils import clean_html_to_text
 
 logger = logging.getLogger("content_importer.ilbe")
 
@@ -146,7 +147,7 @@ class IlbeCollector(BaseCollector):
             raw_title = link_match.group(2)
 
             # Clean title — strip HTML tags (comment count badges, etc.)
-            title = re.sub(r"<[^>]+>", "", raw_title).strip()
+            title = clean_html_to_text(raw_title, preserve_newlines=False)
             if not title:
                 continue
 

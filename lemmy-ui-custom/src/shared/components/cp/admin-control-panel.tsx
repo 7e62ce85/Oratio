@@ -10,7 +10,7 @@ import {
   CPReport,
   CPPermissions
 } from "../../utils/cp-moderation";
-import { getApiKey } from "../../utils/bch-payment";
+import { getApiKey, invalidateReferralBadgeCache } from "../../utils/bch-payment";
 import { Spinner, Icon } from "../common/icon";
 import { toast } from "../../toast";
 
@@ -37,10 +37,28 @@ interface CPAppeal {
   reported_content?: ReportedContent[];
 }
 
+interface ReferralLink {
+  link_id: string;
+  url: string;
+  domain: string;
+  submitted_by: string;
+  status: 'pending' | 'approved' | 'rejected';
+  verified: boolean;
+  submitted_at: number;
+  reject_reason: string | null;
+}
+
 interface AdminControlPanelState {
-  activeTab: 'reports' | 'users' | 'appeals';
+  activeTab: 'reports' | 'users' | 'appeals' | 'referrals';
   reports: CPReport[];
   appeals: CPAppeal[];
+  referralLinks: ReferralLink[];
+  referralFilter: 'pending' | 'approved' | 'rejected' | 'all';
+  referralTotal: number;
+  loadingReferrals: boolean;
+  rejectingLinkId: string | null;
+  rejectReason: string;
+  verifyingLinkId: string | null;
   loading: boolean;
   loadingAppeals: boolean;
   userSearchQuery: string;
@@ -53,6 +71,13 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
     activeTab: 'reports',
     reports: [],
     appeals: [],
+    referralLinks: [],
+    referralFilter: 'pending',
+    referralTotal: 0,
+    loadingReferrals: false,
+    rejectingLinkId: null,
+    rejectReason: '',
+    verifyingLinkId: null,
     loading: false,
     loadingAppeals: false,
     userSearchQuery: '',
@@ -81,6 +106,7 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
     // Also pre-load appeals so we can show a count preview in the tabs
     // (non-blocking - don't await to avoid delaying page render)
     this.loadAppeals();
+    this.loadReferrals();
   }
 
   async loadReports() {
@@ -543,6 +569,286 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
     this.setState({ actionInProgress: false });
   }
 
+  // ==================== Referral Methods ====================
+
+  async loadReferrals() {
+    this.setState({ loadingReferrals: true });
+    try {
+      const filter = this.state.referralFilter === 'all' ? '' : `?status=${this.state.referralFilter}`;
+      const response = await fetch(`/payments/api/referral/list${filter}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': getApiKey()
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.setState({
+          referralLinks: data.links || [],
+          referralTotal: data.total || 0,
+          loadingReferrals: false
+        });
+      } else {
+        toast("Failed to load referral links", "danger");
+        this.setState({ referralLinks: [], loadingReferrals: false });
+      }
+    } catch (error) {
+      console.error('Failed to load referrals:', error);
+      toast("Error loading referrals", "danger");
+      this.setState({ referralLinks: [], loadingReferrals: false });
+    }
+  }
+
+  async handleApproveReferral(linkId: string) {
+    this.setState({ actionInProgress: true });
+    try {
+      const response = await fetch(`/payments/api/referral/approve/${linkId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': getApiKey()
+        }
+      });
+
+      if (response.ok) {
+        toast("Referral approved ✅", "success");
+        await this.loadReferrals();
+      } else {
+        const error = await response.json();
+        toast(error.error || "Failed to approve referral", "danger");
+      }
+    } catch (error) {
+      console.error('Failed to approve referral:', error);
+      toast("Error approving referral", "danger");
+    }
+    this.setState({ actionInProgress: false });
+  }
+
+  async handleRejectReferral(linkId: string) {
+    const reason = this.state.rejectReason.trim();
+    this.setState({ actionInProgress: true });
+    try {
+      const response = await fetch(`/payments/api/referral/reject/${linkId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': getApiKey()
+        },
+        body: JSON.stringify({ reason })
+      });
+
+      if (response.ok) {
+        // Invalidate the submitter's referral badge cache so badge disappears immediately
+        const rejectedLink = this.state.referralLinks.find(l => l.link_id === linkId);
+        if (rejectedLink) {
+          invalidateReferralBadgeCache(rejectedLink.submitted_by);
+        }
+        toast("Referral rejected", "success");
+        this.setState({ rejectingLinkId: null, rejectReason: '' });
+        await this.loadReferrals();
+      } else {
+        const error = await response.json();
+        toast(error.error || "Failed to reject referral", "danger");
+      }
+    } catch (error) {
+      console.error('Failed to reject referral:', error);
+      toast("Error rejecting referral", "danger");
+    }
+    this.setState({ actionInProgress: false });
+  }
+
+  async handleVerifyReferral(linkId: string) {
+    this.setState({ actionInProgress: true, verifyingLinkId: linkId });
+    try {
+      const response = await fetch(`/payments/api/referral/verify/${linkId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': getApiKey()
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        if (data.auto_approved) {
+          toast("✅ Backlink found — auto-approved + membership granted!", "success");
+        } else {
+          toast("⚠️ Backlink NOT found — still pending", "warning");
+        }
+        await this.loadReferrals();
+      } else {
+        toast(data.error || "Verification failed", "danger");
+      }
+    } catch (error) {
+      console.error('Failed to verify referral:', error);
+      toast("Error verifying referral", "danger");
+    }
+    this.setState({ actionInProgress: false, verifyingLinkId: null });
+  }
+
+  renderReferralsTab() {
+    const { referralLinks, loadingReferrals, referralFilter, referralTotal, actionInProgress, rejectingLinkId, rejectReason, verifyingLinkId } = this.state;
+
+    return (
+      <div>
+        {/* Filter buttons */}
+        <div className="btn-group mb-3">
+          {(['pending', 'approved', 'rejected', 'all'] as const).map(f => (
+            <button
+              key={f}
+              className={`btn btn-sm ${referralFilter === f ? 'btn-primary' : 'btn-outline-primary'}`}
+              onClick={() => this.setState({ referralFilter: f }, () => this.loadReferrals())}
+            >
+              {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-muted small mb-3">
+          Total: {referralTotal} link(s) — Showing: {referralLinks.length}
+        </p>
+
+        {loadingReferrals ? (
+          <div className="text-center p-5">
+            <Spinner large />
+          </div>
+        ) : referralLinks.length === 0 ? (
+          <div className="alert alert-info">
+            <Icon icon="info" classes="me-2" />
+            No {referralFilter === 'all' ? '' : referralFilter + ' '}referral links found.
+          </div>
+        ) : (
+          <div className="table-responsive">
+            <table className="table table-striped table-hover">
+              <thead className="table-dark">
+                <tr>
+                  <th>Submitted By</th>
+                  <th>URL</th>
+                  <th>Domain</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {referralLinks.map(link => (
+                  <tr key={link.link_id}>
+                    <td>
+                      <a href={`/u/${link.submitted_by}`} target="_blank" rel="noopener noreferrer">
+                        {link.submitted_by}
+                      </a>
+                    </td>
+                    <td style={{ maxWidth: '300px', wordBreak: 'break-all' }}>
+                      <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-decoration-none">
+                        {link.url.length > 60 ? link.url.substring(0, 60) + '...' : link.url}
+                        <Icon icon="external-link" classes="ms-1" />
+                      </a>
+                    </td>
+                    <td><span className="badge bg-secondary">{link.domain}</span></td>
+                    <td>
+                      <span className={`badge ${
+                        link.status === 'approved' ? 'bg-success' :
+                        link.status === 'rejected' ? 'bg-danger' :
+                        'bg-warning text-dark'
+                      }`}>
+                        {link.status}
+                      </span>
+                      {link.reject_reason && (
+                        <div className="text-muted small mt-1" title={link.reject_reason}>
+                          Reason: {link.reject_reason.length > 30 ? link.reject_reason.substring(0, 30) + '...' : link.reject_reason}
+                        </div>
+                      )}
+                    </td>
+                    <td className="small">
+                      {new Date(link.submitted_at * 1000).toLocaleString()}
+                    </td>
+                    <td>
+                      {/* Verify button — available for pending and approved */}
+                      {(link.status === 'pending' || link.status === 'approved') && (
+                        <button
+                          className={`btn btn-sm ${link.status === 'pending' ? 'btn-info' : 'btn-outline-info'} me-1`}
+                          onClick={() => this.handleVerifyReferral(link.link_id)}
+                          disabled={actionInProgress}
+                          title="Verify backlink (crawl the URL and check for oratio.space link)"
+                        >
+                          {verifyingLinkId === link.link_id ? (
+                            <Spinner />
+                          ) : (
+                            <Icon icon="search" />
+                          )}
+                          {' '}Verify
+                        </button>
+                      )}
+                      {link.status === 'pending' && (
+                        <>
+                          <button
+                            className="btn btn-sm btn-success me-1"
+                            onClick={() => this.handleApproveReferral(link.link_id)}
+                            disabled={actionInProgress}
+                            title="Approve this referral link"
+                          >
+                            <Icon icon="check" />
+                          </button>
+                          {rejectingLinkId === link.link_id ? (
+                            <div className="d-inline-flex align-items-center mt-1">
+                              <input
+                                type="text"
+                                className="form-control form-control-sm me-1"
+                                placeholder="Reject reason (optional)"
+                                value={rejectReason}
+                                style={{ width: '180px' }}
+                                onInput={(e: any) => this.setState({ rejectReason: e.target.value })}
+                              />
+                              <button
+                                className="btn btn-sm btn-danger me-1"
+                                onClick={() => this.handleRejectReferral(link.link_id)}
+                                disabled={actionInProgress}
+                              >
+                                Reject
+                              </button>
+                              <button
+                                className="btn btn-sm btn-outline-secondary"
+                                onClick={() => this.setState({ rejectingLinkId: null, rejectReason: '' })}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => this.setState({ rejectingLinkId: link.link_id, rejectReason: '' })}
+                              disabled={actionInProgress}
+                              title="Reject this referral link"
+                            >
+                              <Icon icon="x" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {link.status === 'approved' && (
+                        <span className="text-success small">
+                          <Icon icon="check-circle" classes="me-1" /> Approved
+                          {link.verified && <span className="badge bg-success ms-1">✓ Verified</span>}
+                        </span>
+                      )}
+                      {link.status === 'rejected' && (
+                        <span className="text-danger small">
+                          <Icon icon="x-circle" classes="me-1" /> Rejected
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   render() {
     const { activeTab } = this.state;
 
@@ -552,7 +858,7 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
           <div className="col-12">
             <h2 className="mb-4">
               <Icon icon="shield-check" classes="me-2" />
-              Admin CP Control Panel
+              Admin Control Panel
             </h2>
 
             <ul className="nav nav-tabs mb-4">
@@ -564,7 +870,7 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
                   })}
                 >
                   <Icon icon="flag" classes="me-1" />
-                  Pending Reports ({this.state.reports.length})
+                  Pending CP Reports ({this.state.reports.length})
                 </button>
               </li>
               <li className="nav-item">
@@ -585,7 +891,18 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
                   })}
                 >
                   <Icon icon="file-text" classes="me-1" />
-                  Appeals ({this.state.appeals.length})
+                  CP Appeals ({this.state.appeals.length})
+                </button>
+              </li>
+              <li className="nav-item">
+                <button
+                  className={`nav-link ${activeTab === 'referrals' ? 'active' : ''}`}
+                  onClick={() => this.setState({ activeTab: 'referrals' }, () => {
+                    if (activeTab !== 'referrals') this.loadReferrals();
+                  })}
+                >
+                  <Icon icon="link" classes="me-1" />
+                  Referrals ({this.state.referralLinks.length})
                 </button>
               </li>
             </ul>
@@ -593,6 +910,7 @@ export class AdminControlPanel extends Component<{}, AdminControlPanelState> {
             {activeTab === 'reports' && this.renderReportsTab()}
             {activeTab === 'users' && this.renderUsersTab()}
             {activeTab === 'appeals' && this.renderAppealsTab()}
+            {activeTab === 'referrals' && this.renderReferralsTab()}
           </div>
         </div>
       </div>

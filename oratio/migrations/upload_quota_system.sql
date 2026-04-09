@@ -181,7 +181,7 @@ FROM upload_transactions ut
 ORDER BY ut.created_at DESC
 LIMIT 100;
 
--- Comments
-COMMENT ON TABLE user_upload_quotas IS 'Tracks annual upload quotas for each user';
-COMMENT ON TABLE upload_transactions IS 'Records all file upload transactions with pricing';
-COMMENT ON TABLE upload_pricing_config IS 'Centralized upload pricing configuration';
+-- Comments (SQLite does not support COMMENT ON TABLE)
+-- user_upload_quotas: Tracks annual upload quotas for each user
+-- upload_transactions: Records all file upload transactions with pricing
+-- upload_pricing_config: Centralized upload pricing configuration

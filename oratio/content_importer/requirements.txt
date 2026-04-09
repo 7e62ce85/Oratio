@@ -13,5 +13,8 @@ feedparser==6.0.11
 beautifulsoup4==4.12.3
 lxml==5.1.0
 
+# Cloudflare bypass (for Rumble, etc.)
+cloudscraper==1.2.71
+
 # Scheduling (lightweight — we use threading, not celery)
 # (no extra dep needed)

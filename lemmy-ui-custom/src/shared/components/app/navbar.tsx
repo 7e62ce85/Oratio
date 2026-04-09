@@ -15,7 +15,7 @@ import { toast } from "../../toast";
 import { Icon } from "../common/icon";
 import { PictrsImage } from "../common/pictrs-image";
 import { UserBadges } from "../common/user-badges";
-import { checkUserHasGoldBadgeSync, updateCreditCache } from "../../utils/bch-payment";
+import { checkUserHasGoldBadgeSync, updateCreditCache, checkReferralBadgeSync, REFERRAL_CACHE_UPDATE_EVENT } from "../../utils/bch-payment";
 import { getPendingReports } from "../../utils/cp-moderation";
 import { Subscription } from "rxjs";
 import { tippyMixin } from "../mixins/tippy-mixin";
@@ -129,28 +129,25 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
       
       // Listen for credit cache updates to refresh badge display
       this.creditUpdateListener = () => {
-        console.log('[Navbar] Credit cache updated event received, forcing re-render');
         this.forceUpdate();
       };
       
       if (typeof window !== 'undefined') {
         window.addEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+        window.addEventListener(REFERRAL_CACHE_UPDATE_EVENT, this.creditUpdateListener);
         
         // Force re-render after hydration to pick up localStorage cache
         // This fixes the badge not showing on initial page load
         // Use multiple timeouts to catch different loading scenarios
         setTimeout(() => {
-          console.log('[Navbar] First forceUpdate (100ms)');
           this.forceUpdate();
         }, 100);
         
         setTimeout(() => {
-          console.log('[Navbar] Second forceUpdate (500ms)');
           this.forceUpdate();
         }, 500);
         
         setTimeout(() => {
-          console.log('[Navbar] Third forceUpdate (1500ms)');
           this.forceUpdate();
         }, 1500);
       }
@@ -304,6 +301,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
       let moderatorReportCount = 0;
       let adminReportCount = 0;
       let adminAppealCount = 0;
+      let adminPendingReferralCount = 0;
 
       // Fetch all counts in parallel, each writing to its own variable
       const promises: Promise<void>[] = [];
@@ -333,6 +331,17 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
             .then(data => { adminAppealCount = (data.appeals || []).length; })
             .catch(() => { /* ignore */ })
         );
+
+        promises.push(
+          fetch('/payments/api/referral/list?status=pending&limit=200', {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': getApiKey()
+            }
+          }).then(res => res.ok ? res.json() : { total: 0 })
+            .then(data => { adminPendingReferralCount = data.total || 0; })
+            .catch(() => { /* ignore */ })
+        );
       }
 
       // Wait for ALL fetches to complete before updating state once
@@ -340,7 +349,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
 
       this.setState({
         unreadCPModeratorCount: moderatorReportCount,
-        unreadCPAdminCount: adminReportCount + adminAppealCount
+        unreadCPAdminCount: adminReportCount + adminAppealCount + adminPendingReferralCount
       });
     } catch (error) {
       console.error("[CP] Error fetching CP notifications:", error);
@@ -377,6 +386,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
     // Remove credit update listener
     if (typeof window !== 'undefined' && this.creditUpdateListener) {
       window.removeEventListener('bch-credit-cache-updated', this.creditUpdateListener);
+      window.removeEventListener(REFERRAL_CACHE_UPDATE_EVENT, this.creditUpdateListener);
     }
   }
 
@@ -792,10 +802,12 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
                           {person.display_name ?? person.name}
                           {(() => {
                             const isPremium = checkUserHasGoldBadgeSync(person);
+                            const isReferrer = checkReferralBadgeSync(person.name);
                             return (
                               <UserBadges
                                 classNames="ms-1"
                                 isPremium={isPremium}
+                                isReferrer={isReferrer}
                               />
                             );
                           })()}

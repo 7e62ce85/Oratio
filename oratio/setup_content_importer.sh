@@ -80,26 +80,64 @@ else
     fi
 fi
 
-# Create default communities
+# ── Auto-detect communities from config.py (enabled sources only) ──
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_PY="$SCRIPT_DIR/content_importer/config.py"
+
+if [ ! -f "$CONFIG_PY" ]; then
+    echo "❌ config.py not found at $CONFIG_PY"
+    exit 1
+fi
+
 echo ""
-echo "📁 Creating default communities..."
-for COMMUNITY in trending news technology science reddit bbc arstechnica sciencedaily reuters youtube fourchan mgtowtv bitchute; do
-    RESULT=$(curl -s -X POST "$LEMMY_URL/api/v3/community" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $JWT" \
-        -d "{\"name\": \"$COMMUNITY\", \"title\": \"$(echo $COMMUNITY | sed 's/.*/\u&/')\"}")
-    
-    if echo "$RESULT" | grep -q "community_view"; then
-        echo "  ✅ Created: $COMMUNITY"
-    elif echo "$RESULT" | grep -qi "already"; then
-        echo "  ℹ️  Already exists: $COMMUNITY"
-    else
-        echo "  ⚠️  $COMMUNITY: $(echo $RESULT | head -c 100)"
-    fi
-done
+echo "📁 Reading enabled communities from config.py..."
+COMMUNITIES=$(python3 -c "
+import sys, os, ast, json
+
+# Parse DEFAULT_SOURCES from config.py without executing the whole file
+with open('$CONFIG_PY') as f:
+    source = f.read()
+
+tree = ast.parse(source)
+for node in ast.walk(tree):
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == 'DEFAULT_SOURCES':
+                sources = ast.literal_eval(node.value)
+                seen = set()
+                for s in sources:
+                    if s.get('enabled') and s.get('community'):
+                        c = s['community']
+                        if c not in seen:
+                            seen.add(c)
+                            print(c)
+")
+
+if [ -z "$COMMUNITIES" ]; then
+    echo "⚠️  No enabled communities found in config.py, skipping"
+else
+    echo "   Found: $(echo $COMMUNITIES | tr '\n' ' ')"
+    echo ""
+    echo "📁 Creating communities..."
+    for COMMUNITY in $COMMUNITIES; do
+        RESULT=$(curl -s -X POST "$LEMMY_URL/api/v3/community" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $JWT" \
+            -d "{\"name\": \"$COMMUNITY\", \"title\": \"$(echo $COMMUNITY | sed 's/.*/\u&/')\"}")
+
+        if echo "$RESULT" | grep -q "community_view"; then
+            echo "  ✅ Created: $COMMUNITY"
+        elif echo "$RESULT" | grep -qi "already"; then
+            echo "  ℹ️  Already exists: $COMMUNITY"
+        else
+            echo "  ⚠️  $COMMUNITY: $(echo $RESULT | head -c 100)"
+        fi
+    done
+fi
 
 echo ""
 echo "🎉 Setup complete!"
 echo "   Bot account: $BOT_USER"
+echo "   Communities: auto-detected from config.py (enabled sources)"
 echo "   Make sure LEMMY_BOT_PASSWORD is set in .env"
 echo "   Then: docker compose build content-importer && docker compose up -d content-importer"

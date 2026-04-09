@@ -67,6 +67,10 @@ app.register_blueprint(upload_bp)
 from routes.ads import ads_bp
 app.register_blueprint(ads_bp)
 
+# Link referral system blueprint
+from routes.referral import referral_bp
+app.register_blueprint(referral_bp)
+
 # 정적 파일 제공
 @app.route('/static/<path:path>')
 def serve_static(path):

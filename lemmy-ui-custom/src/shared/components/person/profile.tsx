@@ -93,7 +93,7 @@ import { Icon, Spinner } from "../common/icon";
 import { MomentTime } from "../common/moment-time";
 import { SortSelect } from "../common/sort-select";
 import { UserBadges } from "../common/user-badges";
-import { checkUserHasGoldBadgeSync } from "../../utils/bch-payment";
+import { checkUserHasGoldBadgeSync, checkReferralBadgeSync } from "../../utils/bch-payment";
 import {
   checkUserCPPermissions,
   adminBanUser,
@@ -727,6 +727,7 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
                         isAdmin={pv.is_admin}
                         isBot={pv.person.bot_account}
                         isPremium={checkUserHasGoldBadgeSync(pv.person)}
+                        isReferrer={checkReferralBadgeSync(pv.person.name)}
                       />
                     </li>
                   </ul>

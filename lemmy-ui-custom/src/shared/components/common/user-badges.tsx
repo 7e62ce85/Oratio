@@ -11,6 +11,7 @@ interface UserBadgesProps {
   isAdmin?: boolean;
   isBot?: boolean;
   isPremium?: boolean;
+  isReferrer?: boolean;
   classNames?: string;
 }
 
@@ -45,7 +46,8 @@ export class UserBadges extends Component<UserBadgesProps> {
         this.props.isMod ||
         this.props.isAdmin ||
         this.props.isBot ||
-        this.props.isPremium) && (
+        this.props.isPremium ||
+        this.props.isReferrer) && (
         <span
           className={classNames(
             "row d-inline-flex gx-1",
@@ -58,6 +60,16 @@ export class UserBadges extends Component<UserBadgesProps> {
                 label: "🥇",
                 tooltip: "Gold Member - Annual Membership Active",
                 classes: "text-warning border border-warning",
+                shrink: false,
+              })}
+            </span>
+          )}
+          {this.props.isReferrer && !this.props.isPremium && (
+            <span className="col">
+              {getRoleLabelPill({
+                label: "🔗",
+                tooltip: "Referrer - Shared a link to Oratio",
+                classes: "text-success border border-success",
                 shrink: false,
               })}
             </span>

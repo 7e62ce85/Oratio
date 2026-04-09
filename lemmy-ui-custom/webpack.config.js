@@ -52,9 +52,12 @@ dockerEnvVars.forEach(key => {
   }
 });
 
-// process.env.COMMIT_HASH가 없으면 'latest'로 기본값 설정
-if (!envVars["process.env.COMMIT_HASH"]) {
-  envVars["process.env.COMMIT_HASH"] = JSON.stringify("latest");
+// process.env.COMMIT_HASH가 없거나 'latest'이면 빌드 시점 타임스탬프로 대체 (캐시 버스팅)
+if (!envVars["process.env.COMMIT_HASH"] ||
+    JSON.parse(envVars["process.env.COMMIT_HASH"]) === "latest" ||
+    (process.env.COMMIT_HASH || "latest") === "latest") {
+  const buildHash = `build-${Date.now()}`;
+  envVars["process.env.COMMIT_HASH"] = JSON.stringify(buildHash);
 }
 
 // BCH 관련 환경변수 기본값 설정 (실제 도메인으로 업데이트)
@@ -145,7 +148,7 @@ module.exports = (env, argv) => {
     plugins: [
       new webpack.DefinePlugin({
         ...envVars,
-        "process.env.COMMIT_HASH": envVars["process.env.COMMIT_HASH"] || JSON.stringify("latest"),
+        "process.env.COMMIT_HASH": envVars["process.env.COMMIT_HASH"],
         "process.env.NODE_ENV": `"${mode}"`
       }),
       new MiniCssExtractPlugin({
@@ -200,13 +203,19 @@ module.exports = (env, argv) => {
               urlPattern: ({
                 sameOrigin,
                 url: { pathname, host },
-                request: { method },
-              }) =>
-                (sameOrigin || host.includes("oratio.space")) &&
-                (!(
-                  pathname.includes("pictrs") || pathname.includes("static")
-                ) ||
-                  method === "POST"),
+                request: { method, destination },
+              }) => {
+                // HTML document 요청(페이지 네비게이션)은 SW가 가로채지 않음
+                // → no-response 에러 방지 & 페이지 로딩 속도 개선
+                if (destination === "document") return false;
+
+                const isOurOrigin =
+                  sameOrigin || host.includes("oratio.space");
+                const isMediaOrStatic =
+                  pathname.includes("pictrs") || pathname.includes("static");
+
+                return isOurOrigin && (!isMediaOrStatic || method === "POST");
+              },
               handler: "NetworkFirst",
               options: {
                 cacheName: "instance-cache",

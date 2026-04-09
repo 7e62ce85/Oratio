@@ -73,15 +73,13 @@ if (typeof window !== 'undefined') {
       
       console.log(`[BCH] Total restored to memory: ${creditCache.size} entries`);
       
-      // Notify all components that cache has been restored
+      // Notify all components that cache has been restored (single event, not per-user)
       // This ensures components re-render with cached badge data
       if (hasRestoredCache) {
         const notifyComponents = () => {
-          creditCache.forEach((value, userId) => {
-            window.dispatchEvent(new CustomEvent(CREDIT_CACHE_UPDATE_EVENT, { 
-              detail: { userId, credit: value.credit } 
-            }));
-          });
+          window.dispatchEvent(new CustomEvent(CREDIT_CACHE_UPDATE_EVENT, { 
+            detail: { type: 'cache-restored' } 
+          }));
         };
         
         // If document is already loaded, notify immediately
@@ -228,13 +226,15 @@ async function checkUserHasGoldBadgeInternal(person: Person): Promise<boolean> {
       
       // Cache the result
       const cacheValue = isActive ? 1.0 : 0.0;
+      const previousCached = creditCache.get(userId);
+      const valueChanged = !previousCached || previousCached.credit !== cacheValue;
       creditCache.set(userId, { credit: cacheValue, timestamp: now });
       
       // Save to localStorage
       saveCacheToStorage();
       
-      // Dispatch event to notify components
-      if (typeof window !== 'undefined') {
+      // Only dispatch event if value actually changed (prevents re-render loops)
+      if (valueChanged && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent(CREDIT_CACHE_UPDATE_EVENT, { 
           detail: { userId, credit: cacheValue, membership: data.membership } 
         }));
@@ -414,4 +414,209 @@ declare global {
       PAYMENT_URL: string;
     };
   }
+}
+
+// ==================== Link Referral Badge System ====================
+
+const referralBadgeCache = new Map<string, { hasBadge: boolean; timestamp: number }>();
+const REFERRAL_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const REFERRAL_CACHE_STORAGE_KEY = 'referral_badge_cache';
+export const REFERRAL_CACHE_UPDATE_EVENT = 'referral-badge-cache-updated';
+
+// Load referral cache from localStorage on initialization (same pattern as Gold badge)
+if (typeof window !== 'undefined') {
+  try {
+    const stored = localStorage.getItem(REFERRAL_CACHE_STORAGE_KEY);
+    if (stored) {
+      const data = JSON.parse(stored);
+      let hasRestoredCache = false;
+
+      Object.entries(data).forEach(([username, value]: [string, any]) => {
+        if (value && typeof value === 'object' && typeof value.hasBadge === 'boolean') {
+          // Restore ALL entries (even expired) to prevent badge flicker
+          referralBadgeCache.set(username, value);
+          if (value.hasBadge) hasRestoredCache = true;
+        }
+      });
+
+      if (hasRestoredCache) {
+        const notifyComponents = () => {
+          window.dispatchEvent(new CustomEvent(REFERRAL_CACHE_UPDATE_EVENT));
+        };
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+          requestAnimationFrame(() => requestAnimationFrame(notifyComponents));
+        } else {
+          window.addEventListener('DOMContentLoaded', notifyComponents);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[Referral] Error loading cache from localStorage:", error);
+  }
+}
+
+// Save referral cache to localStorage
+function saveReferralCacheToStorage() {
+  if (typeof window !== 'undefined') {
+    try {
+      const data: Record<string, any> = {};
+      referralBadgeCache.forEach((value, username) => {
+        data[username] = value;
+      });
+      localStorage.setItem(REFERRAL_CACHE_STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.error("[Referral] Error saving cache to localStorage:", error);
+    }
+  }
+}
+
+function getReferralAPIBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    return '/payments';
+  }
+  return 'http://bitcoincash-service:8081';
+}
+
+/**
+ * Check if user has a referral badge (async, with cache)
+ */
+export async function checkReferralBadge(username: string): Promise<boolean> {
+  if (!username) return false;
+
+  const cached = referralBadgeCache.get(username);
+  if (cached && (Date.now() - cached.timestamp) < REFERRAL_CACHE_DURATION) {
+    return cached.hasBadge;
+  }
+
+  try {
+    const baseUrl = getReferralAPIBaseUrl();
+    const response = await fetch(`${baseUrl}/api/referral/check/${username}`, {
+      headers: { 'X-API-Key': getApiKey() || "" }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const hasBadge = data.has_badge || false;
+      const previousCached = referralBadgeCache.get(username);
+      const valueChanged = !previousCached || previousCached.hasBadge !== hasBadge;
+      referralBadgeCache.set(username, { hasBadge, timestamp: Date.now() });
+      saveReferralCacheToStorage();
+
+      // Only notify components if value actually changed (prevents re-render loops)
+      if (valueChanged && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(REFERRAL_CACHE_UPDATE_EVENT));
+      }
+
+      return hasBadge;
+    }
+  } catch (err) {
+    console.error("[Referral] Badge check error:", err);
+  }
+
+  return cached?.hasBadge ?? false;
+}
+
+/**
+ * Sync version: returns cached value (including expired), triggers async refresh in background
+ * Key anti-flicker behavior: returns stale cache immediately so badge doesn't disappear
+ * BUT if server already confirmed badge was revoked (hasBadge=false in cache), respect that.
+ */
+export function checkReferralBadgeSync(username: string): boolean {
+  if (!username) return false;
+
+  const cached = referralBadgeCache.get(username);
+
+  // If cache exists and is still fresh, return it
+  if (cached && (Date.now() - cached.timestamp) < REFERRAL_CACHE_DURATION) {
+    return cached.hasBadge;
+  }
+
+  // Trigger async refresh in background
+  checkReferralBadge(username).catch(() => {});
+
+  // ANTI-FLICKER: Return expired cached value if it was TRUE
+  // If cache says false (badge was revoked), return false immediately — don't show stale badge
+  if (cached) {
+    return cached.hasBadge;
+  }
+
+  return false;
+}
+
+/**
+ * Force-invalidate the referral badge cache for a specific user.
+ * Call this after admin reject / revoke so the badge disappears immediately.
+ */
+export function invalidateReferralBadgeCache(username: string) {
+  referralBadgeCache.delete(username);
+  saveReferralCacheToStorage();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(REFERRAL_CACHE_UPDATE_EVENT));
+  }
+}
+
+/**
+ * Submit a referral link
+ */
+export async function submitReferralLink(username: string, url: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const baseUrl = getReferralAPIBaseUrl();
+    const response = await fetch(`${baseUrl}/api/referral/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': getApiKey() || ""
+      },
+      body: JSON.stringify({ username, url })
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      // Update cache immediately + persist to localStorage
+      referralBadgeCache.set(username, { hasBadge: true, timestamp: Date.now() });
+      saveReferralCacheToStorage();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(REFERRAL_CACHE_UPDATE_EVENT));
+      }
+      return { success: true, message: data.message || "Link submitted successfully!" };
+    } else {
+      return { success: false, message: data.error || "Submission failed" };
+    }
+  } catch (err) {
+    console.error("[Referral] Submit error:", err);
+    return { success: false, message: "Network error" };
+  }
+}
+
+/**
+ * Get referral status for a user
+ * Also syncs the referral badge cache with the server response
+ */
+export async function getReferralStatus(username: string): Promise<any> {
+  try {
+    const baseUrl = getReferralAPIBaseUrl();
+    const response = await fetch(`${baseUrl}/api/referral/status/${username}`, {
+      headers: { 'X-API-Key': getApiKey() || "" }
+    });
+    if (response.ok) {
+      const data = await response.json();
+
+      // Sync badge cache with authoritative server response
+      if (data && typeof data.has_badge === 'boolean') {
+        const prev = referralBadgeCache.get(username);
+        const changed = !prev || prev.hasBadge !== data.has_badge;
+        referralBadgeCache.set(username, { hasBadge: data.has_badge, timestamp: Date.now() });
+        saveReferralCacheToStorage();
+        if (changed && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent(REFERRAL_CACHE_UPDATE_EVENT));
+        }
+      }
+
+      return data;
+    }
+  } catch (err) {
+    console.error("[Referral] Status error:", err);
+  }
+  return null;
 }

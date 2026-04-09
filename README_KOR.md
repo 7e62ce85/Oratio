@@ -1,6 +1,6 @@
 # Oratio — Lemmy 포럼 + Bitcoin Cash 결제 플랫폼
 
-**Lemmy** 커뮤니티 포럼에 **Bitcoin Cash (BCH) 결제**, 콘텐츠 모더레이션, 멤버십 시스템, 광고 플랫폼, **자동 콘텐츠 임포트**를 통합한 프로젝트. Docker Compose 12개 서비스로 운영.
+**Lemmy** 커뮤니티 포럼에 **Bitcoin Cash (BCH) 결제**, 콘텐츠 모더레이션, 멤버십 시스템, 광고 플랫폼, **링크 레퍼럴 시스템**, **자동 콘텐츠 임포트**를 통합한 프로젝트. Docker Compose 11개 서비스로 운영.
 
 > **English version**: [README.md](README.md)
 
@@ -36,7 +36,7 @@
 | **email-service** | 자체 개발 | ✅ 100% 커스텀 | Python |
 | **content-importer** | 자체 개발 | ✅ 100% 커스텀 | Python/FastAPI |
 | **electron-cash** | Electron Cash 오픈소스 + 커스텀 Dockerfile | ⚠️ 래핑 | Python |
-| **nginx, postgres, pictrs, postfix, certbot** | 공식 이미지 | ❌ 설정만 | — |
+| **nginx, postgres, pictrs, certbot** | 공식 이미지 | ❌ 설정만 | — |
 
 ### 저장소 구조
 
@@ -54,7 +54,7 @@ Oratio/                              ← 레포 루트
 │   ├── bitcoincash_service/         ←   Flask 결제/모더레이션/멤버십/광고 API
 │   ├── pow_validator_service/       ←   PoW 봇 방지 서비스
 │   ├── email-service/               ←   Resend API 이메일 프록시
-│   ├── content_importer/            ←   자동 콘텐츠 임포트 봇 (8개 소스 + 댓글)
+│   ├── content_importer/            ←   자동 콘텐츠 임포트 봇 (15개 소스 + 댓글)
 │   ├── electron_cash/               ←   BCH 지갑 Docker 빌드
 │   ├── data/                        ←   영구 데이터 (지갑, certbot, 결제 DB)
 │   └── volumes/                     ←   Docker 볼륨 마운트 (postgres, pictrs)
@@ -70,7 +70,7 @@ Oratio/                              ← 레포 루트
 
 ## 시스템 아키텍처
 
-12개 Docker 서비스로 구성:
+11개 Docker 서비스로 구성:
 
 ```
                         ┌──────────────────────┐
@@ -106,11 +106,11 @@ Oratio/                              ← 레포 루트
 │   Port: 5432         │   │   Port: 8080         │
 └──────────────────────┘   └──────────────────────┘
 
-┌──────────────────────┐   ┌──────────────────────┐
-│   email-service      │   │   postfix            │
-│   Resend API 프록시   │   │   내부 SMTP          │
-│   Port: 1025, 8025   │   │   릴레이              │
-└──────────────────────┘   └──────────────────────┘
+┌──────────────────────┐
+│   email-service      │
+│   Resend API 프록시   │
+│   Port: 1025, 8025   │
+└──────────────────────┘
 ```
 
 ### 서비스 요약
@@ -123,12 +123,11 @@ Oratio/                              ← 레포 루트
 | 4 | **lemmy-ui** | BCH 통합 커스텀 프론트엔드 | 1234 |
 | 5 | **pictrs** | 이미지 호스팅 및 처리 | 8080 |
 | 6 | **postgres** | PostgreSQL 포럼 데이터 | 5432 |
-| 7 | **postfix** | 내부 메일 릴레이 | — |
-| 8 | **pow-validator** | PoW 봇 방지 (회원가입 + 게시글) | 5001 |
-| 9 | **bitcoincash-service** | 결제, 모더레이션, 멤버십, 광고 API | 8081 |
-| 10 | **email-service** | Resend API 프록시 (SMTP 포트 차단 우회) | 1025, 8025 |
-| 11 | **electron-cash** | BCH HD 지갑 + RPC 인터페이스 | 7777 |
-| 12 | **content-importer** | 8개 소스 자동 콘텐츠 임포트 + 댓글 가져오기 | 8085 |
+| 7 | **pow-validator** | PoW 봇 방지 (회원가입 + 게시글) | 5001 |
+| 8 | **bitcoincash-service** | 결제, 모더레이션, 멤버십, 레퍼럴, 광고 API | 8081 |
+| 9 | **email-service** | Resend API 이메일 프록시 (aiosmtpd) | 1025, 8025 |
+| 10 | **electron-cash** | BCH HD 지갑 + RPC 인터페이스 | 7777 |
+| 11 | **content-importer** | 15개 소스 자동 콘텐츠 임포트 + 댓글 가져오기 | 8085 |
 
 ### 요청 흐름
 1. **브라우저** → nginx (SSL) → lemmy-ui (프론트엔드)
@@ -137,7 +136,7 @@ Oratio/                              ← 레포 루트
 4. **콘텐츠 신고** → nginx `/api/cp/` → bitcoincash-service (CP 모더레이션)
 5. **멤버십 / 광고** → nginx `/api/membership/` 또는 `/api/ads/` → bitcoincash-service
 6. **이메일 인증** → lemmy → email-service (Resend API) → 사용자 수신함
-7. **콘텐츠 임포트** → content-importer (8개 소스) → AI 선별 → lemmy API → 게시물 + 인기 댓글
+7. **콘텐츠 임포트** → content-importer (15개 소스) → AI 선별 → lemmy API → 게시물 + 인기 댓글
 
 ---
 
@@ -262,13 +261,6 @@ chmod +x init-letsencrypt-simple.sh
 `.example` 버전을 복사한 뒤 본인 환경에 맞게 수정하세요:
 
 ```bash
-# Postfix SMTP 설정 스크립트 (선택 — 이메일 자체 호스팅 시에만 필요)
-cp setup_postfix_check.sh.example setup_postfix_check.sh
-nano setup_postfix_check.sh        # SERVER_IP, DOMAIN, MAIL_HOSTNAME 수정
-
-# Postfix DNS 가이드 (참고 문서)
-cp setup_postfix_dns_guide.md.example setup_postfix_dns_guide.md
-
 # SSL 설정 참고 문서
 cp ../docs/SSL_LETSENCRYPT_SETUP.md.example ../docs/SSL_LETSENCRYPT_SETUP.md
 ```
@@ -489,6 +481,17 @@ cd Oratio/oratio
 | POST | `/api/ads/credits/purchase` | 크레딧 구매 |
 | GET | `/api/ads/credits/balance/<username>` | 크레딧 잔액 |
 
+### 링크 레퍼럴 API (`/api/referral/`)
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/referral/submit` | 레퍼럴 링크 제출 |
+| GET | `/api/referral/list` | 레퍼럴 링크 목록 (관리자, 상태별 필터) |
+| POST | `/api/referral/approve/<link_id>` | 레퍼럴 링크 승인 (관리자) |
+| POST | `/api/referral/reject/<link_id>` | 레퍼럴 링크 거부 (관리자) |
+| POST | `/api/referral/verify/<link_id>` | 링크 수동 검증 (관리자) |
+| GET | `/api/referral/badge/<username>` | 유저 레퍼럴 배지 여부 |
+
 ### 정적 페이지
 
 | GET | `/` | 결제 서비스 메인 페이지 |
@@ -504,7 +507,7 @@ cd Oratio/oratio
 
 ### SQLite (결제 서비스 — `data/bitcoincash/payments.db`)
 
-13개 테이블, 첫 시작 시 자동 생성:
+13개 테이블 + 레퍼럴 3개, 첫 시작 시 자동 생성:
 
 | 테이블 | 용도 |
 |--------|------|
@@ -521,6 +524,9 @@ cd Oratio/oratio
 | `cp_notifications` | 모더레이션 알림 |
 | `cp_audit_log` | 모든 모더레이션 액션의 감사 추적 |
 | `moderator_cp_assignments` | 모더레이터↔커뮤니티 CP 심사 배정 |
+| `referral_links` | 제출된 레퍼럴 링크 (url, 도메인, 상태, 검증) |
+| `referral_awards` | 유저별 레퍼럴 배지/보상 기록 |
+| `referral_verification_log` | 주기적 링크 검증 감사 로그 |
 
 ---
 

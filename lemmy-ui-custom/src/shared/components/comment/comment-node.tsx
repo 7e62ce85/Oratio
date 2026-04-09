@@ -46,7 +46,7 @@ import { tippyMixin } from "../mixins/tippy-mixin";
 import { Icon, Spinner } from "../common/icon";
 import { MomentTime } from "../common/moment-time";
 import { UserBadges } from "../common/user-badges";
-import { checkUserHasGoldBadgeSync } from "../../utils/bch-payment";
+import { checkUserHasGoldBadgeSync, checkReferralBadgeSync } from "../../utils/bch-payment";
 import { VoteButtonsCompact } from "../common/vote-buttons";
 import { CommunityLink } from "../community/community-link";
 import { PersonListing } from "../person/person-listing";
@@ -246,6 +246,7 @@ export class CommentNode extends Component<CommentNodeProps, CommentNodeState> {
                 isAdmin={creator_is_admin}
                 isBot={cv.creator.bot_account}
                 isPremium={checkUserHasGoldBadgeSync(creator)}
+                isReferrer={checkReferralBadgeSync(creator.name)}
               />
 
               {this.props.showCommunity && (

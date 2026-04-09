@@ -24,7 +24,7 @@ import { fetchLimit } from "../../../config";
 import { PersonListing } from "../../person/person-listing";
 import { modalMixin } from "../../mixins/modal-mixin";
 import { UserBadges } from "../user-badges";
-import { checkUserHasGoldBadgeSync } from "../../../utils/bch-payment";
+import { checkUserHasGoldBadgeSync, checkReferralBadgeSync } from "../../../utils/bch-payment";
 import { isBrowser } from "@utils/browser";
 
 interface ViewVotesModalProps {
@@ -56,6 +56,7 @@ function voteViewTable(votes: VoteView[]) {
                   isDeleted={v.creator.deleted}
                   isBanned={v.creator.banned || v.creator_banned_from_community}
                   isPremium={checkUserHasGoldBadgeSync(v.creator)}
+                  isReferrer={checkReferralBadgeSync(v.creator.name)}
                 />
               </td>
               <td className="text-end">{scoreToIcon(v.score)}</td>

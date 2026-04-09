@@ -259,6 +259,61 @@ def init_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_mod_cp_person ON moderator_cp_assignments(person_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_mod_cp_can_review ON moderator_cp_assignments(can_review_cp)')
         
+        # ==================== Link Referral System Tables ====================
+        
+        # 제출된 레퍼럴 링크
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS referral_links (
+            id TEXT PRIMARY KEY,
+            url TEXT UNIQUE NOT NULL,
+            normalized_url TEXT UNIQUE,
+            domain TEXT NOT NULL,
+            submitted_by TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            reject_reason TEXT,
+            verified BOOLEAN DEFAULT FALSE,
+            last_verified_at INTEGER,
+            submitted_at INTEGER NOT NULL
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_referral_links_domain ON referral_links(domain)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_referral_links_submitted_by ON referral_links(submitted_by)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_referral_links_status ON referral_links(status)')
+        
+        # 레퍼럴 보상 기록
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS referral_awards (
+            id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            link_id TEXT NOT NULL,
+            award_type TEXT NOT NULL,
+            awarded_at INTEGER NOT NULL,
+            expires_at INTEGER,
+            revoked BOOLEAN DEFAULT FALSE,
+            revoke_reason TEXT,
+            FOREIGN KEY(link_id) REFERENCES referral_links(id)
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_referral_awards_username ON referral_awards(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_referral_awards_link ON referral_awards(link_id)')
+        
+        # 레퍼럴 검증 로그
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS referral_verification_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            link_id TEXT NOT NULL,
+            checked_at INTEGER NOT NULL,
+            http_status INTEGER,
+            link_found BOOLEAN,
+            notes TEXT,
+            FOREIGN KEY(link_id) REFERENCES referral_links(id)
+        )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_referral_vlog_link ON referral_verification_log(link_id)')
+        
         # 프라그마 설정 - 외래 키 활성화 및 저널 모드 WAL로 변경
         cursor.execute("PRAGMA foreign_keys = ON")
         cursor.execute("PRAGMA journal_mode = WAL")
@@ -274,6 +329,8 @@ def init_db():
 def get_db_connection():
     """데이터베이스 연결 생성"""
     conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 def save_address(address):

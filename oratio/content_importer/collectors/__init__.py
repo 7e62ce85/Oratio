@@ -6,6 +6,13 @@ from .youtube import YouTubeCollector
 from .fourchan import FourChanCollector
 from .mgtow import MGTOWCollector
 from .bitchute import BitchuteCollector
+from .upgoat import UpgoatCollector
+from .arstechnica import ArsTechnicaCollector
+from .rumble import RumbleCollector
+from .xcancel import XCancelCollector
+from .imgur import ImgurCollector
+from .instagram import InstagramCollector
+from .ninegag import NineGagCollector
 
 __all__ = [
     "BaseCollector",
@@ -16,4 +23,11 @@ __all__ = [
     "FourChanCollector",
     "MGTOWCollector",
     "BitchuteCollector",
+    "UpgoatCollector",
+    "ArsTechnicaCollector",
+    "RumbleCollector",
+    "XCancelCollector",
+    "ImgurCollector",
+    "InstagramCollector",
+    "NineGagCollector",
 ]

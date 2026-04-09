@@ -141,7 +141,7 @@ def get_blocked_post_creator_map():
         return _blocked_creator_cache['mapping']
     
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute('''
             SELECT DISTINCT content_id, creator_person_id FROM cp_reports
@@ -171,7 +171,7 @@ def get_blocked_post_ids():
         return _blocked_cache['post_ids']
     
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         # OPTIMIZED: Use DISTINCT to avoid duplicates from multiple reports
         cursor.execute('''
@@ -211,7 +211,7 @@ def get_mod_accessible_post_ids():
         return _mod_accessible_cache['post_ids']
     
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute('''
             SELECT DISTINCT content_id FROM cp_reports 

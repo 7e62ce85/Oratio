@@ -82,7 +82,7 @@ const html5EmbedConfig = {
     useImageSyntax: true, // Enables video/audio embed with ![]() syntax (default)
     attributes: {
       audio: 'controls preload="metadata"',
-      video: 'width="100%" max-height="100%" controls loop preload="metadata"',
+      video: 'width="100%" max-height="100%" controls loop muted autoplay playsinline preload="metadata"',
     },
   },
 };

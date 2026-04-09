@@ -1,6 +1,6 @@
 # Oratio — Lemmy Forum + Bitcoin Cash Payment Platform
 
-A **Lemmy** community forum with integrated **Bitcoin Cash (BCH) payments**, content moderation, membership system, advertisement platform, and **automated content importing**. Runs on Docker Compose with 12 services.
+A **Lemmy** community forum with integrated **Bitcoin Cash (BCH) payments**, content moderation, membership system, advertisement platform, **link referral system**, and **automated content importing**. Runs on Docker Compose with 11 services.
 
 > **한국어 버전**: [README_KOR.md](README_KOR.md)
 
@@ -36,7 +36,7 @@ This project is **not** a rewrite of Lemmy. It uses the official Lemmy backend a
 | **email-service** | Built from scratch | ✅ 100% custom | Python |
 | **content-importer** | Built from scratch | ✅ 100% custom | Python/FastAPI |
 | **electron-cash** | Electron Cash open-source + custom Dockerfile | ⚠️ Wrapped | Python |
-| **nginx, postgres, pictrs, postfix, certbot** | Official images | ❌ Config only | — |
+| **nginx, postgres, pictrs, certbot** | Official images | ❌ Config only | — |
 
 ### Repository Structure
 
@@ -54,7 +54,7 @@ Oratio/                              ← repo root
 │   ├── bitcoincash_service/         ←   Flask payment/moderation/membership/ads API
 │   ├── pow_validator_service/       ←   PoW bot prevention service
 │   ├── email-service/               ←   Resend API email proxy
-│   ├── content_importer/            ←   Auto content import bot (8 sources + comments)
+│   ├── content_importer/            ←   Auto content import bot (15 sources + comments)
 │   ├── electron_cash/               ←   BCH wallet Docker build
 │   ├── data/                        ←   Persistent data (wallet, certbot, payments DB)
 │   └── volumes/                     ←   Docker volume mounts (postgres, pictrs)
@@ -70,7 +70,7 @@ Oratio/                              ← repo root
 
 ## System Architecture
 
-12 interconnected Docker services:
+11 interconnected Docker services:
 
 ```
                         ┌──────────────────────┐
@@ -106,11 +106,11 @@ Oratio/                              ← repo root
 │   Port: 5432         │   │   Port: 8080         │
 └──────────────────────┘   └──────────────────────┘
 
-┌──────────────────────┐   ┌──────────────────────┐
-│   email-service      │   │   postfix            │
-│   Resend API proxy   │   │   Internal SMTP      │
-│   Port: 1025, 8025   │   │   relay              │
-└──────────────────────┘   └──────────────────────┘
+┌──────────────────────┐
+│   email-service      │
+│   Resend API proxy   │
+│   Port: 1025, 8025   │
+└──────────────────────┘
 ```
 
 ### Service Summary
@@ -123,12 +123,11 @@ Oratio/                              ← repo root
 | 4 | **lemmy-ui** | Custom frontend with BCH integration | 1234 |
 | 5 | **pictrs** | Image hosting & processing | 8080 |
 | 6 | **postgres** | PostgreSQL for forum data | 5432 |
-| 7 | **postfix** | Internal mail relay | — |
-| 8 | **pow-validator** | PoW bot prevention (registration + posts) | 5001 |
-| 9 | **bitcoincash-service** | Payment, moderation, membership, ads API | 8081 |
-| 10 | **email-service** | Resend API proxy (SMTP port-block workaround) | 1025, 8025 |
-| 11 | **electron-cash** | BCH HD wallet with RPC interface | 7777 |
-| 12 | **content-importer** | Auto content import from 8 sources + comment importing | 8085 |
+| 7 | **pow-validator** | PoW bot prevention (registration + posts) | 5001 |
+| 8 | **bitcoincash-service** | Payment, moderation, membership, referral, ads API | 8081 |
+| 9 | **email-service** | Resend API email proxy (aiosmtpd) | 1025, 8025 |
+| 10 | **electron-cash** | BCH HD wallet with RPC interface | 7777 |
+| 11 | **content-importer** | Auto content import from 15 sources + comment importing | 8085 |
 
 ### Request Flow
 1. **Browser** → nginx (SSL) → lemmy-ui (frontend)
@@ -137,7 +136,7 @@ Oratio/                              ← repo root
 4. **Content report** → nginx `/api/cp/` → bitcoincash-service (CP moderation)
 5. **Membership / Ads** → nginx `/api/membership/` or `/api/ads/` → bitcoincash-service
 6. **Email verification** → lemmy → email-service (Resend API) → user inbox
-7. **Content import** → content-importer (8 sources) → AI selection → lemmy API → post + comments
+7. **Content import** → content-importer (15 sources) → AI selection → lemmy API → post + comments
 
 ---
 
@@ -262,13 +261,6 @@ Some files contain server-specific values (IP addresses, domain names) and are *
 Copy the `.example` version and fill in your own values:
 
 ```bash
-# Postfix SMTP setup script (optional — only if self-hosting email)
-cp setup_postfix_check.sh.example setup_postfix_check.sh
-nano setup_postfix_check.sh        # set SERVER_IP, DOMAIN, MAIL_HOSTNAME
-
-# Postfix DNS guide (reference doc)
-cp setup_postfix_dns_guide.md.example setup_postfix_dns_guide.md
-
 # SSL setup reference doc
 cp ../docs/SSL_LETSENCRYPT_SETUP.md.example ../docs/SSL_LETSENCRYPT_SETUP.md
 ```
@@ -489,6 +481,17 @@ The payment service (`bitcoincash-service`, port 8081) exposes the following end
 | POST | `/api/ads/credits/purchase` | Purchase credits |
 | GET | `/api/ads/credits/balance/<username>` | Credit balance |
 
+### Link Referral API (`/api/referral/`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/referral/submit` | Submit a referral link |
+| GET | `/api/referral/list` | List referral links (admin, filterable by status) |
+| POST | `/api/referral/approve/<link_id>` | Approve referral link (admin) |
+| POST | `/api/referral/reject/<link_id>` | Reject referral link (admin) |
+| POST | `/api/referral/verify/<link_id>` | Manually verify link (admin) |
+| GET | `/api/referral/badge/<username>` | Check if user has referrer badge |
+
 ### Static Pages
 
 | GET | `/` | Payment service main page |
@@ -504,7 +507,7 @@ Standard Lemmy schema: users, posts, comments, communities, etc. **Not modified.
 
 ### SQLite (Payment Service — `data/bitcoincash/payments.db`)
 
-13 tables, all auto-created on first startup:
+13 tables + 3 referral tables, all auto-created on first startup:
 
 | Table | Purpose |
 |-------|---------|
@@ -521,6 +524,9 @@ Standard Lemmy schema: users, posts, comments, communities, etc. **Not modified.
 | `cp_notifications` | Moderation notifications |
 | `cp_audit_log` | Audit trail for all moderation actions |
 | `moderator_cp_assignments` | Moderator-to-community CP review assignments |
+| `referral_links` | Submitted referral links (url, domain, status, verification) |
+| `referral_awards` | Referral badge/reward records per user |
+| `referral_verification_log` | Periodic link verification audit trail |
 
 ---
 

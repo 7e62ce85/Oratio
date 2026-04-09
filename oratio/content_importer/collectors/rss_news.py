@@ -16,6 +16,7 @@ import requests
 from models import NormalizedPost
 
 from .base import BaseCollector
+from .html_utils import clean_html_to_text
 
 logger = logging.getLogger("content_importer.rss")
 
@@ -55,10 +56,8 @@ class RSSCollector(BaseCollector):
                 body = entry.summary
             elif hasattr(entry, "content"):
                 body = entry.content[0].get("value", "") if entry.content else ""
-            # Strip HTML tags (simple)
-            import re
-
-            body = re.sub(r"<[^>]+>", "", body).strip()
+            # Strip HTML tags
+            body = clean_html_to_text(body)
             if len(body) > 2000:
                 body = body[:2000] + "…"
 

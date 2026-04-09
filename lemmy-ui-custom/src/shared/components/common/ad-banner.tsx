@@ -157,15 +157,27 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
   }
 
   componentDidMount() {
-    // Ensure we check credit first, then fetch ads only if ads should be shown.
-    // This prevents recording impressions for users who have BCH credits (ad-free members).
+    // PARALLEL STRATEGY: Start ad fetch immediately alongside membership check.
+    // This eliminates the sequential delay (membership API → ads API) that caused
+    // non-membership logged-in users to see "Loading..." indefinitely on first visit.
+    // If the user turns out to be a member, we simply hide the already-fetched ad.
+    // Impression confirmation only happens after ad is rendered, so members won't
+    // generate false impressions.
     (async () => {
       try {
+        // Start ad fetch immediately (don't wait for membership check)
+        const adFetchPromise = this.fetchDynamicAd();
+        
+        // Run membership check in parallel
         const shouldShowAd = await this.checkUserCredit();
-        // Use the returned value directly instead of state (setState is async)
-        if (shouldShowAd) {
-          await this.fetchDynamicAd();
+        
+        if (!shouldShowAd) {
+          // User is a member — hide ads (ad fetch may still be in progress, that's OK)
+          return;
         }
+        
+        // Wait for ad fetch to complete if it hasn't already
+        await adFetchPromise;
       } catch (e) {
         console.error('[AdBanner] componentDidMount error:', e);
       }
@@ -256,18 +268,23 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
     const userInfo = UserService.Instance.myUserInfo;
     
     if (!userInfo) {
-      // Retry once after a short delay in case login is still in progress
+      // Quick check: if no user info after 200ms, assume not logged in and show ads immediately.
+      // Previous 2000ms delay was the #1 bottleneck for ad loading speed.
+      // Risk is minimal: monthly-budget model (not impression-based billing),
+      // so a rare flash of ads for a member mid-login has zero cost impact.
+      // If user does log in later, componentDidUpdate will re-check and hide ads.
       return new Promise((resolve) => {
         setTimeout(() => {
           const retryUserInfo = UserService.Instance.myUserInfo;
           if (retryUserInfo && this.state.creditBalance === null) {
             this.checkUserCredit().then(resolve);
           } else {
-            // Show ads for non-logged-in users, set isLoadingAd=true to prevent flicker
-            this.setState({ showAd: true, isCheckingCredit: false, isLoadingAd: true });
+            // Show ads for non-logged-in users.
+            // Don't touch isLoadingAd here — fetchDynamicAd() manages it (runs in parallel).
+            this.setState({ showAd: true, isCheckingCredit: false });
             resolve(true); // Show ads for non-logged-in users
           }
-        }, 2000);
+        }, 200);
       });
     }
 
@@ -279,29 +296,37 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
       // NEW BEHAVIOR: Only hide ads for active membership users.
       // Use async version to ensure we wait for API response before deciding.
       // This prevents counting impressions for members whose cache hasn't loaded yet.
+      // Add timeout to prevent indefinite "Loading..." if membership API is slow.
       try {
-        const isMember = await checkUserHasGoldBadge(person);
+        const MEMBERSHIP_CHECK_TIMEOUT = 3000; // 3 seconds max
+        const isMember = await Promise.race([
+          checkUserHasGoldBadge(person),
+          new Promise<boolean>((_, reject) => 
+            setTimeout(() => reject(new Error('Membership check timeout')), MEMBERSHIP_CHECK_TIMEOUT)
+          )
+        ]);
 
         if (isMember) {
           // Member: hide ads
           this.setState({ showAd: false, creditBalance: 1.0, isCheckingCredit: false });
           return false; // Don't show ads for members
         } else {
-          // Not a member: always show ads. Set isLoadingAd=true to prevent flicker
-          // while fetchDynamicAd() is running (keeps showing "Loading..." instead of default ad)
-          this.setState({ showAd: true, creditBalance: 0.0, isCheckingCredit: false, isLoadingAd: true });
+          // Not a member: always show ads.
+          // Don't set isLoadingAd here — fetchDynamicAd() is already running in parallel
+          // and manages isLoadingAd itself.
+          this.setState({ showAd: true, creditBalance: 0.0, isCheckingCredit: false });
           return true; // Show ads for non-members
         }
       } catch (err) {
-        // If membership check fails for any reason, fall back to showing ads
-        console.error('[AdBanner] Membership check failed, falling back to show ads', err);
-        this.setState({ showAd: true, creditBalance: -1, isCheckingCredit: false, isLoadingAd: true });
+        // If membership check fails or times out, fall back to showing ads
+        console.error('[AdBanner] Membership check failed/timeout, falling back to show ads', err);
+        this.setState({ showAd: true, creditBalance: -1, isCheckingCredit: false });
         return true; // Show ads on error
       }
     } catch (error) {
       console.error("[AdBanner] Error checking user credits:", error);
       // 에러 발생시 기본적으로 광고 표시, creditBalance를 -1로 설정하여 재시도 방지
-      this.setState({ showAd: true, creditBalance: -1, isCheckingCredit: false, isLoadingAd: true });
+      this.setState({ showAd: true, creditBalance: -1, isCheckingCredit: false });
       return true; // Show ads on error
     }
   }
@@ -361,27 +386,30 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
     const hasUrlCommunity = !!urlCommunity;
     
     if (!hasUrlCommunity && !community && !globalCommunityInfo) {
-      // URL에서 community 패턴이 감지되면 (/c/) 더 오래 대기
-      const isCommunityPage = currentPageUrl.startsWith('/c/');
-      const waitTime = isCommunityPage ? 250 : 100;
+      // Home page ("/") doesn't need community info — all ads are show_on_all=true.
+      // Skip hydration wait entirely for home page to eliminate 100-300ms delay.
+      const isHomePage = currentPageUrl === '/' || currentPageUrl === '';
       
-      // 만약 클라이언트 hydration이 아직 끝나지 않았다면, hydration 이벤트를
-      // 최대 timeout 동안 기다려준다. post 페이지 같은 경우 hydration 후에
-      // 사이드바가 community 정보를 갖고 오기 때문에 이 대기가 필요하다.
-      const hydrationTimeout = Math.max(waitTime, 300);
-      if (!lemmyHydrated) {
-        await Promise.race([
-          new Promise<void>(resolve => {
-            const onHydrated = () => {
-              window.removeEventListener('lemmy-hydrated', onHydrated);
-              resolve();
-            };
-            window.addEventListener('lemmy-hydrated', onHydrated);
-          }),
-          new Promise<void>(resolve => setTimeout(resolve, hydrationTimeout))
-        ]);
-      } else {
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+      if (!isHomePage) {
+        // Only wait for community info on community/post pages where targeting matters
+        const isCommunityPage = currentPageUrl.startsWith('/c/');
+        const waitTime = isCommunityPage ? 250 : 100;
+        
+        const hydrationTimeout = Math.max(waitTime, 300);
+        if (!lemmyHydrated) {
+          await Promise.race([
+            new Promise<void>(resolve => {
+              const onHydrated = () => {
+                window.removeEventListener('lemmy-hydrated', onHydrated);
+                resolve();
+              };
+              window.addEventListener('lemmy-hydrated', onHydrated);
+            }),
+            new Promise<void>(resolve => setTimeout(resolve, hydrationTimeout))
+          ]);
+        } else {
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
       }
       // 대기 후 캐시가 생겼으면 사용
       if (sessionAdCache) {
@@ -658,8 +686,17 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
   render() {
     const { position, size = "medium", className = "" } = this.props;
 
-    // Check credit during initialization if user is logged in
-    if (this.state.isCheckingCredit || this.state.isLoadingAd) {
+    // Don't show ad if user has been confirmed as a member (showAd === false)
+    if (!this.state.showAd) {
+      return null;
+    }
+
+    // Show loading placeholder only when BOTH conditions are true:
+    // 1. We don't have ad data yet (still fetching from ads API)
+    // 2. We're still checking credit OR loading the ad
+    // This ensures that if the ad fetch completes before the membership check,
+    // we render the ad immediately instead of blocking on "Loading..."
+    if ((this.state.isCheckingCredit || this.state.isLoadingAd) && !this.state.adData) {
       return (
         <div className={`ad-container ad-${position} ad-${size} ${className}`}>
           <div style={{ padding: "10px", "text-align": "center", color: "#666" }}>
@@ -667,11 +704,6 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
           </div>
         </div>
       );
-    }
-
-    // Don't show ad if user has sufficient credits
-    if (!this.state.showAd) {
-      return null;
     }
 
     // Display advertisement

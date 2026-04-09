@@ -33,6 +33,10 @@ class NormalizedPost:
     # when post.url is the external article URL)
     source_permalink: Optional[str] = None
 
+    # Source-specific unique ID (e.g. Rumble numeric video ID, Reddit post ID)
+    # Used by collectors that need the ID for API calls (e.g. comment fetching)
+    source_id: Optional[str] = None
+
     # Top comments from the source (fetched after selection)
     top_comments: list["NormalizedComment"] = field(default_factory=list)
 
@@ -60,6 +64,7 @@ class NormalizedPost:
             "comment_count": self.comment_count,
             "tags": self.tags,
             "source_permalink": self.source_permalink,
+            "source_id": self.source_id,
             "ai_rank": self.ai_rank,
             "ai_reason": self.ai_reason,
             "fingerprint": self.fingerprint,

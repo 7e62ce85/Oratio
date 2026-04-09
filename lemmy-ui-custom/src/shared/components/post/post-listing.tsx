@@ -2,7 +2,7 @@ import { myAuth, setIsoData } from "@utils/app";
 import { canShare, share } from "@utils/browser";
 import { getExternalHost, getHttpBase } from "@utils/env";
 import { futureDaysToUnixTime, hostname } from "@utils/helpers";
-import { isImage, isVideo } from "@utils/media";
+import { isImage, isVideo, getVideoEmbedUrl } from "@utils/media";
 import { canAdmin, canMod } from "@utils/roles";
 import classNames from "classnames";
 import { Component, linkEvent } from "inferno";
@@ -43,7 +43,7 @@ import { Icon } from "../common/icon";
 import { MomentTime } from "../common/moment-time";
 import { PictrsImage } from "../common/pictrs-image";
 import { UserBadges } from "../common/user-badges";
-import { checkUserHasGoldBadgeSync, isPremiumCommunity, canAccessPremiumCommunitySync } from "../../utils/bch-payment";
+import { checkUserHasGoldBadgeSync, isPremiumCommunity, canAccessPremiumCommunitySync, checkReferralBadgeSync } from "../../utils/bch-payment";
 import { VoteButtons, VoteButtonsCompact } from "../common/vote-buttons";
 import { CommunityLink } from "../community/community-link";
 import { PersonListing } from "../person/person-listing";
@@ -274,14 +274,20 @@ export class PostListing extends Component<PostListingProps, PostListingState> {
           </video>
         </div>
       );
-    } else if (post.embed_video_url) {
+    }
+
+    // Embed URL from Lemmy backend, or client-side extraction for
+    // YouTube / Rumble / MGTOW.tv / Bitchute / Odysee
+    const embedUrl = post.embed_video_url || getVideoEmbedUrl(url);
+    if (embedUrl) {
       return (
         <div className="ratio ratio-16x9 mt-3">
           <iframe
             title="video embed"
-            src={post.embed_video_url}
-            sandbox="allow-same-origin allow-scripts"
+            src={embedUrl}
+            sandbox="allow-same-origin allow-scripts allow-popups"
             allowFullScreen={true}
+            loading="lazy"
           ></iframe>
         </div>
       );
@@ -371,8 +377,8 @@ export class PostListing extends Component<PostListingProps, PostListingState> {
       );
     }
 
-    // 비디오인 경우
-    if (isVideo(url) || post.embed_video_url) {
+    // 비디오인 경우 (직접 mp4 링크, Lemmy embed, 또는 YouTube/Rumble/MGTOW 등)
+    if (isVideo(url) || post.embed_video_url || getVideoEmbedUrl(url)) {
       return (
         <a
           className={classNames(
@@ -469,6 +475,7 @@ export class PostListing extends Component<PostListingProps, PostListingState> {
           isAdmin={pv.creator_is_admin}
           isBot={pv.creator.bot_account}
           isPremium={checkUserHasGoldBadgeSync(pv.creator)}
+          isReferrer={checkReferralBadgeSync(pv.creator.name)}
         />
         {this.props.showCommunity && (
           <>

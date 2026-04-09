@@ -54,7 +54,7 @@ def get_db():
     """Get database connection with proper settings"""
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
     return conn
@@ -1236,19 +1236,28 @@ def notify_admins(report_id: Optional[str], content_type: str, content_id: int, 
 # ==========================================
 
 def check_expired_bans():
-    """Check and auto-unban users whose ban period has expired"""
+    """Check and auto-unban users whose ban period has expired.
+    
+    IMPORTANT: DB connection is opened/closed separately from external HTTP calls
+    to prevent SQLite 'database is locked' errors. The Lemmy API unban call can
+    take seconds, and holding a write lock during that time blocks all other DB access.
+    """
     now = int(time.time())
     
+    # Phase 1: Read expired bans and update DB (fast, milliseconds)
     conn = get_db()
     cursor = conn.cursor()
     
-    # Find expired bans
     cursor.execute('''
         SELECT user_id, person_id, username FROM user_cp_permissions
         WHERE is_banned = ? AND ban_end <= ?
     ''', (True, now))
     
-    expired_users = cursor.fetchall()
+    expired_users = [dict(row) for row in cursor.fetchall()]
+    
+    if not expired_users:
+        conn.close()
+        return 0
     
     for user in expired_users:
         cursor.execute('''
@@ -1256,26 +1265,26 @@ def check_expired_bans():
             SET is_banned = ?, ban_start = NULL, ban_end = NULL, updated_at = ?
             WHERE user_id = ?
         ''', (False, now, user['user_id']))
-        
-        # Also unban in Lemmy PostgreSQL
+    
+    conn.commit()
+    conn.close()
+    # DB lock released here
+    
+    # Phase 2: External HTTP calls (slow, no DB lock held)
+    for user in expired_users:
         _unban_user_in_lemmy(
             user['person_id'], user['username'], 
             reason="Auto-unban: ban period expired"
         )
         
-        # Notify user
         create_notification(
             user['person_id'], user['username'], 'ban_expired',
             "Ban Lifted", "Your 3-month ban has expired. You can now post again."
         )
         
-        # Log audit
         log_audit('ban_expired', None, 'system', user['user_id'], user['person_id'], user['username'])
         
         logger.info(f"Auto-unbanned user {user['username']} (ID: {user['user_id']}) in SQLite + Lemmy")
-    
-    conn.commit()
-    conn.close()
     
     return len(expired_users)
 
@@ -1285,20 +1294,28 @@ def check_auto_delete_reports():
     
     After moderator confirms CP, report is escalated to admin with a 7-day window.
     If admin does not review within 7 days, this task permanently purges the content.
+    
+    IMPORTANT: DB operations and Lemmy API calls are separated into phases to prevent
+    SQLite 'database is locked' errors. Lemmy API calls (login + purge) can take
+    seconds/timeout, and must not hold the DB write lock.
     """
     now = int(time.time())
     
+    # Phase 1: Read reports to delete and update their status in DB (fast)
     conn = get_db()
     cursor = conn.cursor()
     
-    # Find reports to auto-delete (admin-escalated, still pending or moderator_confirmed, past 7-day deadline)
     cursor.execute('''
         SELECT id, content_type, content_id, creator_username 
         FROM cp_reports
         WHERE escalation_level = ? AND status IN (?, ?) AND auto_delete_at IS NOT NULL AND auto_delete_at <= ?
     ''', (ESCALATION_ADMIN, REPORT_STATUS_PENDING, REPORT_STATUS_MODERATOR_CONFIRMED, now))
     
-    reports_to_delete = cursor.fetchall()
+    reports_to_delete = [dict(row) for row in cursor.fetchall()]
+    
+    if not reports_to_delete:
+        conn.close()
+        return 0
     
     for report in reports_to_delete:
         cursor.execute('''
@@ -1306,74 +1323,87 @@ def check_auto_delete_reports():
             SET status = ?, reviewed_at = ?, auto_delete_at = NULL
             WHERE id = ?
         ''', (REPORT_STATUS_AUTO_DELETED, now, report['id']))
-        
-        # Actually PURGE the content from Lemmy now
-        try:
-            from lemmy_integration import LemmyAPI
-            import os
-            
-            lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
-            lemmy_admin_username = os.environ.get('LEMMY_ADMIN_USER', 'admin')
-            lemmy_admin_password = os.environ.get('LEMMY_ADMIN_PASS', '')
-            
-            if lemmy_admin_password:
-                lemmy_api = LemmyAPI(lemmy_api_url)
-                lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
-                
-                if lemmy_api.login_as_admin():
-                    purge_reason = f"Auto-purge: admin did not review within 7 days"
-                    success = False
-                    
-                    if report['content_type'] == 'post':
-                        success = lemmy_api.purge_post(report['content_id'], reason=purge_reason)
-                    elif report['content_type'] == 'comment':
-                        success = lemmy_api.purge_comment(report['content_id'], reason=purge_reason)
-                    
-                    if success:
-                        logger.info(f"✅ [AUTO-DELETE] Content {report['content_type']} #{report['content_id']} PURGED from Lemmy (7-day deadline passed)")
-                    else:
-                        logger.error(f"❌ [AUTO-DELETE] Failed to purge {report['content_type']} #{report['content_id']} from Lemmy")
-                else:
-                    logger.error(f"❌ [AUTO-DELETE] Failed to login as admin for auto-purge")
-            else:
-                logger.warning(f"⚠️  [AUTO-DELETE] No admin password - cannot purge from Lemmy")
-        except Exception as e:
-            logger.error(f"❌ [AUTO-DELETE] Error purging content: {e}")
-        
-        # Log audit
-        log_audit('report_auto_deleted', None, 'system', None, None, None, report['id'],
-                 action_details={'content_type': report['content_type'], 
-                               'content_id': report['content_id']})
-        
-        logger.info(f"Auto-deleted unreviewed CP report {report['id']}")
     
     conn.commit()
     conn.close()
+    # DB lock released here
+    
+    # Phase 2: Purge content from Lemmy via API (slow, no DB lock held)
+    try:
+        from lemmy_integration import LemmyAPI
+        import os
+        
+        lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+        lemmy_admin_username = os.environ.get('LEMMY_ADMIN_USER', 'admin')
+        lemmy_admin_password = os.environ.get('LEMMY_ADMIN_PASS', '')
+        
+        if lemmy_admin_password:
+            lemmy_api = LemmyAPI(lemmy_api_url)
+            lemmy_api.set_admin_credentials(lemmy_admin_username, lemmy_admin_password)
+            logged_in = lemmy_api.login_as_admin()
+            
+            if logged_in:
+                for report in reports_to_delete:
+                    purge_reason = f"Auto-purge: admin did not review within 7 days"
+                    success = False
+                    
+                    try:
+                        if report['content_type'] == 'post':
+                            success = lemmy_api.purge_post(report['content_id'], reason=purge_reason)
+                        elif report['content_type'] == 'comment':
+                            success = lemmy_api.purge_comment(report['content_id'], reason=purge_reason)
+                        
+                        if success:
+                            logger.info(f"✅ [AUTO-DELETE] Content {report['content_type']} #{report['content_id']} PURGED from Lemmy (7-day deadline passed)")
+                        else:
+                            logger.error(f"❌ [AUTO-DELETE] Failed to purge {report['content_type']} #{report['content_id']} from Lemmy")
+                    except Exception as e:
+                        logger.error(f"❌ [AUTO-DELETE] Error purging {report['content_type']} #{report['content_id']}: {e}")
+            else:
+                logger.error(f"❌ [AUTO-DELETE] Failed to login as admin for auto-purge")
+        else:
+            logger.warning(f"⚠️  [AUTO-DELETE] No admin password - cannot purge from Lemmy")
+    except Exception as e:
+        logger.error(f"❌ [AUTO-DELETE] Error in Lemmy purge phase: {e}")
+    
+    # Phase 3: Audit logging (each opens/closes its own DB connection)
+    for report in reports_to_delete:
+        log_audit('report_auto_deleted', None, 'system', None, None, None, report['id'],
+                 action_details={'content_type': report['content_type'], 
+                               'content_id': report['content_id']})
+        logger.info(f"Auto-deleted unreviewed CP report {report['id']}")
     
     return len(reports_to_delete)
 
 
 def check_expired_report_ability_bans():
-    """Check and auto-restore report ability for users whose restriction period has expired"""
+    """Check and auto-restore report ability for users whose restriction period has expired.
+    
+    DB operations are kept minimal and connection is closed before any notifications
+    or audit logging to maintain consistent pattern with other background tasks.
+    """
     now = int(time.time())
     
+    # Phase 1: Migration check (quick, separate connection)
     conn = get_db()
     cursor = conn.cursor()
-    
-    # Add column if it doesn't exist (migration)
     try:
         cursor.execute('ALTER TABLE user_cp_permissions ADD COLUMN report_ability_revoked_at INTEGER')
         conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
     
-    # Find expired report ability bans
+    # Phase 2: Read and update in same connection (fast, milliseconds)
     cursor.execute('''
         SELECT user_id, person_id, username FROM user_cp_permissions
         WHERE can_report_cp = ? AND report_ability_revoked_at IS NOT NULL AND report_ability_revoked_at <= ?
     ''', (False, now))
     
-    expired_users = cursor.fetchall()
+    expired_users = [dict(row) for row in cursor.fetchall()]
+    
+    if not expired_users:
+        conn.close()
+        return 0
     
     for user in expired_users:
         cursor.execute('''
@@ -1381,20 +1411,21 @@ def check_expired_report_ability_bans():
             SET can_report_cp = ?, report_ability_revoked_at = NULL, updated_at = ?
             WHERE user_id = ?
         ''', (True, now, user['user_id']))
-        
-        # Notify user
+    
+    conn.commit()
+    conn.close()
+    # DB lock released here
+    
+    # Phase 3: Notifications and audit logging (each opens/closes its own DB connection)
+    for user in expired_users:
         create_notification(
             user['person_id'], user['username'], 'report_ability_restored',
             "Report Ability Restored", "Your ability to report CP content has been restored after 3 months."
         )
         
-        # Log audit
         log_audit('report_ability_restored', None, 'system', user['user_id'], user['person_id'], user['username'])
         
         logger.info(f"✅ [AUTO RESTORE] User {user['username']} (ID: {user['user_id']}) report ability restored after 3 months")
-    
-    conn.commit()
-    conn.close()
     
     return len(expired_users)
 

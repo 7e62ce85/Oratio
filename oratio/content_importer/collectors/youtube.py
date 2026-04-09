@@ -25,14 +25,41 @@ import requests
 import config
 from models import NormalizedPost, NormalizedComment
 from .base import BaseCollector
+from .html_utils import clean_html_to_text
 
 logger = logging.getLogger("content_importer.youtube")
 
 YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
 
+# ── US TV broadcast networks whose full-episode uploads are geo-locked ──
+# These channels routinely upload full shows/episodes that are only playable
+# inside the US due to DRM / broadcast licensing, even though the YouTube
+# Data API does NOT report regionRestriction for them.
+# Matching is case-insensitive substring.
+_GEO_LOCKED_CHANNEL_KEYWORDS: set[str] = {
+    # US broadcast / cable TV networks
+    "espn", "espn2", "fox news", "fox sports", "fox business",
+    "cnn", "msnbc", "cnbc", "abc news", "cbs news", "nbc news",
+    "tbs", "tnt", "tru tv", "usa network",
+    "amc", "amc+", "tlc", "hgtv", "food network", "discovery",
+    "bravo", "e! entertainment", "syfy", "lifetime",
+    "golf channel", "nfl network", "nba tv", "mlb network",
+    "nbcsn", "nbc sports", "cbs sports", "fox sports 1",
+    "comedy central", "mtv", "bet", "vh1", "nickelodeon",
+    "cartoon network", "adult swim", "paramount network",
+    "a&e", "history", "hallmark",
+    # Sports-specific
+    "sec network", "acc network", "big ten network",
+}
+
 
 class YouTubeCollector(BaseCollector):
     """Collect trending YouTube videos via Data API v3."""
+
+    # Maximum video duration (seconds) to import.
+    # Full TV episodes / live replays are typically > 30 min.
+    # We allow up to 30 min by default; override with "max_duration_sec" in source config.
+    DEFAULT_MAX_DURATION_SEC = 30 * 60  # 30 minutes
 
     def fetch(self) -> list[NormalizedPost]:
         api_key = config.YOUTUBE_API_KEY
@@ -40,6 +67,30 @@ class YouTubeCollector(BaseCollector):
             logger.warning("YOUTUBE_API_KEY not set — YouTube source disabled")
             return []
         return self._fetch_trending(api_key)
+
+    # -- helpers -------------------------------------------------------
+
+    @staticmethod
+    def _is_geo_locked_channel(channel_title: str) -> bool:
+        """Return True if channel name matches a known US-TV geo-locked network."""
+        lower = channel_title.lower().strip()
+        for kw in _GEO_LOCKED_CHANNEL_KEYWORDS:
+            if kw in lower:
+                return True
+        return False
+
+    @staticmethod
+    def _parse_iso8601_duration(duration: str) -> int:
+        """Parse ISO 8601 duration (e.g. PT2H38M28S) into total seconds."""
+        match = re.match(
+            r"^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$", duration or ""
+        )
+        if not match:
+            return 0
+        hours = int(match.group(1) or 0)
+        minutes = int(match.group(2) or 0)
+        seconds = int(match.group(3) or 0)
+        return hours * 3600 + minutes * 60 + seconds
 
     # -- Trending API --------------------------------------------------
 
@@ -50,7 +101,7 @@ class YouTubeCollector(BaseCollector):
         category = self.config.get("category_id", "")
 
         params: dict = {
-            "part": "snippet,statistics",
+            "part": "snippet,statistics,contentDetails,status",
             "chart": "mostPopular",
             "regionCode": region,
             "maxResults": limit,
@@ -72,17 +123,90 @@ class YouTubeCollector(BaseCollector):
         items = data.get("items", [])
         posts: list[NormalizedPost] = []
 
+        skipped_region = 0
+        skipped_geolocked = 0
+        skipped_too_long = 0
+        max_duration = self.config.get(
+            "max_duration_sec", self.DEFAULT_MAX_DURATION_SEC
+        )
+
         for item in items:
             video_id = item.get("id", "")
             snippet = item.get("snippet", {})
             stats = item.get("statistics", {})
+            content_details = item.get("contentDetails", {})
+            status = item.get("status", {})
 
             title = snippet.get("title", "").strip()
             if not title or not video_id:
                 continue
 
-            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            # ── Status / region / age checks ───────────────────────
+            # Skip videos that are NOT globally available, not embeddable,
+            # age-restricted, or not public.
+
+            # regionRestriction: if present => restricted in some way
+            region_restriction = content_details.get("regionRestriction")
+            if region_restriction:
+                skipped_region += 1
+                logger.debug(
+                    "Skipping region-restricted video: %s (%s) — %s",
+                    title[:60], video_id, region_restriction,
+                )
+                continue
+
+            # privacyStatus: "public", "unlisted", "private"
+            privacy = status.get("privacyStatus")
+            if privacy and privacy != "public":
+                logger.debug(
+                    "Skipping non-public video: %s (%s) — privacy=%s",
+                    title[:60], video_id, privacy,
+                )
+                continue
+
+            # embeddable flag (owner can disable embedding)
+            embeddable = status.get("embeddable")
+            if embeddable is False:
+                logger.debug(
+                    "Skipping non-embeddable video: %s (%s)",
+                    title[:60], video_id,
+                )
+                continue
+
+            # age restriction: contentDetails.contentRating.ytRating == "ytAgeRestricted"
+            content_rating = content_details.get("contentRating", {})
+            if content_rating.get("ytRating") == "ytAgeRestricted":
+                logger.debug(
+                    "Skipping age-restricted video: %s (%s)",
+                    title[:60], video_id,
+                )
+                continue
+
+            # ── Geo-locked US TV network channel filter ────────────
+            # Many US broadcast networks upload full episodes that are
+            # DRM-locked to the US, but the API does NOT set regionRestriction.
             channel = snippet.get("channelTitle", "YouTube")
+            if self._is_geo_locked_channel(channel):
+                skipped_geolocked += 1
+                logger.debug(
+                    "Skipping geo-locked TV channel video: %s (%s) — channel=%s",
+                    title[:60], video_id, channel,
+                )
+                continue
+
+            # ── Duration filter (skip full episodes / live replays) ─
+            duration_sec = self._parse_iso8601_duration(
+                content_details.get("duration", "")
+            )
+            if max_duration and duration_sec > max_duration:
+                skipped_too_long += 1
+                logger.debug(
+                    "Skipping too-long video (%ds > %ds): %s (%s)",
+                    duration_sec, max_duration, title[:60], video_id,
+                )
+                continue
+
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
 
             # Description (truncated)
             body = snippet.get("description", "")
@@ -129,8 +253,10 @@ class YouTubeCollector(BaseCollector):
             )
 
         logger.info(
-            "YouTube Trending API (%s): fetched %d videos",
-            region, len(posts),
+            "YouTube Trending API (%s): fetched %d videos "
+            "(skipped: %d region-restricted, %d geo-locked TV, %d too-long)",
+            region, len(posts), skipped_region, skipped_geolocked,
+            skipped_too_long,
         )
         return posts
 
@@ -186,7 +312,7 @@ class YouTubeCollector(BaseCollector):
             if not snippet:
                 continue
 
-            body = snippet.get("textDisplay", "").strip()
+            body = clean_html_to_text(snippet.get("textDisplay", ""))
             if not body:
                 continue
 

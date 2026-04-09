@@ -135,11 +135,11 @@ export class PostListings extends Component<PostListingsProps, PostListingsState
       ? this.removeDuplicates()
       : this.props.posts;
     
-    // CRITICAL: If still loading reported content list, return empty array
-    // This prevents "flash" of CP content before filter is ready
+    // If still loading reported content list, show all posts unfiltered
+    // CP filter will apply automatically once loading completes and triggers re-render
     if (this.state.loadingReports) {
-      console.log("⏳ [CP Filter] Still loading reported IDs - showing no posts yet");
-      return [];
+      console.log("⏳ [CP Filter] Still loading reported IDs - showing posts unfiltered");
+      return rawPosts;
     }
     
     // Filter posts based on hidden status and CP reports

@@ -40,6 +40,16 @@ COMMENTS_ENABLED = os.getenv("COMMENTS_ENABLED", "true").lower() == "true"
 # Used for Trending videos + official comment fetching (free, 10k units/day)
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 
+# ─── Rumble Login (댓글 수집용) ────────────────────────────────────────
+# rumble.com 계정 — 있으면 인증된 세션으로 댓글 가져옴, 없으면 댓글 스킵
+RUMBLE_USERNAME = os.getenv("RUMBLE_USERNAME", "")
+RUMBLE_PASSWORD = os.getenv("RUMBLE_PASSWORD", "")
+
+# ─── Imgur API ─────────────────────────────────────────────────────────
+# Register free at https://api.imgur.com/oauth2/addclient (anonymous)
+# If empty, falls back to HTML scraping (less reliable)
+IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID", "")
+
 # ─── Scheduler ─────────────────────────────────────────────────────────
 IMPORT_INTERVAL_MINUTES = int(os.getenv("IMPORT_INTERVAL_MINUTES", "360"))  # 6 hours
 IMPORT_ON_STARTUP = os.getenv("IMPORT_ON_STARTUP", "true").lower() == "true"
@@ -68,6 +78,7 @@ DEFAULT_SOURCES = [
         "limit": 25,
         "community": "reddit",
         "ai_picks": 3,
+        "fallback_thumbnail": "https://www.redditstatic.com/desktop2x/img/favicon/android-icon-192x192.png",
         "enabled": True,
     },
     {
@@ -78,12 +89,13 @@ DEFAULT_SOURCES = [
         "limit": 25,
         "community": "reddit",
         "ai_picks": 3,
+        "fallback_thumbnail": "https://www.redditstatic.com/desktop2x/img/favicon/android-icon-192x192.png",
         "enabled": True,
     },
     # ── Ars Technica ───────────────────────────────────────────────
     {
         "name": "ars_technica",
-        "type": "rss",
+        "type": "arstechnica",
         "url": "https://feeds.arstechnica.com/arstechnica/index",
         "source_label": "arstechnica",
         "community": "arstechnica",
@@ -98,7 +110,7 @@ DEFAULT_SOURCES = [
         "url": "https://www.sciencedaily.com/rss/all.xml",
         "source_label": "sciencedaily",
         "community": "sciencedaily",
-        "ai_picks": 2,
+        "ai_picks": 3,
         "limit": 20,
         "enabled": True,
     },
@@ -112,6 +124,7 @@ DEFAULT_SOURCES = [
         "ai_picks": 3,
         "limit": 25,
         "follow_redirects": True,
+        "fallback_thumbnail": "https://cdn.brandfetch.io/id81tTzGrw/w/400/h/400/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1758338730664",
         "enabled": True,
     },
     # ── YouTube Trending (Data API v3) ────────────────────────────
@@ -121,17 +134,18 @@ DEFAULT_SOURCES = [
         "region_code": "US",       # Trending region (US, KR, GB, etc.)
         "category_id": "",         # Empty = all categories. "10"=Music, "20"=Gaming, etc.
         "community": "youtube",
-        "ai_picks": 2,
+        "ai_picks": 10,
         "limit": 25,
         "enabled": True,
     },
-    # ── 4chan /pol/ ─────────────────────────────────────────────────
+    # ── 4chan (전체 인기 보드) ──────────────────────────────────────────
     {
-        "name": "fourchan_pol",
+        "name": "fourchan_all",
         "type": "fourchan",
-        "board": "pol",
+        "board": "all",             # "all" = scan popular boards globally
+        "per_board_fetch": 10,      # Top N threads per board before global sort
         "community": "fourchan",
-        "ai_picks": 2,
+        "ai_picks": 10,
         "limit": 20,
         "enabled": True,
     },
@@ -140,17 +154,90 @@ DEFAULT_SOURCES = [
         "name": "mgtow_tv",
         "type": "mgtow",
         "community": "mgtowtv",
-        "ai_picks": 2,
+        "ai_picks": 3,
         "limit": 15,
         "enabled": True,
     },
-    # ── Bitchute ───────────────────────────────────────────────────
+    # ── Bitchute (old.bitchute.com SSR trending) ─────────────────
     {
-        "name": "bitchute_popular",
+        "name": "bitchute_trending",
         "type": "bitchute",
+        "trending_period": "day",  # "day", "week", or "month"
         "community": "bitchute",
-        "ai_picks": 2,
+        "ai_picks": 3,
         "limit": 15,
+        "enabled": True,
+    },
+    # ── Rumble (service.php JSON API + cloudscraper) ────────────────
+    {
+        "name": "rumble_trending",
+        "type": "rumble",
+        # search_queries: broad terms to simulate trending (multiple = more variety)
+        "search_queries": ["news", "politics", "live", "trending", "breaking", "world", "viral"],
+        "sort": "views",   # "views" or "date"
+        "date": "today",   # "today" | "this-week" | "this-month" | "" (all-time)
+        "community": "rumble",
+        "ai_picks": 10,
+        "limit": 20,
+        "enabled": True,
+    },
+    # ── Upgoat (전체 게시물 import, AI 미사용) ────────────────────────────
+    {
+        "name": "upgoat",
+        "type": "upgoat",
+        "community": "upgoat",
+        "import_all": True,         # Fetch ALL posts (multi-page pagination)
+        "min_age_hours": 13,        # Only import posts older than 13 hours
+        "max_age_hours": 72,        # Never import posts older than 72 hours
+        "skip_ai": True,            # Bypass AI selection — import everything
+        "ai_picks": 999,            # Ignored when skip_ai=True, but set high as safety
+        "limit": 200,               # Safety cap per cycle
+        "fallback_thumbnail": "https://oratio.space/files/logos/upgoat.png",
+        "enabled": True,
+    },
+    # ── XCancel (Twitter/X search via xcancel.com) ─────────────────────
+    {
+        "name": "xcancel_liberty",
+        "type": "xcancel",
+        "search_url": "https://xcancel.com/search?f=tweets&q=Liberty",
+        "community": "xcancel",
+        "ai_picks": 5,
+        "limit": 25,
+        "enabled": True,
+    },
+    # ── Imgur (Gallery / Memes) ────────────────────────────────────────
+    {
+        "name": "imgur_hot",
+        "type": "imgur",
+        "section": "hot",
+        "sort": "viral",
+        "window": "day",
+        "tag": "",           # Empty = all. Set to "memes", "funny", etc.
+        "community": "imgur",
+        "ai_picks": 3,
+        "limit": 20,
+        "enabled": True,
+    },
+    # ── Instagram (public hashtags) ────────────────────────────────────
+    {
+        "name": "instagram_memes",
+        "type": "instagram",
+        "hashtags": ["memes", "funny", "viral"],
+        "profiles": [],
+        "community": "instagram",
+        "ai_picks": 3,
+        "limit": 20,
+        "enabled": True,
+    },
+    # ── 9gag (Popular / Hot) ──────────────────────────────────────────
+    {
+        "name": "ninegag_hot",
+        "type": "ninegag",
+        "section": "hot",
+        "tag": "",           # Empty = all. Set to "funny", "animals", etc.
+        "community": "ninegag",
+        "ai_picks": 3,
+        "limit": 20,
         "enabled": True,
     },
     # ── Disabled sources ───────────────────────────────────────────

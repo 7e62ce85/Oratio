@@ -8,9 +8,11 @@ Architecture (v3 — single AI call for all sources):
   2. Deduplicate against history
   3. ONE AI call to select posts across all sources
      (AI is told per-source quotas so each source gets fair picks)
-  4. Post selected items to each source's dedicated Lemmy community
-  5. Fetch top comments (score-based, no AI) for sources that support it
-  6. Post comments on each Lemmy post
+     Sources with skip_ai=True bypass AI and import ALL fetched posts.
+  4. Collect all selected posts and SHUFFLE them so posts from
+     different sources are interleaved (not posted source-by-source).
+  5. Post selected items to each source's dedicated Lemmy community
+  6. Fetch top comments (score-based, no AI) for sources that support it
   7. Record results
 
 This minimises API calls to 1 per cycle (vs N per source),
@@ -20,6 +22,7 @@ cutting token usage by ~90%.
 from __future__ import annotations
 
 import logging
+import random
 import re
 import threading
 import time
@@ -35,6 +38,13 @@ from collectors import (
     FourChanCollector,
     MGTOWCollector,
     BitchuteCollector,
+    RumbleCollector,
+    UpgoatCollector,
+    ArsTechnicaCollector,
+    XCancelCollector,
+    ImgurCollector,
+    InstagramCollector,
+    NineGagCollector,
 )
 from collectors.base import BaseCollector
 from dedup import DedupStore
@@ -52,6 +62,13 @@ COLLECTOR_REGISTRY: dict[str, type] = {
     "fourchan": FourChanCollector,
     "mgtow": MGTOWCollector,
     "bitchute": BitchuteCollector,
+    "rumble": RumbleCollector,
+    "upgoat": UpgoatCollector,
+    "arstechnica": ArsTechnicaCollector,
+    "xcancel": XCancelCollector,
+    "imgur": ImgurCollector,
+    "instagram": InstagramCollector,
+    "ninegag": NineGagCollector,
 }
 
 # Korean language community routing
@@ -125,70 +142,122 @@ def run_import_cycle(
         dedup.finish_run(run_id, total_fetched, 0, "no_new_posts")
         return {"fetched": total_fetched, "posted": 0, "status": "no_new_posts"}
 
-    # ── Phase 2: Single AI call for all sources ───────────────────
-    # Build per-source quota: { source_name: ai_picks }
+    # ── Phase 2: AI selection (or skip for skip_ai sources) ─────
+    # Sources with skip_ai=True: import ALL new posts (no AI, no score filter)
+    # Other sources: single AI batch call as usual
+    skip_ai_selected: dict[str, list[NormalizedPost]] = {}
+    ai_source_pools: dict[str, tuple[dict, list[NormalizedPost], BaseCollector]] = {}
+
+    for name, (cfg, posts, collector) in source_pools.items():
+        if cfg.get("skip_ai", False):
+            # Import ALL new posts — no AI selection
+            for i, p in enumerate(posts):
+                p.ai_rank = i + 1
+                p.ai_reason = "import_all (skip_ai)"
+            skip_ai_selected[name] = posts
+            logger.info("[%s] skip_ai=True → importing all %d new posts", name, len(posts))
+        else:
+            ai_source_pools[name] = (cfg, posts, collector)
+
+    # Build AI quotas only for non-skip sources
     quotas = {
         name: cfg.get("ai_picks", config.AI_PICKS_PER_SOURCE)
-        for name, (cfg, _, _collector) in source_pools.items()
+        for name, (cfg, _, _collector) in ai_source_pools.items()
     }
-    # Flatten all new posts with source tag
+    # Flatten new posts from AI sources only
     all_new: list[tuple[str, NormalizedPost]] = []
-    for name, (cfg, posts, _collector) in source_pools.items():
+    for name, (cfg, posts, _collector) in ai_source_pools.items():
         for p in posts:
             all_new.append((name, p))
 
-    # Single AI/score selection — returns { source_name: [selected posts] }
-    selected_by_source = select_posts_batch(all_new, quotas)
+    # Single AI/score selection for non-skip sources
+    if all_new:
+        ai_selected_by_source = select_posts_batch(all_new, quotas)
+    else:
+        ai_selected_by_source = {}
 
-    # ── Phase 3: Post to Lemmy + fetch & post comments ──────────
+    # Merge: skip_ai sources + AI-selected sources
+    selected_by_source = {**ai_selected_by_source, **skip_ai_selected}
+
+    # ── Phase 3: Shuffle all posts across sources + post to Lemmy ──
+    # Build a flat list of (post, src_name, src_cfg, collector) tuples
+    # then shuffle so posts from different sources are interleaved
+    all_selected: list[tuple[NormalizedPost, str, dict, BaseCollector]] = []
+    for src_name, (src_cfg, _, collector) in source_pools.items():
+        selected = selected_by_source.get(src_name, [])
+        for post in selected:
+            all_selected.append((post, src_name, src_cfg, collector))
+
+    # Shuffle for interleaved posting across sources
+    random.shuffle(all_selected)
+
     total_comments = 0
     comments_per_post = config.COMMENTS_PER_POST
     comments_enabled = config.COMMENTS_ENABLED
 
+    # Track per-source stats
+    src_posted: dict[str, int] = {}
+    src_comments: dict[str, int] = {}
+
+    for post, src_name, src_cfg, collector in all_selected:
+        # Apply fallback thumbnail if post has none and source defines one
+        if not post.thumbnail_url and src_cfg.get("fallback_thumbnail"):
+            post.thumbnail_url = src_cfg["fallback_thumbnail"]
+            logger.debug("[%s] Applied fallback thumbnail for '%s'", src_name, post.title[:40])
+
+        # ── Pre-post liveness check (4chan threads can 404 fast) ──
+        if hasattr(collector, "verify_alive") and not collector.verify_alive(post):
+            logger.info("[%s] Skipped dead thread: '%s'", src_name, post.title[:60])
+            continue
+
+        community = src_cfg.get("community", config.LEMMY_DEFAULT_COMMUNITY)
+        target = KOREAN_COMMUNITY if _is_korean(post) else community
+        post_id = lemmy.create_post(post, target)
+        if post_id:
+            dedup.mark_imported(post, post_id)
+            src_posted[src_name] = src_posted.get(src_name, 0) + 1
+
+            # ── Phase 4: Fetch & post top comments (score-based) ──
+            if comments_enabled and collector.supports_comments:
+                try:
+                    comments = collector.fetch_comments(post, limit=comments_per_post)
+                    for comment in comments:
+                        cid = lemmy.create_comment(post_id, comment)
+                        if cid:
+                            src_comments[src_name] = src_comments.get(src_name, 0) + 1
+                            total_comments += 1
+                        time.sleep(0.5)  # rate limit between comments
+                except Exception as e:
+                    logger.warning(
+                        "[%s] Comment fetch failed for '%s': %s",
+                        src_name, post.title[:40], e,
+                    )
+
+            time.sleep(1.0)
+
+    total_posted = sum(src_posted.values())
+
+    # Build per-source result summaries
     for src_name, (src_cfg, _, collector) in source_pools.items():
         selected = selected_by_source.get(src_name, [])
         community = src_cfg.get("community", config.LEMMY_DEFAULT_COMMUNITY)
-        posted = 0
-        src_comments = 0
+        posted = src_posted.get(src_name, 0)
+        sc = src_comments.get(src_name, 0)
 
-        for post in selected:
-            target = KOREAN_COMMUNITY if _is_korean(post) else community
-            post_id = lemmy.create_post(post, target)
-            if post_id:
-                dedup.mark_imported(post, post_id)
-                posted += 1
-
-                # ── Phase 4: Fetch & post top comments (score-based) ──
-                if comments_enabled and collector.supports_comments:
-                    try:
-                        comments = collector.fetch_comments(post, limit=comments_per_post)
-                        for comment in comments:
-                            cid = lemmy.create_comment(post_id, comment)
-                            if cid:
-                                src_comments += 1
-                            time.sleep(0.5)  # rate limit between comments
-                    except Exception as e:
-                        logger.warning(
-                            "[%s] Comment fetch failed for '%s': %s",
-                            src_name, post.title[:40], e,
-                        )
-
-                time.sleep(1.0)
-
-        total_posted += posted
-        total_comments += src_comments
         source_results[src_name] = {
             "fetched": len(source_pools[src_name][1]),
             "new": len(source_pools[src_name][1]),
             "selected": len(selected),
             "posted": posted,
-            "comments": src_comments,
+            "comments": sc,
             "community": community,
+            "skip_ai": src_cfg.get("skip_ai", False),
             "status": "ok",
         }
         logger.info(
-            "[%s] selected=%d, posted=%d, comments=%d → %s",
-            src_name, len(selected), posted, src_comments, community,
+            "[%s] selected=%d, posted=%d, comments=%d → %s%s",
+            src_name, len(selected), posted, sc, community,
+            " (skip_ai)" if src_cfg.get("skip_ai") else "",
         )
 
     dedup.finish_run(run_id, total_fetched, total_posted, "ok")

@@ -34,10 +34,13 @@ export class LanguageSelect extends Component<LanguageSelectProps, any> {
   setSelectedValues() {
     const ids = this.props.selectedLanguageIds?.map(toString);
     if (ids) {
-      const select = (document.getElementById(this.id) as HTMLSelectElement)
-        .options;
-      for (let i = 0; i < select.length; i++) {
-        const o = select[i];
+      const selectEl = document.getElementById(this.id) as HTMLSelectElement | null;
+      if (!selectEl) {
+        return;
+      }
+      const options = selectEl.options;
+      for (let i = 0; i < options.length; i++) {
+        const o = options[i];
         if (ids.includes(o.value)) {
           o.selected = true;
         }

@@ -10,6 +10,7 @@ from services.payment import process_payment
 from zero_conf_validator import get_validator
 from services.membership_sync import setup_membership_sync
 from services.cp_moderation import run_cp_background_tasks  # CP system
+from services.referral_verifier import reverify_approved_links, reverify_early_backoff  # Referral Phase B
 
 # Initialize membership sync service
 membership_sync_service = None
@@ -114,6 +115,10 @@ def check_pending_invoices():
 
 def run_background_tasks():
     """백그라운드 작업 처리"""
+    # Referral 재검증은 12시간(=2880 iterations × 15s)마다 실행
+    _referral_reverify_counter = 0
+    _REFERRAL_REVERIFY_EVERY = 2880  # 12h @ 15s interval
+
     while True:
         try:
             # 만료된 인보이스 처리
@@ -136,6 +141,26 @@ def run_background_tasks():
             
             # CP 시스템 백그라운드 작업 (auto-unban, auto-delete)
             run_cp_background_tasks()
+
+            # ── Referral Phase B: 주기적 재검증 (12시간 간격) ──
+            _referral_reverify_counter += 1
+            if _referral_reverify_counter >= _REFERRAL_REVERIFY_EVERY:
+                _referral_reverify_counter = 0
+                try:
+                    # 승인 직후 지수 백오프 재검증 (12h~64d 구간)
+                    early_checked = reverify_early_backoff()
+                    if early_checked:
+                        logger.info(f"[Referral] Early backoff re-verification done: {early_checked} links")
+                except Exception as eb_err:
+                    logger.error(f"[Referral] Early backoff re-verification error: {eb_err}")
+
+                try:
+                    # 정기 90일 재검증
+                    checked = reverify_approved_links()
+                    if checked:
+                        logger.info(f"[Referral] Periodic re-verification done: {checked} links")
+                except Exception as rv_err:
+                    logger.error(f"[Referral] Re-verification error: {rv_err}")
             
             # 주기적으로 자금 전송 시도 (설정에 따라)
             if FORWARD_PAYMENTS:

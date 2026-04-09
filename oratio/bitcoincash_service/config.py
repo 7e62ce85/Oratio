@@ -39,6 +39,7 @@ MOCK_MODE = os.environ.get('MOCK_MODE', 'false').lower() == 'true'
 TESTNET = os.environ.get('TESTNET', 'false').lower() == 'true'
 DIRECT_MODE = os.environ.get('DIRECT_MODE', 'false').lower() == 'true'
 FORWARD_PAYMENTS = os.environ.get('FORWARD_PAYMENTS', 'true').lower() == 'true'
+MIN_PAYOUT_AMOUNT = float(os.environ.get('MIN_PAYOUT_AMOUNT', '0.001'))  # Minimum BCH to forward
 
 # Lemmy API configuration
 LEMMY_API_URL = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')

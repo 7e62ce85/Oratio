@@ -17,6 +17,7 @@ import requests
 from models import NormalizedPost, NormalizedComment
 
 from .base import BaseCollector
+from .html_utils import clean_html_to_text
 
 logger = logging.getLogger("content_importer.reddit")
 
@@ -77,7 +78,7 @@ class RedditCollector(BaseCollector):
             # Self-posts only have the reddit comments link.
             external_url = self._extract_external_url(raw_html, reddit_link)
 
-            body = re.sub(r"<[^>]+>", "", raw_html).strip()
+            body = clean_html_to_text(raw_html)
             if len(body) > 2000:
                 body = body[:2000] + "…"
 
@@ -141,22 +142,32 @@ class RedditCollector(BaseCollector):
 
     def fetch_comments(self, post: NormalizedPost, limit: int = 3) -> list[NormalizedComment]:
         """
-        Fetch top comments for a Reddit post by score.
+        Fetch top comments for a Reddit post.
 
-        Uses the Reddit JSON endpoint: {permalink}.json
-        Extracts top-level comments sorted by upvotes, returns top N.
+        Strategy:
+          1. Try JSON API ({permalink}.json) — has full scores, but often 403
+          2. Fall back to RSS ({permalink}.rss) — no scores, but always works
+             RSS entries arrive in Reddit's default (hot/best) sort order,
+             so earlier entries are the community's top-voted comments.
         """
-        # We need the Reddit permalink to fetch comments.
-        # The post.url may be an external article URL, so we reconstruct
-        # the Reddit comments URL from the post data.
         reddit_url = self._get_reddit_comments_url(post)
         if not reddit_url:
             return []
 
+        # ── Attempt 1: JSON API (has scores) ──
+        comments = self._fetch_comments_json(reddit_url, limit)
+        if comments:
+            return comments
+
+        # ── Attempt 2: RSS fallback (no scores, uses position as proxy) ──
+        return self._fetch_comments_rss(reddit_url, post, limit)
+
+    def _fetch_comments_json(self, reddit_url: str, limit: int) -> list[NormalizedComment]:
+        """Try the JSON endpoint — returns scored comments or empty list on failure."""
         json_url = reddit_url.rstrip("/") + ".json"
-        # old.reddit.com JSON is often blocked from datacenter IPs;
-        # use www.reddit.com instead for comment fetching
-        json_url = json_url.replace("old.reddit.com", "www.reddit.com")
+        json_url = json_url.replace("www.reddit.com", "old.reddit.com")
+        if "old.reddit.com" not in json_url:
+            json_url = json_url.replace("reddit.com", "old.reddit.com")
         headers = {"User-Agent": REDDIT_USER_AGENT}
 
         try:
@@ -169,23 +180,22 @@ class RedditCollector(BaseCollector):
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
-            logger.warning("Reddit comment fetch failed for %s: %s", reddit_url, e)
+            logger.debug("Reddit JSON comments failed (will try RSS): %s", e)
             return []
 
         if not isinstance(data, list) or len(data) < 2:
             return []
 
-        # data[1] contains the comment listing
         comments_data = data[1].get("data", {}).get("children", [])
 
         raw_comments: list[NormalizedComment] = []
         for child in comments_data:
-            if child.get("kind") != "t1":  # t1 = comment
+            if child.get("kind") != "t1":
                 continue
             c = child.get("data", {})
 
             body = c.get("body", "").strip()
-            if not body or body == "[deleted]" or body == "[removed]":
+            if not body or body in ("[deleted]", "[removed]"):
                 continue
 
             author = c.get("author", "")
@@ -193,36 +203,118 @@ class RedditCollector(BaseCollector):
                 continue
 
             score = c.get("score", 0)
-            if score < 2:  # Skip low-quality / downvoted comments
+            if score < 2:
                 continue
 
-            # Truncate very long comments
             if len(body) > 1000:
                 body = body[:1000] + "…"
+
+            raw_comments.append(
+                NormalizedComment(body=body, author=author, score=score, source="reddit")
+            )
+
+        raw_comments.sort(key=lambda c: c.score, reverse=True)
+        for i, c in enumerate(raw_comments):
+            c.rank = i + 1
+
+        selected = raw_comments[:limit]
+        if selected:
+            logger.debug(
+                "Reddit JSON comments for top %d (ranks: %s)",
+                len(selected), [c.rank for c in selected],
+            )
+        return selected
+
+    def _fetch_comments_rss(
+        self, reddit_url: str, post: NormalizedPost, limit: int
+    ) -> list[NormalizedComment]:
+        """
+        Fallback: fetch comments via the .rss endpoint.
+
+        Reddit RSS includes comments in the thread's default sort order
+        (hot/best).  There are no score numbers, so we use the position
+        in the feed as a quality proxy — earlier = better.
+
+        The first <entry> is the original post; subsequent entries are comments.
+
+        NOTE: feedparser's built-in HTTP client gets 403'd by Reddit,
+        so we use requests first, then parse the response text.
+        We must use www.reddit.com (not old.reddit.com) for per-post RSS.
+        """
+        rss_url = reddit_url.rstrip("/") + ".rss"
+        # Per-post comment RSS works on www.reddit.com, NOT old.reddit.com
+        rss_url = rss_url.replace("old.reddit.com", "www.reddit.com")
+
+        try:
+            resp = requests.get(
+                rss_url,
+                headers={"User-Agent": REDDIT_USER_AGENT},
+                timeout=15,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.warning("Reddit RSS comments fetch failed for %s: %s", rss_url, e)
+            return []
+
+        feed = feedparser.parse(resp.text)
+
+        if not feed.entries:
+            logger.warning("Reddit RSS comments: no entries for %s", reddit_url)
+            return []
+
+        raw_comments: list[NormalizedComment] = []
+
+        # Skip entry[0] — it's the original post (OP)
+        for idx, entry in enumerate(feed.entries[1:], start=1):
+            # Author: "/u/username" → "username"
+            author = getattr(entry, "author", "") or ""
+            if author.startswith("/u/"):
+                author = author[3:]
+            if not author or author in ("[deleted]", "AutoModerator"):
+                continue
+
+            # Body: prefer content[0].value (HTML), fallback to summary
+            body = ""
+            if hasattr(entry, "content") and entry.content:
+                body = entry.content[0].get("value", "")
+            elif hasattr(entry, "summary"):
+                body = entry.summary or ""
+
+            # Strip HTML tags for plain text
+            body = clean_html_to_text(body)
+            body = re.sub(r"\s+", " ", body).strip()
+
+            if not body or len(body) < 5:
+                continue
+
+            # Skip comments containing URLs (spam filter)
+            if re.search(r"https?://", body, re.IGNORECASE):
+                continue
+
+            if len(body) > 1000:
+                body = body[:1000] + "…"
+
+            # Use inverse position as pseudo-score (higher = earlier = better)
+            pseudo_score = max(100 - idx, 1)
 
             raw_comments.append(
                 NormalizedComment(
                     body=body,
                     author=author,
-                    score=score,
+                    score=pseudo_score,
                     source="reddit",
                 )
             )
 
-        # Sort by score descending — rank is position in full sorted list
-        raw_comments.sort(key=lambda c: c.score, reverse=True)
-
-        # Assign rank (1-based) across ALL qualifying comments
+        # Already in quality order from RSS, assign ranks
         for i, c in enumerate(raw_comments):
             c.rank = i + 1
 
         selected = raw_comments[:limit]
-
         if selected:
-            logger.debug(
-                "Reddit comments for '%s': fetched %d, selected top %d (ranks: %s)",
+            logger.info(
+                "Reddit RSS comments for '%s': %d entries, selected top %d",
                 post.title[:40], len(raw_comments), len(selected),
-                [c.rank for c in selected],
             )
         return selected
 

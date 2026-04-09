@@ -487,25 +487,12 @@ export function clearCPPermissionsCache(username?: string) {
 const reportedContentCache = new Map<string, Set<number>>();
 const REPORTED_CONTENT_CACHE_DURATION = 30 * 1000; // 30 seconds
 let lastReportedContentFetch = 0;
+let isBackgroundFetchInProgress = false;
 
-// Get all pending CP reported content IDs (for filtering)
-export async function getReportedContentIds(): Promise<{ posts: Set<number>; comments: Set<number> }> {
-  const now = Date.now();
-  const cacheAge = now - lastReportedContentFetch;
-  
-  // Return cached data if still valid
-  if (cacheAge < REPORTED_CONTENT_CACHE_DURATION) {
-    const cachedPosts = reportedContentCache.get('posts') || new Set();
-    const cachedComments = reportedContentCache.get('comments') || new Set();
-    console.log(`💾 [CP API] Using cached data (age: ${(cacheAge/1000).toFixed(1)}s, ${cachedPosts.size} posts, ${cachedComments.size} comments)`);
-    return {
-      posts: cachedPosts,
-      comments: cachedComments
-    };
-  }
-
+// Internal: perform the actual API fetch and update cache
+async function fetchReportedContentFromAPI(): Promise<{ posts: Set<number>; comments: Set<number> }> {
   const apiUrl = `${getCPApiUrl()}/reported-content-ids`;
-  console.log(`📡 [CP API] Cache expired - fetching from ${apiUrl}`);
+  console.log(`📡 [CP API] Fetching from ${apiUrl}`);
   const fetchStart = performance.now();
 
   try {
@@ -534,7 +521,7 @@ export async function getReportedContentIds(): Promise<{ posts: Set<number>; com
     // Update cache
     reportedContentCache.set('posts', posts);
     reportedContentCache.set('comments', comments);
-    lastReportedContentFetch = now;
+    lastReportedContentFetch = Date.now();
     
     return { posts, comments };
   } catch (error) {
@@ -542,6 +529,50 @@ export async function getReportedContentIds(): Promise<{ posts: Set<number>; com
     console.error(`❌ [CP API] Error after ${fetchElapsed.toFixed(1)}ms:`, error);
     return { posts: new Set(), comments: new Set() };
   }
+}
+
+// Get all pending CP reported content IDs (for filtering)
+// Uses Stale-While-Revalidate: returns stale cache immediately, refreshes in background
+export async function getReportedContentIds(): Promise<{ posts: Set<number>; comments: Set<number> }> {
+  const now = Date.now();
+  const cacheAge = now - lastReportedContentFetch;
+  const hasCachedData = reportedContentCache.has('posts');
+  
+  // Return cached data if still valid
+  if (cacheAge < REPORTED_CONTENT_CACHE_DURATION) {
+    const cachedPosts = reportedContentCache.get('posts') || new Set();
+    const cachedComments = reportedContentCache.get('comments') || new Set();
+    console.log(`💾 [CP API] Using cached data (age: ${(cacheAge/1000).toFixed(1)}s, ${cachedPosts.size} posts, ${cachedComments.size} comments)`);
+    return {
+      posts: cachedPosts,
+      comments: cachedComments
+    };
+  }
+
+  // STALE-WHILE-REVALIDATE: Cache expired but we have stale data
+  // Return stale data immediately, refresh in background
+  if (hasCachedData && !isBackgroundFetchInProgress) {
+    const stalePosts = reportedContentCache.get('posts') || new Set();
+    const staleComments = reportedContentCache.get('comments') || new Set();
+    console.log(`♻️ [CP API] Cache expired - returning stale data (${stalePosts.size} posts) and refreshing in background`);
+    
+    // Fire-and-forget background refresh
+    isBackgroundFetchInProgress = true;
+    fetchReportedContentFromAPI().then(() => {
+      isBackgroundFetchInProgress = false;
+    }).catch(() => {
+      isBackgroundFetchInProgress = false;
+    });
+    
+    return {
+      posts: stalePosts,
+      comments: staleComments
+    };
+  }
+
+  // No cached data at all - must wait for fresh fetch (first load)
+  console.log(`📡 [CP API] No cached data - performing initial fetch`);
+  return await fetchReportedContentFromAPI();
 }
 
 // Check if a post is reported

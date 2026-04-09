@@ -19,7 +19,7 @@ from typing import Optional
 
 import requests
 
-from models import NormalizedPost
+from models import NormalizedPost, NormalizedComment
 from .base import BaseCollector
 
 logger = logging.getLogger("content_importer.mgtow")
@@ -162,8 +162,129 @@ class MGTOWCollector(BaseCollector):
                     author=author,
                     comment_count=0,
                     tags=[],
+                    source_permalink=video_url,
                 )
             )
 
         logger.info("MGTOW.tv: fetched %d videos", len(posts))
         return posts
+
+    # ── Comment fetching ──────────────────────────────────────────
+
+    def fetch_comments(self, post: NormalizedPost, limit: int = 3) -> list[NormalizedComment]:
+        """
+        Fetch top comments for an MGTOW.tv video by like count.
+
+        Scrapes the /watch/... page and extracts comment blocks using the
+        actual DOM structure (as of 2026-04):
+
+          <div class="main-comment">
+            <a href="/@AuthorName">AuthorName</a>
+            <div class="comment-text"><p>Comment body…</p></div>
+            <div class="div-vote-comment-btn">
+              <span data-comment-likes="..."><span>N</span></span>
+              <span data-comment-dislikes="..."><span>N</span></span>
+            </div>
+          </div>
+
+        Skips comments that contain URLs (spam filtering).
+        """
+        watch_url = getattr(post, "source_permalink", None) or post.url
+        if not watch_url or "/watch/" not in watch_url:
+            return []
+
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml",
+        }
+
+        try:
+            resp = requests.get(watch_url, headers=headers, timeout=20)
+            resp.raise_for_status()
+            html = resp.text
+        except Exception as e:
+            logger.warning("MGTOW.tv comment fetch failed for %s: %s", watch_url, e)
+            return []
+
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError:
+            return []
+
+        soup = BeautifulSoup(html, "html.parser")
+        raw_comments: list[NormalizedComment] = []
+        seen_keys: set[str] = set()
+
+        for el in soup.select(".main-comment"):
+            # ── Author ──
+            author_el = el.select_one('a[href*="/@"]')
+            author = author_el.get_text(strip=True) if author_el else "Anonymous"
+
+            # ── Body ──
+            body_el = el.select_one(".comment-text")
+            if not body_el:
+                continue
+            p_tag = body_el.select_one("p")
+            body = (p_tag.get_text(strip=True) if p_tag
+                    else body_el.get_text(strip=True))
+            if not body or len(body) < 5:
+                continue
+
+            # ── Skip comments containing URLs (spam filter) ──
+            if re.search(r"https?://", body, re.IGNORECASE):
+                logger.debug("MGTOW.tv: skipping comment with URL by %s", author)
+                continue
+
+            # ── Likes / Dislikes ──
+            likes = 0
+            dislikes = 0
+            likes_el = el.select_one("span[data-comment-likes]")
+            if likes_el:
+                inner = likes_el.select_one("span")
+                if inner:
+                    try:
+                        likes = int(inner.get_text(strip=True))
+                    except ValueError:
+                        pass
+            dislikes_el = el.select_one("span[data-comment-dislikes]")
+            if dislikes_el:
+                inner = dislikes_el.select_one("span")
+                if inner:
+                    try:
+                        dislikes = int(inner.get_text(strip=True))
+                    except ValueError:
+                        pass
+
+            score = likes - dislikes
+
+            # ── Dedup by author + body prefix ──
+            dedup_key = f"{author}:{body[:50]}"
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
+
+            if len(body) > 1000:
+                body = body[:1000] + "…"
+
+            raw_comments.append(
+                NormalizedComment(
+                    body=body,
+                    author=author,
+                    score=score,
+                    source="mgtow.tv",
+                )
+            )
+
+        # Sort by score descending, assign ranks
+        raw_comments.sort(key=lambda c: c.score, reverse=True)
+        for i, c in enumerate(raw_comments):
+            c.rank = i + 1
+
+        selected = raw_comments[:limit]
+
+        if selected:
+            logger.debug(
+                "MGTOW.tv comments for '%s': fetched %d, selected top %d",
+                post.title[:40], len(raw_comments), len(selected),
+            )
+        return selected
