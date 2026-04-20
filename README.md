@@ -123,20 +123,31 @@ Oratio/                              ← repo root
 | 4 | **lemmy-ui** | Custom frontend with BCH integration | 1234 |
 | 5 | **pictrs** | Image hosting & processing | 8080 |
 | 6 | **postgres** | PostgreSQL for forum data | 5432 |
-| 7 | **pow-validator** | PoW bot prevention (registration + posts) | 5001 |
+| 7 | **pow-validator** | PoW bot prevention (registration + posts + comments) + spam filter | 5001 |
 | 8 | **bitcoincash-service** | Payment, moderation, membership, referral, ads API | 8081 |
 | 9 | **email-service** | Resend API email proxy (aiosmtpd) | 1025, 8025 |
 | 10 | **electron-cash** | BCH HD wallet with RPC interface | 7777 |
 | 11 | **content-importer** | Auto content import from 15 sources + comment importing | 8085 |
 
+### Content Import Sources (15)
+
+Reddit, YouTube (Trending API), BitChute, Rumble, 4chan, 9GAG, Imgur, Instagram, X/Twitter (via xcancel), Upgoat (voat), Ars Technica, MGTOW, Ilbe, RSS News feeds — each with comment importing support where available.
+
+### Key Frontend Features
+
+- **Video embed** support (YouTube, Rumble, BitChute auto-embed in posts)
+- **Admin Control Panel** with referral management, campaign approval, CP moderation dashboard
+- **User badges** (membership, referrer) displayed on profiles and posts
+
 ### Request Flow
 1. **Browser** → nginx (SSL) → lemmy-ui (frontend)
-2. **Registration / New post** → nginx → pow-validator (PoW check) → lemmy (backend)
+2. **Registration / New post / Comment** → nginx → pow-validator (PoW check + spam filter) → lemmy (backend)
 3. **BCH payment** → nginx `/payments/` → bitcoincash-service → electron-cash → blockchain
-4. **Content report** → nginx `/api/cp/` → bitcoincash-service (CP moderation)
+4. **Content report** → nginx `/api/cp/` → bitcoincash-service (CP moderation, moderator-scoped)
 5. **Membership / Ads** → nginx `/api/membership/` or `/api/ads/` → bitcoincash-service
 6. **Email verification** → lemmy → email-service (Resend API) → user inbox
 7. **Content import** → content-importer (15 sources) → AI selection → lemmy API → post + comments
+8. **Membership vote** → PostgreSQL trigger → 5× vote multiplier for members (posts + comments)
 
 ---
 
@@ -415,6 +426,10 @@ The payment service (`bitcoincash-service`, port 8081) exposes the following end
 | POST | `/api/membership/purchase` | Purchase membership |
 | GET | `/api/membership/transactions/<username>` | Membership tx history |
 | POST | `/api/membership/check-expiry` | Trigger expiry check |
+| GET | `/api/membership/settings/<username>` | User's custom settings (members-only filter) |
+| POST | `/api/membership/settings` | Save user settings |
+| GET | `/api/membership/posts` | Members-only feed (Lemmy API format) |
+| GET | `/api/membership/active-users` | List active membership users |
 
 ### CP (Content Protection) Moderation API (`/api/cp/`)
 
@@ -491,6 +506,9 @@ The payment service (`bitcoincash-service`, port 8081) exposes the following end
 | POST | `/api/referral/reject/<link_id>` | Reject referral link (admin) |
 | POST | `/api/referral/verify/<link_id>` | Manually verify link (admin) |
 | GET | `/api/referral/badge/<username>` | Check if user has referrer badge |
+| GET | `/api/referral/status/<username>` | Referral status + re-verification details |
+| GET | `/api/referral/check/<username>` | Quick referral active check |
+| POST | `/api/referral/replace/<link_id>` | Replace link URL during grace period (user) |
 
 ### Static Pages
 
@@ -503,7 +521,14 @@ The payment service (`bitcoincash-service`, port 8081) exposes the following end
 
 ### PostgreSQL (Lemmy — managed by official Lemmy backend)
 
-Standard Lemmy schema: users, posts, comments, communities, etc. **Not modified.**
+Standard Lemmy schema: users, posts, comments, communities, etc. Plus custom extensions:
+
+| Extension | Purpose |
+|-----------|---------|
+| `user_memberships` table | Synced membership status from SQLite for vote multiplier |
+| `membership_post_vote_multiplier` trigger | 5× vote multiplier on `post_like` for members |
+| `membership_comment_vote_multiplier` trigger | 5× vote multiplier on `comment_like` for members |
+| `check_user_membership()` function | Checks active membership status |
 
 ### SQLite (Payment Service — `data/bitcoincash/payments.db`)
 
@@ -514,7 +539,7 @@ Standard Lemmy schema: users, posts, comments, communities, etc. **Not modified.
 | `invoices` | Payment invoices (id, address, amount, status, tx_hash, confirmations) |
 | `addresses` | Generated BCH addresses |
 | `user_credits` | User credit balances |
-| `transactions` | All transaction records (deposits, withdrawals) |
+| `transactions` | All transaction records (deposits, withdrawals) — unique index prevents duplicate credits |
 | `user_memberships` | Annual membership records (user, expiry, amount_paid) |
 | `membership_transactions` | Membership BCH transfer records |
 | `user_cp_permissions` | User moderation permissions (can_report, can_review, ban status) |
@@ -527,6 +552,8 @@ Standard Lemmy schema: users, posts, comments, communities, etc. **Not modified.
 | `referral_links` | Submitted referral links (url, domain, status, verification) |
 | `referral_awards` | Referral badge/reward records per user |
 | `referral_verification_log` | Periodic link verification audit trail |
+| `background_task_state` | Persistent task scheduler state (survives container restarts) |
+| `user_settings` | Per-user custom settings (membership_default_filter, etc.) |
 
 ---
 

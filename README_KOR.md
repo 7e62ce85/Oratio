@@ -123,20 +123,31 @@ Oratio/                              ← 레포 루트
 | 4 | **lemmy-ui** | BCH 통합 커스텀 프론트엔드 | 1234 |
 | 5 | **pictrs** | 이미지 호스팅 및 처리 | 8080 |
 | 6 | **postgres** | PostgreSQL 포럼 데이터 | 5432 |
-| 7 | **pow-validator** | PoW 봇 방지 (회원가입 + 게시글) | 5001 |
+| 7 | **pow-validator** | PoW 봇 방지 (회원가입 + 게시글 + 댓글) + 스팸 필터 | 5001 |
 | 8 | **bitcoincash-service** | 결제, 모더레이션, 멤버십, 레퍼럴, 광고 API | 8081 |
 | 9 | **email-service** | Resend API 이메일 프록시 (aiosmtpd) | 1025, 8025 |
 | 10 | **electron-cash** | BCH HD 지갑 + RPC 인터페이스 | 7777 |
 | 11 | **content-importer** | 15개 소스 자동 콘텐츠 임포트 + 댓글 가져오기 | 8085 |
 
+### 콘텐츠 임포트 소스 (15개)
+
+Reddit, YouTube (Trending API), BitChute, Rumble, 4chan, 9GAG, Imgur, Instagram, X/Twitter (xcancel 경유), Upgoat (voat), Ars Technica, MGTOW, Ilbe, RSS 뉴스피드 — 각 소스에서 인기 댓글도 함께 가져옴.
+
+### 주요 프론트엔드 기능
+
+- **비디오 임베드** 지원 (YouTube, Rumble, BitChute 게시물 내 자동 임베드)
+- **관리자 제어판** — 레퍼럴 관리, 캠페인 승인, CP 모더레이션 대시보드
+- **유저 뱃지** (멤버십, 레퍼러) 프로필과 게시물에 표시
+
 ### 요청 흐름
 1. **브라우저** → nginx (SSL) → lemmy-ui (프론트엔드)
-2. **회원가입 / 새 게시글** → nginx → pow-validator (PoW 검증) → lemmy (백엔드)
+2. **회원가입 / 새 게시글 / 댓글** → nginx → pow-validator (PoW 검증 + 스팸 필터) → lemmy (백엔드)
 3. **BCH 결제** → nginx `/payments/` → bitcoincash-service → electron-cash → 블록체인
-4. **콘텐츠 신고** → nginx `/api/cp/` → bitcoincash-service (CP 모더레이션)
+4. **콘텐츠 신고** → nginx `/api/cp/` → bitcoincash-service (CP 모더레이션, 커뮤니티별 권한)
 5. **멤버십 / 광고** → nginx `/api/membership/` 또는 `/api/ads/` → bitcoincash-service
 6. **이메일 인증** → lemmy → email-service (Resend API) → 사용자 수신함
 7. **콘텐츠 임포트** → content-importer (15개 소스) → AI 선별 → lemmy API → 게시물 + 인기 댓글
+8. **멤버십 투표** → PostgreSQL 트리거 → 멤버 투표 5배 적용 (게시글 + 댓글)
 
 ---
 
@@ -415,6 +426,10 @@ cd Oratio/oratio
 | POST | `/api/membership/purchase` | 멤버십 구매 |
 | GET | `/api/membership/transactions/<username>` | 멤버십 거래 내역 |
 | POST | `/api/membership/check-expiry` | 만료 체크 트리거 |
+| GET | `/api/membership/settings/<username>` | 유저 커스텀 설정 (멤버 전용 필터 등) |
+| POST | `/api/membership/settings` | 유저 설정 저장 |
+| GET | `/api/membership/posts` | 멤버 전용 피드 (Lemmy API 포맷) |
+| GET | `/api/membership/active-users` | 활성 멤버십 유저 목록 |
 
 ### CP (콘텐츠 보호) 모더레이션 API (`/api/cp/`)
 
@@ -491,6 +506,9 @@ cd Oratio/oratio
 | POST | `/api/referral/reject/<link_id>` | 레퍼럴 링크 거부 (관리자) |
 | POST | `/api/referral/verify/<link_id>` | 링크 수동 검증 (관리자) |
 | GET | `/api/referral/badge/<username>` | 유저 레퍼럴 배지 여부 |
+| GET | `/api/referral/status/<username>` | 레퍼럴 상태 + 재검증 상세 |
+| GET | `/api/referral/check/<username>` | 레퍼럴 활성 여부 간단 조회 |
+| POST | `/api/referral/replace/<link_id>` | 유예 기간 중 링크 URL 교체 (유저) |
 
 ### 정적 페이지
 
@@ -503,7 +521,14 @@ cd Oratio/oratio
 
 ### PostgreSQL (Lemmy — 공식 Lemmy 백엔드가 관리)
 
-표준 Lemmy 스키마: users, posts, comments, communities 등. **수정 없음.**
+표준 Lemmy 스키마: users, posts, comments, communities 등. 커스텀 확장:
+
+| 확장 | 용도 |
+|------|------|
+| `user_memberships` 테이블 | SQLite에서 동기화된 멤버십 상태 (투표 배수용) |
+| `membership_post_vote_multiplier` 트리거 | 멤버 `post_like` 시 5배 투표 |
+| `membership_comment_vote_multiplier` 트리거 | 멤버 `comment_like` 시 5배 투표 |
+| `check_user_membership()` 함수 | 활성 멤버십 여부 확인 |
 
 ### SQLite (결제 서비스 — `data/bitcoincash/payments.db`)
 
@@ -514,7 +539,7 @@ cd Oratio/oratio
 | `invoices` | 결제 인보이스 (id, 주소, 금액, 상태, tx_hash, 확인 수) |
 | `addresses` | 생성된 BCH 주소 |
 | `user_credits` | 사용자 크레딧 잔액 |
-| `transactions` | 모든 거래 기록 (입금, 출금) |
+| `transactions` | 모든 거래 기록 (입금, 출금) — 중복 크레딧 방지 UNIQUE 인덱스 |
 | `user_memberships` | 연간 멤버십 기록 (유저, 만료일, 결제액) |
 | `membership_transactions` | 멤버십 BCH 이체 기록 |
 | `user_cp_permissions` | 유저 모더레이션 권한 (신고/심사 가능, 밴 상태) |
@@ -527,6 +552,8 @@ cd Oratio/oratio
 | `referral_links` | 제출된 레퍼럴 링크 (url, 도메인, 상태, 검증) |
 | `referral_awards` | 유저별 레퍼럴 배지/보상 기록 |
 | `referral_verification_log` | 주기적 링크 검증 감사 로그 |
+| `background_task_state` | 백그라운드 작업 스케줄러 상태 (컨테이너 재시작에도 유지) |
+| `user_settings` | 유저별 커스텀 설정 (membership_default_filter 등) |
 
 ---
 
