@@ -21,6 +21,7 @@ def process_payment(invoice_id):
     
     # 이미 완료된 경우
     if invoice["status"] == "completed":
+        logger.info(f"인보이스 {invoice_id}는 이미 completed 상태입니다. 스킵합니다.")
         return invoice
     
     # 지불 확인된 경우 (paid 상태)
@@ -40,6 +41,12 @@ def process_payment(invoice_id):
                 
                 # 충분한 확인이 되면 완료 처리
                 if confirmations >= MIN_CONFIRMATIONS:
+                    # ★ Race Condition 방지: 상태 업데이트 전 DB에서 최신 상태 재확인
+                    fresh_invoice = models.get_invoice(invoice_id)
+                    if fresh_invoice and fresh_invoice["status"] == "completed":
+                        logger.warning(f"⚠️ Race Condition 방지 (paid→completed): 인보이스 {invoice_id}가 이미 completed. 스킵.")
+                        return fresh_invoice
+                    
                     models.update_invoice_status(invoice_id, "completed")
                     invoice["status"] = "completed"
                     
@@ -134,6 +141,12 @@ def process_payment(invoice_id):
                     status = "paid"
                     logger.info(f"⏳ 확인 대기 상태: {tx_hash} (confirmations={confirmations}/{MIN_CONFIRMATIONS})")
                 
+                # ★ Race Condition 방지: 상태 업데이트 전 DB에서 최신 상태 재확인
+                fresh_invoice = models.get_invoice(invoice_id)
+                if fresh_invoice and fresh_invoice["status"] == "completed":
+                    logger.warning(f"⚠️ Race Condition 방지: 인보이스 {invoice_id}가 이미 다른 스레드에서 completed 처리됨. 중복 크레딧 방지.")
+                    return fresh_invoice
+                
                 # 인보이스 상태 업데이트
                 models.update_invoice_status(invoice_id, status, tx_hash, confirmations, paid_at)
                 
@@ -176,6 +189,12 @@ def process_payment(invoice_id):
                 paid_at = int(time.time())
                 tx_hash = tx_info["txid"]
                 confirmations = tx_info.get("confirmations", 1)
+                
+                # ★ Race Condition 방지: 상태 업데이트 전 DB에서 최신 상태 재확인
+                fresh_invoice = models.get_invoice(invoice_id)
+                if fresh_invoice and fresh_invoice["status"] == "completed":
+                    logger.warning(f"⚠️ Race Condition 방지 (direct_payment): 인보이스 {invoice_id}가 이미 completed. 스킵.")
+                    return fresh_invoice
                 
                 # 인보이스 상태 업데이트
                 models.update_invoice_status(invoice_id, "paid", tx_hash, confirmations, paid_at)
@@ -220,6 +239,12 @@ def process_payment(invoice_id):
                 paid_at = int(time.time())
                 tx_hash = tx_info["txid"]
                 confirmations = tx_info.get("confirmations", 0)
+                
+                # ★ Race Condition 방지: 상태 업데이트 전 DB에서 최신 상태 재확인
+                fresh_invoice = models.get_invoice(invoice_id)
+                if fresh_invoice and fresh_invoice["status"] == "completed":
+                    logger.warning(f"⚠️ Race Condition 방지 (electron_cash fallback): 인보이스 {invoice_id}가 이미 completed. 스킵.")
+                    return fresh_invoice
                 
                 # 인보이스 상태 업데이트
                 models.update_invoice_status(invoice_id, "paid", tx_hash, confirmations, paid_at)

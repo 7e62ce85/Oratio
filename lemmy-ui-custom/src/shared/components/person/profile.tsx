@@ -300,9 +300,13 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
       await this.fetchUserData(this.props, true);
     }
     
-    // Fetch CP permissions for this user (admin only)
-    if (isBrowser() && amAdmin() && !this.amCurrentUser) {
-      this.fetchCPPermissions();
+    // Fetch CP permissions:
+    // - Admin viewing another user's profile: for admin controls
+    // - Current user viewing own profile: for status display + appeal buttons
+    if (isBrowser()) {
+      if ((amAdmin() && !this.amCurrentUser) || this.amCurrentUser) {
+        this.fetchCPPermissions();
+      }
     }
     
     // Listen for credit cache updates to refresh gold badge display
@@ -347,7 +351,7 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
     }
     
     // Refresh CP permissions when navigating to a different user
-    if (newUsername && isBrowser() && amAdmin()) {
+    if (newUsername && isBrowser()) {
       this.setState({ cpPermissions: undefined });
       this.fetchCPPermissions(nextProps.match.params.username);
     }
@@ -689,9 +693,11 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
     } = this.state;
 
     // CP ban 상태를 Lemmy ban 상태와 결합
-    const isCPBanned = cpPermissions?.is_banned ?? false;
+    // Force boolean conversion: API returns 0/1 integers, not true/false
+    // Without !!, JSX renders the number 0 as text instead of treating it as falsy
+    const isCPBanned = !!(cpPermissions?.is_banned);
     const isEffectivelyBanned = pv.person.banned || isCPBanned;
-    const canReportCP = cpPermissions?.can_report_cp ?? true;
+    const canReportCP = !!(cpPermissions?.can_report_cp ?? true);
 
     return (
       pv && (
@@ -730,6 +736,17 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
                         isReferrer={checkReferralBadgeSync(pv.person.name)}
                       />
                     </li>
+                    {this.amCurrentUser && !checkUserHasGoldBadgeSync(pv.person) && (
+                      <li className="list-inline-item">
+                        <Link
+                          to="/wallet"
+                          className="btn btn-sm btn-outline-warning"
+                          title={I18NextService.i18n.t("purchase_membership", "Purchase Annual Membership")}
+                        >
+                          💰 {I18NextService.i18n.t("get_gold_badge", "Get Gold Badge")}
+                        </Link>
+                      </li>
+                    )}
                   </ul>
                 </div>
                 {this.banDialog(pv)}
@@ -855,6 +872,69 @@ export class Profile extends Component<ProfileRouteProps, ProfileState> {
                       </button>
                     )}
                   </>
+                )}
+                {/* Current User CP Status Display */}
+                {this.amCurrentUser && cpPermissions && (
+                  <div className="w-100 mt-3">
+                    <div className={`card ${(isCPBanned || !canReportCP) ? 'border-warning' : 'border-secondary'}`}>
+                      <div className="card-body">
+                        <h5 className={`card-title ${(isCPBanned || !canReportCP) ? 'text-warning' : 'text-muted'}`}>
+                          {(isCPBanned || !canReportCP) ? '⚠️' : 'ℹ️'} CP Moderation Status
+                        </h5>
+                        
+                        {/* Normal status */}
+                        {!isCPBanned && canReportCP && (
+                          <div className="mb-0">
+                            <span className="badge bg-success me-2">✅ Posting: Active</span>
+                            <span className="badge bg-success me-2">✅ CP Reporting: Active</span>
+                          </div>
+                        )}
+                        
+                        {isCPBanned && (
+                          <div className="alert alert-danger mb-2">
+                            <strong>🚫 Account Banned</strong>
+                            <p className="mb-1">
+                              Your account is banned due to a CP violation.
+                              {cpPermissions.ban_end && (
+                                <> Ban expires on <strong>{new Date(cpPermissions.ban_end * 1000).toLocaleDateString()}</strong>
+                                {" "}({Math.max(0, Math.ceil((cpPermissions.ban_end * 1000 - Date.now()) / (1000 * 60 * 60 * 24)))} days remaining).</>
+                              )}
+                            </p>
+                            <p className="mb-1">You cannot create posts or comments while banned.</p>
+                            <Link
+                              to="/cp/appeal"
+                              className="btn btn-outline-light btn-sm mt-1"
+                            >
+                              📝 Submit Appeal (Membership Required)
+                            </Link>
+                          </div>
+                        )}
+                        
+                        {!canReportCP && !isCPBanned && (
+                          <div className="alert alert-warning mb-2">
+                            <strong>⛔ CP Reporting Ability Revoked</strong>
+                            <p className="mb-1">
+                              Your ability to report CP content has been revoked due to a false report.
+                              {cpPermissions.report_ability_revoked_at && (
+                                <> Report ability will be restored on <strong>{new Date(cpPermissions.report_ability_revoked_at * 1000).toLocaleDateString()}</strong>
+                                {" "}({Math.max(0, Math.ceil((cpPermissions.report_ability_revoked_at * 1000 - Date.now()) / (1000 * 60 * 60 * 24)))} days remaining).</>
+                              )}
+                            </p>
+                            <span className="badge bg-success me-2">✅ Posting: Active</span>
+                            <span className="badge bg-danger me-2">❌ CP Reporting: Revoked</span>
+                            <div className="mt-2">
+                              <Link
+                                to="/cp/appeal"
+                                className="btn btn-outline-warning btn-sm"
+                              >
+                                📝 Submit Appeal (Membership Required)
+                              </Link>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )}
                 {amAdmin() && (
                   <>

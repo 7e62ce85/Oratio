@@ -5,6 +5,7 @@ import { Component, linkEvent } from "inferno";
 import { RouteComponentProps } from "inferno-router/dist/Route";
 import { GetSiteResponse, LoginResponse } from "lemmy-js-client";
 import { I18NextService, UserService } from "../../services";
+import { loadUserLanguage } from "../../services/I18NextService";
 import {
   EMPTY_REQUEST,
   HttpService,
@@ -54,6 +55,7 @@ async function handleLoginSuccess(i: Login, loginRes: LoginResponse) {
   if (site.state === "success") {
     UserService.Instance.myUserInfo = site.data.my_user;
     refreshTheme();
+    await loadUserLanguage();
   }
 
   const { prev } = i.props;
@@ -151,12 +153,10 @@ async function handleLoginSubmit(i: Login, event: any) {
             }
 
             const banMsg =
-              `CP 위반으로 인해 ${banEndDate}까지 로그인이 차단되었습니다 (${daysLeft}일 남음). ` +
-              `멤버십 사용자는 /cp/appeal 에서 이의제기할 수 있습니다.\n\n` +
               `You are banned from logging in until ${banEndDate} (${daysLeft} days remaining) due to CP violation. ` +
               `Membership users can appeal at /cp/appeal`;
 
-            toast(banMsg, "danger");
+            toast(banMsg, "danger", 30000);
             i.setState({ loginRes: { state: "failed", err: { message: "site_ban" } } as any });
             break;
           }

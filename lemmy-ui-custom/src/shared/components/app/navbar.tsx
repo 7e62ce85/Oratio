@@ -15,7 +15,7 @@ import { toast } from "../../toast";
 import { Icon } from "../common/icon";
 import { PictrsImage } from "../common/pictrs-image";
 import { UserBadges } from "../common/user-badges";
-import { checkUserHasGoldBadgeSync, updateCreditCache, checkReferralBadgeSync, REFERRAL_CACHE_UPDATE_EVENT } from "../../utils/bch-payment";
+import { checkUserHasGoldBadgeSync, updateCreditCache, checkReferralBadgeSync, REFERRAL_CACHE_UPDATE_EVENT, hasReferralWarning, getReferralStatus } from "../../utils/bch-payment";
 import { getPendingReports } from "../../utils/cp-moderation";
 import { Subscription } from "rxjs";
 import { tippyMixin } from "../mixins/tippy-mixin";
@@ -60,6 +60,7 @@ interface NavbarState {
   unreadCPAdminCount: number;
   userCredit: number;
   isDarkMode: boolean;
+  referralWarning: boolean;
 }
 
 function handleCollapseClick(i: Navbar) {
@@ -69,6 +70,17 @@ function handleCollapseClick(i: Navbar) {
       ?.value === "true"
   ) {
     i.collapseButtonRef.current?.click();
+  }
+}
+
+function handleHomeLogoClick(_i: Navbar, e: Event) {
+  // If already on the home page, force a full reload so that
+  // membership filter state and pagination are properly reset to defaults.
+  const path = window.location.pathname;
+  const isHome = path === "/" || path === "";
+  if (isHome) {
+    e.preventDefault();
+    window.location.href = "/";
   }
 }
 
@@ -87,6 +99,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
   unreadReportCountSubscription: Subscription;
   unreadApplicationCountSubscription: Subscription;
   creditUpdateListener?: () => void;
+  referralWarningListener?: () => void;
 
   state: NavbarState = {
     unreadInboxCount: 0,
@@ -96,6 +109,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
     unreadCPAdminCount: 0,
     userCredit: 0,
     isDarkMode: false,
+    referralWarning: false,
   };
 
   constructor(props: any, context: any) {
@@ -136,6 +150,15 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
         window.addEventListener('bch-credit-cache-updated', this.creditUpdateListener);
         window.addEventListener(REFERRAL_CACHE_UPDATE_EVENT, this.creditUpdateListener);
         
+        // Listen for referral warning changes (from getReferralStatus)
+        this.referralWarningListener = () => {
+          this.setState({ referralWarning: hasReferralWarning() });
+        };
+        window.addEventListener('referral-warning-updated', this.referralWarningListener);
+        
+        // Initialize from localStorage
+        this.setState({ referralWarning: hasReferralWarning() });
+        
         // Force re-render after hydration to pick up localStorage cache
         // This fixes the badge not showing on initial page load
         // Use multiple timeouts to catch different loading scenarios
@@ -156,6 +179,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
       if (UserService.Instance.myUserInfo) {
         this.fetchUserCredit();
         this.fetchCPNotifications();
+        this.fetchReferralWarning();
       } else {
         // If user info not available yet, retry after a short delay
         // This handles cases where login is in progress
@@ -163,6 +187,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
           if (UserService.Instance.myUserInfo && this.state.userCredit === 0) {
             this.fetchUserCredit();
             this.fetchCPNotifications();
+            this.fetchReferralWarning();
           }
         }, 1000);
       }
@@ -291,6 +316,20 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
     }
   }
 
+  // Fetch referral warning state (grace period link detected)
+  async fetchReferralWarning() {
+    try {
+      const person = UserService.Instance.myUserInfo?.local_user_view.person;
+      if (!person) return;
+      // getReferralStatus internally stores warning in localStorage
+      // and dispatches 'referral-warning-updated' event
+      await getReferralStatus(person.name);
+      this.setState({ referralWarning: hasReferralWarning() });
+    } catch (error) {
+      console.error("[Referral] Error fetching referral warning:", error);
+    }
+  }
+
   // Fetch CP notification counts for moderators and admins
   async fetchCPNotifications() {
     try {
@@ -388,6 +427,11 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
       window.removeEventListener('bch-credit-cache-updated', this.creditUpdateListener);
       window.removeEventListener(REFERRAL_CACHE_UPDATE_EVENT, this.creditUpdateListener);
     }
+    
+    // Remove referral warning listener
+    if (typeof window !== 'undefined' && this.referralWarningListener) {
+      window.removeEventListener('referral-warning-updated', this.referralWarningListener);
+    }
   }
 
   // TODO class active corresponding to current pages
@@ -406,6 +450,7 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
             title={siteView?.site.description ?? siteView?.site.name}
             className="d-flex align-items-center navbar-brand me-md-3"
             onMouseUp={linkEvent(this, handleCollapseClick)}
+            onClick={linkEvent(this, handleHomeLogoClick)}
           >
             {siteView?.site.icon && showAvatars() && (
               <PictrsImage src={siteView.site.icon} icon />
@@ -414,6 +459,18 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
           </NavLink>
           {person && (
             <ul className="navbar-nav d-flex flex-row ms-auto d-md-none">
+              {this.state.referralWarning && (
+                <li className="nav-item nav-item-icon">
+                  <NavLink
+                    to="/wallet"
+                    className="p-1 nav-link border-0"
+                    title="레퍼럴 링크 확인 필요"
+                    onMouseUp={linkEvent(this, handleCollapseClick)}
+                  >
+                    <Icon icon="alert-triangle" classes="text-warning" />
+                  </NavLink>
+                </li>
+              )}
               <li id="navMessages" className="nav-item nav-item-icon">
                 <NavLink
                   to="/inbox"
@@ -659,6 +716,21 @@ export class Navbar extends Component<NavbarProps, NavbarState> {
               )}
               {person ? (
                 <>
+                  {this.state.referralWarning && (
+                    <li className="nav-item">
+                      <NavLink
+                        className="nav-link d-inline-flex align-items-center d-md-inline-block"
+                        to="/wallet"
+                        title="레퍼럴 링크 확인 필요"
+                        onMouseUp={linkEvent(this, handleCollapseClick)}
+                      >
+                        <Icon icon="alert-triangle" classes="text-warning" />
+                        <span className="badge text-bg-warning d-inline ms-1 d-md-none ms-md-0">
+                          레퍼럴 경고
+                        </span>
+                      </NavLink>
+                    </li>
+                  )}
                   <li id="navMessages" className="nav-item">
                     <NavLink
                       className="nav-link d-inline-flex align-items-center d-md-inline-block"

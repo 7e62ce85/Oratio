@@ -173,61 +173,58 @@
     <!-- 네비게이션 바 스타일 -->
     <div class="navbar-like">
         <div class="container text-center">
-            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
+            <a href="https://oratio.space/" class="site-title" data-i18n="site_title">✨ oratio</a>
         </div>
     </div>
 
     <div class="container">
         <div class="card">
             <div class="card-header text-center">
-                <h2>💳 Bitcoin Cash Payment Service</h2>
+                <h2 data-i18n="bch_payment_service">💳 Bitcoin Cash Payment Service</h2>
             </div>
             <div class="card-body">
                 <!-- Non-Refundable Policy Warning -->
                 <div class="alert alert-danger mb-4 text-center">
-                    <h5 class="alert-heading"><span class="emoji-icon">⚠️</span><strong>Important: Non-Refundable Policy</strong></h5>
-                    <p class="mb-2 fs-5">All Bitcoin Cash payments are <strong>non-refundable</strong>.</p>
+                    <h5 class="alert-heading"><span class="emoji-icon">⚠️</span><strong data-i18n="nonrefundable_title">Important: Non-Refundable Policy</strong></h5>
+                    <p class="mb-2 fs-5" data-i18n="nonrefundable_desc" data-i18n-html="true">All Bitcoin Cash payments are <strong>non-refundable</strong>.</p>
                     <div class="text-start" style="max-width: 600px; margin: 0 auto;">
-                        <p class="mb-1">• Please verify the amount and address before payment</p>
-                        <p class="mb-1">• For security reasons and to avoid AML laws, deposits are non-refundable.</p>
-                        <p class="mb-0">• Proceeding with payment implies agreement to this policy</p>
+                        <p class="mb-1" data-i18n="nonrefundable_1">• Please verify the amount and address before payment</p>
+                        <p class="mb-1" data-i18n="nonrefundable_2">• For security reasons and to avoid AML laws, deposits are non-refundable.</p>
+                        <p class="mb-0" data-i18n="nonrefundable_3">• Proceeding with payment implies agreement to this policy</p>
                     </div>
                 </div>
                 
-                <!-- <div class="alert alert-warning mb-4 text-center">
-                    <p class="mb-0"><span class="emoji-icon">📋</span><strong>Payment Instructions:</strong> Send the exact amount to the generated address below. Payment completion may take 10-30 minutes.</p>
-                </div> -->
-                
                 <!-- Premium Benefits Information -->
                 <div class="alert alert-success mb-4">
-                    <h5 class="alert-heading text-center"><span class="emoji-icon">💎</span>Premium Benefits</h5>
-                    <p class="mb-3 text-center"><strong>Premium membership 5 USD per year</strong></p>
+                    <h5 class="alert-heading text-center"><span class="emoji-icon">💎</span><span data-i18n="premium_title">Premium Benefits</span></h5>
+                    <p class="mb-3 text-center"><strong data-i18n="premium_price">Annual Membership — only $5 USD/year in BCH</strong></p>
                     <div style="max-width: 600px; margin: 0 auto;">
-                        <div class="benefit-item">✅ Remove ad banners across the entire site</div>
-                        <div class="benefit-item">✅ Clean and focused browsing environment</div>
-                        <div class="benefit-item">✅ Faster page loading speed</div>
-                        <div class="benefit-item">✅ Membership apportunity with multiple benefits</div>
+                        <div class="benefit-item" data-i18n="benefit_voting" data-i18n-html="true">🗳️ <strong>5× Voting Power</strong> — Your votes on posts and comments count 5 times more</div>
+                        <div class="benefit-item" data-i18n="benefit_visibility" data-i18n-html="true">📈 <strong>Instant Visibility</strong> — Your content starts with 5 upvotes, reaching more people faster</div>
+                        <div class="benefit-item" data-i18n="benefit_badge" data-i18n-html="true">💰 <strong>Gold Badge</strong> — Stand out with a 💰 badge next to your name everywhere</div>
+                        <div class="benefit-item" data-i18n="benefit_adfree" data-i18n-html="true">🚫 <strong>Ad-Free Experience</strong> — All ad banners removed across the entire site</div>
+                        <div class="benefit-item" data-i18n="benefit_feed" data-i18n-html="true">⭐ <strong>Members-Only Feed</strong> — Filter to see only quality posts from fellow members</div>
                     </div>
                 </div>
                 
                 <div class="text-center mb-2">
-                    <a href="/payments/help" class="btn btn-outline-info btn-lg mt-2">🛈 BCH Bitcoin Cash Help</a>
+                    <a href="/payments/help" class="btn btn-outline-info btn-lg mt-2" data-i18n="bch_help_btn">🛈 BCH Bitcoin Cash Help</a>
                 </div>
                 <div class="text-center mb-4">
-                    <a href="https://oratio.space/" class="btn btn-lg btn-primary">🏠 Return to oratio.space</a>
+                    <a href="https://oratio.space/" class="btn btn-lg btn-primary" data-i18n="return_home">🏠 Return to oratio.space</a>
                 </div>
                 
                 <div class="form-section">
-                    <h4>🎫 Generate Payment Invoice</h4>
-                    <p class="text-center text-muted mb-4">For development and testing purposes only.</p>
+                    <h4 data-i18n="generate_invoice_title">🎫 Generate Payment Invoice</h4>
+                    <p class="text-center text-muted mb-4" data-i18n="generate_invoice_desc">For development and testing purposes only.</p>
                     <form action="generate_invoice" method="get" class="mb-3">
                         <div class="mb-3">
-                            <label for="amount" class="form-label fw-bold">Amount (BCH)</label>
+                            <label for="amount" class="form-label fw-bold" data-i18n="amount_label">Amount (BCH)</label>
                             <input type="number" step="0.00001" min="0.00001" name="amount" id="amount" class="form-control" value="0.01" required>
-                            <div class="form-text">Minimum amount: 0.0001 BCH</div>
+                            <div class="form-text" data-i18n="amount_min">Minimum amount: 0.0001 BCH</div>
                         </div>
                         <div class="mb-3">
-                            <label for="user_id" class="form-label fw-bold">Username <span class="text-danger">*</span></label>
+                            <label for="user_id" class="form-label fw-bold"><span data-i18n="username_label">Username</span> <span class="text-danger">*</span></label>
                             <input type="text" name="user_id" id="user_id" class="form-control" 
                                    value="{{ user_id }}" 
                                    {% if user_id %}readonly{% endif %}
@@ -239,16 +236,17 @@
                                    readonly>
                             <div class="form-text {% if username %}text-success{% else %}text-danger{% endif %}">
                                 {% if username %}
-                                <strong>✓ Logged in as:</strong> <span class="fw-bold">{{ username }}</span><br>
-                                <strong>Info:</strong> Credits will be accumulated to your account after payment
+                                <strong data-i18n="logged_in_as">✓ Logged in as:</strong> <span class="fw-bold">{{ username }}</span><br>
+                                <strong>Info:</strong> <span data-i18n="credit_info">Credits will be accumulated to your account after payment</span>
                                 {% else %}
-                                <strong>⚠️ Not logged in:</strong> Please login to oratio.space first<br>
-                                <strong>Warning:</strong> Without login, you cannot receive payment benefits
+                                <strong data-i18n="not_logged_in_warning">⚠️ Not logged in: Please login to oratio.space first</strong><br>
+                                <strong>Warning:</strong> <span data-i18n="no_login_warning">Without login, you cannot receive payment benefits</span>
                                 {% endif %}
                             </div>
                         </div>
                         <div class="text-center">
-                            <button type="submit" class="btn btn-primary btn-lg" {% if not username %}disabled{% endif %}>
+                            <button type="submit" class="btn btn-primary btn-lg" {% if not username %}disabled{% endif %}
+                                    data-i18n="{% if username %}generate_invoice_btn{% else %}login_required_btn{% endif %}">
                                 {% if username %}🚀 Generate Invoice{% else %}🔒 Login Required{% endif %}
                             </button>
                         </div>
@@ -261,9 +259,11 @@
     <!-- Footer -->
     <div class="footer-like">
         <div class="container">
-            <p class="mb-0">&copy; 2025 oratio - Bitcoin Cash Payment System</p>
-            <small>Providing secure and transparent cryptocurrency payments</small>
+            <p class="mb-0" data-i18n="footer_copyright">&copy; 2026 oratio - Bitcoin Cash Payment System</p>
+            <small data-i18n="footer_desc">Providing secure and transparent cryptocurrency payments</small>
         </div>
     </div>
+
+    <script src="/payments/static/js/i18n.js"></script>
 </body>
 </html>

@@ -1,17 +1,16 @@
 # Annual Membership & Gold Badge System
 
-> **Version**: v4.2 | **Updated**: 2025-11-02 | **Status**: ✅ Production (Vote Toggle Bug Fixed)
+> **Version**: v5.2 | **Updated**: 2026-04-15 | **Status**: ✅ Production (Comment Vote Multiplier)
 
 ## 🎯 Quick Overview
 
 **Gold Badge System** (💰): Annual membership-based premium feature system for Oratio platform.
 
 | Feature | Details |
-|---------|---------|
-| **Cost** | $5 USD in BCH (real-time exchange rate) |
+|---------|---------|| **5x Vote Multiplier** (membership users' votes count 5 times more on posts and comments) || **Cost** | $5 USD in BCH (real-time exchange rate) |
 | **Duration** | 365 days from purchase |
 | **Payment** | From user credit → admin wallet |
-| **Benefits** | Gold badge display, premium community access, **5x vote power** |
+| **Benefits** | Gold badge display, premium community access, **5x vote power (posts + comments)** |
 
 ---
 
@@ -42,6 +41,13 @@ CREATE TABLE membership_transactions (
     created_at INTEGER NOT NULL,
     confirmed_at INTEGER
 );
+
+-- User custom settings (Oratio-specific, not in Lemmy API)
+CREATE TABLE user_settings (
+    user_id TEXT PRIMARY KEY,
+    membership_default_filter BOOLEAN DEFAULT FALSE,
+    updated_at INTEGER NOT NULL DEFAULT 0
+);
 ```
 
 ### API Endpoints
@@ -52,6 +58,8 @@ CREATE TABLE membership_transactions (
 | `/api/membership/status/<user>` | GET | ✅ | Check membership status |
 | `/api/membership/purchase` | POST | ✅ | Purchase membership |
 | `/api/membership/transactions/<user>` | GET | ✅ | Get transaction history |
+| `/api/membership/settings/<user>` | GET | ❌ | Get user's custom settings |
+| `/api/membership/settings` | POST | ❌ | Save user's custom settings |
 
 ### Price Service
 
@@ -308,6 +316,9 @@ docker-compose logs -f bitcoincash-service | grep -i "membership\|error"
 - **5x Vote Multiplier** (membership users' votes count 5 times more on posts)
 - **Automatic Membership Sync** (SQLite → PostgreSQL every 60 seconds)
 - **Database-Level Implementation** (transparent to frontend, no UI changes needed)
+- **Membership Posts Filter** (DB-level filtering, all sort types, full pagination)
+- **Settings Default Filter** (Settings 페이지에서 default members-only 설정, SQLite DB 영구 저장)
+- **Auto Expiry Filter Clear** (멤버십 만료 시 default filter 자동 해제)
 
 ---
 
@@ -373,6 +384,34 @@ docker exec -it bitcoincash-service sqlite3 /app/data/payment.db
 
 ## 📅 Changelog
 
+**2026-04-15** (v5.2) - Comment Vote Multiplier
+- ✅ **NEW**: Comment vote에도 5x multiplier 적용 (기존 post만 → post + comment 모두)
+- 🔧 `apply_comment_vote_multiplier()` PostgreSQL 함수 추가
+- ✅ `membership_comment_vote_multiplier` trigger를 `comment_like` 테이블에 설치
+- ✅ INSERT, UPDATE, DELETE 모든 vote 동작 지원 (toggle off 포함)
+- 🔧 deploy 스크립트 컨테이너명 `postgres` → `oratio-postgres-1` 수정
+- 📝 문서 업데이트: Benefits 섹션, Verification 커맨드 등
+
+**2026-04-10** (v5.1) - Settings Default Filter + DB Storage
+- ✅ Settings 페이지(`/settings`)에 "Members only default" 체크박스 추가 (Sort type 바로 아래)
+- 🔧 localStorage → SQLite DB(`user_settings` 테이블) 영구 저장으로 전환
+- ✅ 멤버십 만료 시 `check_and_expire_memberships()`에서 자동으로 filter 설정 해제
+- ✅ `GET/POST /api/membership/settings` 엔드포인트 추가
+- ✅ POST 시 서버에서 멤버십 활성 여부 검증 (비멤버 활성화 차단)
+- 🔧 Home 로고 클릭 시 이미 `/`면 full page reload로 state 완전 리셋
+- ⚡ Home 초기 로드 최적화: membership check + settings API 병렬 호출, 이중 fetchData 제거
+- ✅ 30개 언어 `membership_default_filter` 번역 키 추가
+
+**2026-04-10** (v5.0) - Membership Posts Filter
+- ✅ **NEW FEATURE**: Home feed에서 멤버십 유저 게시글만 필터링하는 체크박스
+- 🔧 PostgreSQL 직접 쿼리로 DB 레벨 필터링 (프론트엔드 한계 극복)
+- ✅ 모든 정렬 옵션 지원 (Active, Hot, New, Old, TopAll 등 19개)
+- ✅ 페이지네이션 완벽 지원 (20개씩 페이지 꽉 채움)
+- ✅ 비멤버십 유저는 체크박스 disabled 처리
+- ✅ `GET /api/membership/posts` + `GET /api/membership/active-users` 엔드포인트 추가
+- ✅ 30개 언어 번역 키 추가
+- 📝 이전 프론트엔드-only 시도 실패 기록 통합 (MEMBERSHIP_FILTER_ATTEMPT.md 삭제)
+
 **2025-11-02** (v4.2) - Vote Toggle Bug Fix
 - 🐛 **CRITICAL FIX**: Fixed mobile browser vote toggle issue
 - 🔧 Trigger now properly tracks upvote/downvote removal separately
@@ -405,26 +444,97 @@ docker exec -it bitcoincash-service sqlite3 /app/data/payment.db
 
 ---
 
-## 🗳️ Vote Multiplier System
+## � Membership Posts Filter
 
 ### Overview
 
-Membership users' votes on posts automatically count as **5x normal votes**. This is implemented at the database level using PostgreSQL triggers, making it transparent and automatic.
+Home feed에서 멤버십 유저의 게시글만 필터링하는 체크박스. 기존 정렬(Active, Hot, New 등) 옆에 💰 체크박스 → 체크하면 해당 정렬을 유지하면서 멤버십 유저 글만 20개씩 페이지를 꽉 채워서 표시.
+
+### Why Backend Implementation?
+
+프론트엔드만으로는 불가능했음 (Lemmy API가 `creator_id` 1명만 지원):
+- 클라이언트 필터링: 20개 중 멤버 글 1~2개만 남아 페이지 비어보임
+- 다중 API 호출: 속도 심각하게 느려짐
+- **해결**: PostgreSQL 직접 쿼리로 DB 레벨 필터링 → 빠르고 정확히 20개씩 반환
+
+### Architecture
+
+```
+[체크박스 체크] → home.tsx fetchMembershipPosts()
+    → fetch('/api/membership/posts?sort=New&page=1&limit=20')
+    → Nginx → bitcoincash-service (Flask)
+    → membership_posts.py → PostgreSQL 직접 쿼리
+    → Lemmy API 형식으로 응답 반환
+    → 기존 PostListings 컴포넌트에 그대로 렌더링
+```
+
+### Access Control
+
+- **멤버십 유저**: 체크박스 활성화, 클릭 가능
+- **비멤버십 유저**: 체크박스 보이지만 disabled (grayed out), 호버 시 tooltip 표시
+- **비로그인 유저**: 체크박스 보이지만 disabled
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `bitcoincash_service/services/membership_posts.py` | PostgreSQL 직접 쿼리, 모든 정렬 지원, Lemmy API 형식 응답 |
+| `bitcoincash_service/routes/membership.py` | posts, active-users, settings 엔드포인트 |
+| `bitcoincash_service/models.py` | `user_settings` 테이블 + CRUD + 만료 시 자동 해제 |
+| `lemmy-ui-custom/src/shared/components/home/home.tsx` | 체크박스 UI, 멤버십 필터 로직, DB에서 default 설정 로드 |
+| `lemmy-ui-custom/src/shared/components/person/settings.tsx` | Settings 페이지 "Members only" 체크박스, DB 저장 |
+| `lemmy-ui-custom/src/shared/components/app/navbar.tsx` | 홈 로고 클릭 시 full reload (state 리셋) |
+| `lemmy-ui-custom/custom-translations.json` | `membership_posts_only` + `membership_default_filter` (30개 언어) |
+
+### API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/membership/posts` | ❌ | Membership posts (sort, page, limit, type_) |
+| GET | `/api/membership/active-users` | ❌ | Active membership user list |
+| GET | `/api/membership/settings/<user>` | ❌ | User's custom settings |
+| POST | `/api/membership/settings` | ❌ | Save user's custom settings (서버에서 멤버십 검증) |
+
+### Supported Sort Types
+
+Active, Hot, Scaled, Controversial, New, Old, MostComments, NewComments, TopHour, TopSixHour, TopTwelveHour, TopDay, TopWeek, TopMonth, TopThreeMonths, TopSixMonths, TopNineMonths, TopYear, TopAll
+
+### Verification
+
+```bash
+# Test membership posts API
+curl -s 'http://localhost:8081/api/membership/posts?sort=New&limit=5&page=1' | python3 -m json.tool
+
+# Test active users
+curl -s 'http://localhost:8081/api/membership/active-users' | python3 -m json.tool
+
+# Nginx routing test
+curl -s 'https://oratio.space/api/membership/posts?sort=Active&limit=3'
+```
+
+---
+
+## �🗳️ Vote Multiplier System
+
+### Overview
+
+Membership users' votes on posts and comments automatically count as **5x normal votes**. This is implemented at the database level using PostgreSQL triggers, making it transparent and automatic.
 
 ### How It Works
 
-1. **User votes on a post** → Lemmy backend records vote in `post_like` table
+1. **User votes on a post or comment** → Lemmy backend records vote in `post_like` / `comment_like` table
 2. **PostgreSQL trigger fires** → Checks if user has active membership
-3. **If membership active** → Automatically multiplies vote impact by 5x in `post_aggregates`
-4. **Result** → Post score reflects the 5x multiplier immediately
+3. **If membership active** → Automatically multiplies vote impact by 5x in `post_aggregates` / `comment_aggregates`
+4. **Result** → Post/comment score reflects the 5x multiplier immediately
 
 ### Technical Implementation
 
-**Database Trigger**: `membership_post_vote_multiplier`
-- Fires on INSERT, UPDATE, DELETE of `post_like` table
-- Checks `user_memberships` table for active status
-- Applies 5x multiplier to vote score
-- Updates `post_aggregates` accordingly
+**Database Triggers**:
+- `membership_post_vote_multiplier` — Fires on INSERT, UPDATE, DELETE of `post_like` table
+- `membership_comment_vote_multiplier` — Fires on INSERT, UPDATE, DELETE of `comment_like` table
+- Both check `user_memberships` table for active status
+- Apply 5x multiplier to vote score
+- Update `post_aggregates` / `comment_aggregates` accordingly
 
 **Membership Sync Service**:
 - Runs every 60 seconds in bitcoincash-service
@@ -432,7 +542,7 @@ Membership users' votes on posts automatically count as **5x normal votes**. Thi
 - Ensures vote multiplier has current membership data
 
 **Key Files**:
-- `/oratio/migrations/membership_vote_multiplier.sql` - Database triggers
+- `/oratio/migrations/membership_vote_multiplier.sql` - Database triggers (posts + comments)
 - `/oratio/bitcoincash_service/services/membership_sync.py` - Sync service
 - `/oratio/deploy_membership_vote_multiplier.sh` - Deployment script
 
@@ -455,30 +565,36 @@ bash deploy_membership_vote_multiplier.sh
 
 ```bash
 # Check if triggers are installed
-docker exec -i postgres psql -U lemmy -d lemmy -c \
-  "SELECT tgname FROM pg_trigger WHERE tgname = 'membership_post_vote_multiplier';"
+docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy -c \
+  "SELECT tgname, tgrelid::regclass FROM pg_trigger WHERE tgname LIKE 'membership_%';"
 
 # View synced memberships
-docker exec -i postgres psql -U lemmy -d lemmy -c \
+docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy -c \
   "SELECT user_id, is_active, expires_at FROM user_memberships;"
 
 # Check sync service logs
 docker compose logs -f bitcoincash-service | grep -i "membership sync"
 
-# Test vote multiplier
+# Test post vote multiplier
 # 1. Have a membership user vote on a post
 # 2. Check the vote counts:
-docker exec -i postgres psql -U lemmy -d lemmy -c \
+docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy -c \
   "SELECT id, score, upvotes FROM post_aggregates WHERE post_id = YOUR_POST_ID;"
+
+# Test comment vote multiplier
+# 1. Have a membership user vote on a comment
+# 2. Check the vote counts:
+docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy -c \
+  "SELECT comment_id, score, upvotes FROM comment_aggregates WHERE comment_id = YOUR_COMMENT_ID;"
 ```
 
 ### Benefits
 
 - **Reward loyal members** - Membership users have more influence
 - **Transparent** - Works automatically, no frontend changes
-- **Fair** - Only applies to posts, not comments
+- **Fair** - Applies to both posts and comments
 - **Efficient** - Database-level implementation (no API overhead)
 
 ---
 
-_Document Version: 1.3 | System Version: v4.2 | Status: Production Ready_
+_Document Version: 1.6 | System Version: v5.2 | Status: Production Ready_

@@ -13,7 +13,12 @@ import re
 from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
 from config import logger, LEMMY_API_KEY
 import models
-from services.referral_verifier import auto_verify_on_submit, _grant_referral_membership, _revoke_referral_membership
+from services.referral_verifier import (
+    auto_verify_on_submit, _grant_referral_membership, _revoke_referral_membership,
+    _count_verification_failures, _revoke_for_strike,
+    verify_link, log_verification,
+    TOTAL_FAIL_LIMIT, EARLY_BACKOFF_SCHEDULE, GRACE_PERIOD_DAYS
+)
 
 # Blueprint
 referral_bp = Blueprint('referral', __name__)
@@ -307,6 +312,7 @@ def get_referral_status(username):
                 "has_referral": False,
                 "has_badge": False,
                 "has_membership": False,
+                "is_banned": False,
                 "links": []
             })
 
@@ -324,12 +330,11 @@ def get_referral_status(username):
         ''', (username,))
         has_membership = cursor.fetchone()[0] > 0
 
-        conn.close()
-
         links = []
+        now_ts = int(time.time())
         for row in link_rows:
             link_id, url, domain, status, verified, submitted_at, reject_reason = row
-            links.append({
+            link_data = {
                 "link_id": link_id,
                 "url": url,
                 "domain": domain,
@@ -337,12 +342,86 @@ def get_referral_status(username):
                 "verified": bool(verified),
                 "submitted_at": submitted_at,
                 "reject_reason": reject_reason,
-            })
+            }
+
+            # rejected (3-strike/auto-revoked) 링크에도 상세 정보 추가
+            if status == 'rejected' and reject_reason and ('3-strike' in reject_reason or 'auto-revoked' in reject_reason or 'Backlink removed' in reject_reason):
+                fail_count = _count_verification_failures(link_id, conn)
+                link_data["fail_count"] = fail_count
+                link_data["fail_limit"] = TOTAL_FAIL_LIMIT
+                link_data["grace_period_days"] = GRACE_PERIOD_DAYS
+
+                # 마지막 검증 로그 가져오기
+                cursor.execute('''
+                    SELECT datetime(checked_at, 'unixepoch'), http_status, link_found, notes
+                    FROM referral_verification_log
+                    WHERE link_id = ?
+                    ORDER BY checked_at DESC LIMIT 5
+                ''', (link_id,))
+                recent_logs = cursor.fetchall()
+                link_data["recent_checks"] = [
+                    {"checked_at": r[0], "http_status": r[1], "link_found": bool(r[2]), "notes": r[3]}
+                    for r in recent_logs
+                ]
+
+            # approved 상태인 링크에 재검증 상세 정보 추가
+            if status == 'approved':
+                fail_count = _count_verification_failures(link_id, conn)
+                link_data["fail_count"] = fail_count
+                link_data["fail_limit"] = TOTAL_FAIL_LIMIT
+                link_data["grace_period_days"] = GRACE_PERIOD_DAYS
+
+                # 실제 다음 background task 실행 시점 계산
+                # background_task_state에서 last_run_at + 12h = 다음 실행 시점
+                cursor.execute('''
+                    SELECT last_run_at FROM background_task_state
+                    WHERE task_name = 'referral_reverify'
+                ''')
+                task_row = cursor.fetchone()
+                next_task_run = (task_row[0] + 12 * 3600) if task_row else now_ts
+
+                # 백오프 스케줄에서 다음 체크 가능 시점 계산
+                cursor.execute('''
+                    SELECT awarded_at FROM referral_awards
+                    WHERE link_id = ? AND award_type IN ('badge', 'membership')
+                    ORDER BY awarded_at ASC LIMIT 1
+                ''', (link_id,))
+                award_row = cursor.fetchone()
+                if award_row:
+                    approved_at = award_row[0]
+                    elapsed = now_ts - approved_at
+
+                    # 다음 백오프 체크 가능 시점
+                    next_backoff_at = None
+                    for interval in EARLY_BACKOFF_SCHEDULE:
+                        check_time = approved_at + int(interval)
+                        if check_time > now_ts:
+                            next_backoff_at = check_time
+                            break
+
+                    if next_backoff_at:
+                        # 실제 재검증 = max(다음 백오프 시점, 다음 task 실행 시점)
+                        actual_next = max(next_backoff_at, next_task_run)
+                        link_data["next_check_at"] = actual_next
+                        link_data["next_check_in_hours"] = round(max(0, (actual_next - now_ts)) / 3600, 1)
+                    elif next_task_run > now_ts:
+                        # 64일 이후이지만 아직 체크 예정이면 task 실행 시점 사용
+                        link_data["next_check_at"] = next_task_run
+                        link_data["next_check_in_hours"] = round((next_task_run - now_ts) / 3600, 1)
+                    else:
+                        # 90일 정기 재검증 대상
+                        link_data["next_check_at"] = None
+                        link_data["next_check_in_hours"] = None
+
+            links.append(link_data)
+
+        conn.close()
 
         return jsonify({
             "has_referral": True,
             "has_badge": has_badge,
             "has_membership": has_membership,
+            "is_banned": False,
             "links": links
         })
 
@@ -553,29 +632,235 @@ def reject_referral(link_id):
 @referral_bp.route('/api/referral/verify/<link_id>', methods=['POST'])
 @require_admin_key
 def manual_verify_referral(link_id):
-    """관리자: 특정 링크 수동 재검증 트리거"""
+    """관리자: 특정 링크 수동 재검증 트리거 (3-strike 포함)"""
     try:
         conn = models.get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute('SELECT id, url, submitted_by, status FROM referral_links WHERE id = ?', (link_id,))
+        cursor.execute('SELECT id, url, submitted_by, status, verified FROM referral_links WHERE id = ?', (link_id,))
         row = cursor.fetchone()
-        conn.close()
 
         if not row:
+            conn.close()
             return jsonify({"error": "Link not found"}), 404
 
-        _, url, submitted_by, status = row
+        _, url, submitted_by, status, currently_verified = row
 
-        result = auto_verify_on_submit(link_id, url, submitted_by)
+        # pending 상태 링크는 기존 auto_verify_on_submit 사용
+        if status != 'approved':
+            conn.close()
+            result = auto_verify_on_submit(link_id, url, submitted_by)
+            return jsonify({
+                "success": True,
+                "auto_approved": result["auto_approved"],
+                "verification": result["result"],
+                "message": "Auto-approved" if result["auto_approved"] else "Backlink not found — still pending"
+            })
 
-        return jsonify({
-            "success": True,
-            "auto_approved": result["auto_approved"],
-            "verification": result["result"],
-            "message": "Auto-approved" if result["auto_approved"] else "Backlink not found — still pending"
-        })
+        # ── approved 링크: 3-strike 포함 재검증 ──
+        result = verify_link(url)
+        log_verification(link_id, result, conn=conn)
+        now = int(time.time())
+
+        if result["link_found"]:
+            cursor.execute('''
+                UPDATE referral_links SET verified = TRUE, last_verified_at = ?
+                WHERE id = ?
+            ''', (now, link_id))
+            conn.commit()
+            conn.close()
+            return jsonify({
+                "success": True,
+                "verified": True,
+                "verification": result,
+                "message": "Backlink found — link verified successfully"
+            })
+        else:
+            # 실패 → 3-strike 체크
+            fail_count = _count_verification_failures(link_id, conn)
+            if fail_count >= TOTAL_FAIL_LIMIT:
+                _revoke_for_strike(link_id, submitted_by, fail_count, conn)
+                conn.close()
+                return jsonify({
+                    "success": True,
+                    "verified": False,
+                    "verification": result,
+                    "revoked": True,
+                    "message": f"3-strike auto-revoked: {fail_count} total failures — badge and membership revoked"
+                })
+            elif currently_verified:
+                # 첫 실패 → verified=FALSE (유예 시작)
+                cursor.execute('''
+                    UPDATE referral_links SET verified = FALSE, last_verified_at = ?
+                    WHERE id = ?
+                ''', (now, link_id))
+                conn.commit()
+                conn.close()
+                return jsonify({
+                    "success": True,
+                    "verified": False,
+                    "verification": result,
+                    "message": f"Backlink not found — grace period started (strike {fail_count}/{TOTAL_FAIL_LIMIT})"
+                })
+            else:
+                # 이미 유예 상태
+                cursor.execute('''
+                    UPDATE referral_links SET last_verified_at = ?
+                    WHERE id = ?
+                ''', (now, link_id))
+                conn.commit()
+                conn.close()
+                return jsonify({
+                    "success": True,
+                    "verified": False,
+                    "verification": result,
+                    "message": f"Backlink still not found — grace period continues (strike {fail_count}/{TOTAL_FAIL_LIMIT})"
+                })
 
     except Exception as e:
         logger.error(f"[Referral] Manual verify error: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
+
+# ==================== Link Replace (User) ====================
+
+@referral_bp.route('/api/referral/replace/<link_id>', methods=['POST'])
+@require_api_key
+def replace_referral_link(link_id):
+    """
+    유저: 유예 상태(approved + verified=FALSE)인 링크의 URL을 교체하고 즉시 재검증.
+    - 백링크가 발견되면 verified=TRUE로 복구 → 멤버십 유지
+    - 백링크가 없으면 verified=FALSE 유지 → 유예 기간 계속
+    Body: { "username": "...", "url": "https://new-site.com/page-with-link" }
+    """
+    if not REFERRAL_ENABLED:
+        return jsonify({"error": "Referral system is currently disabled"}), 503
+
+    try:
+        data = request.get_json()
+        if not data or 'username' not in data or 'url' not in data:
+            return jsonify({"error": "Missing username or url"}), 400
+
+        username = data['username'].strip()
+        new_url = data['url'].strip()
+
+        # URL 유효성 검사
+        is_valid, error_msg = validate_url(new_url)
+        if not is_valid:
+            return jsonify({"error": error_msg}), 400
+
+        new_normalized = normalize_url(new_url)
+        new_domain = extract_domain(new_url)
+
+        # 기존 링크 조회 + 권한 확인
+        conn = models.get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            'SELECT id, url, submitted_by, status, verified FROM referral_links WHERE id = ?',
+            (link_id,)
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            conn.close()
+            return jsonify({"error": "Link not found"}), 404
+
+        _, old_url, submitted_by, status, verified = row
+
+        # 본인 링크만 교체 가능
+        if submitted_by != username:
+            conn.close()
+            return jsonify({"error": "You can only replace your own link"}), 403
+
+        # approved + verified=FALSE (유예 상태)에서만 교체 가능
+        if status != 'approved' or verified:
+            conn.close()
+            return jsonify({
+                "error": "Link replacement is only available when re-verification has failed "
+                         "(approved but backlink not found)."
+            }), 409
+
+        # URL이 동일하면 그냥 재검증만 실행
+        old_normalized = normalize_url(old_url)
+        url_changed = (new_normalized != old_normalized)
+
+        if url_changed:
+            # 새 URL 중복 확인 (다른 사용자가 이미 사용 중인지)
+            cursor.execute('''
+                SELECT id FROM referral_links
+                WHERE normalized_url = ? AND id != ? AND status != 'rejected'
+            ''', (new_normalized, link_id))
+            if cursor.fetchone():
+                conn.close()
+                return jsonify({"error": "This URL has already been submitted by another user"}), 409
+
+            # URL 업데이트
+            cursor.execute('''
+                UPDATE referral_links SET url = ?, normalized_url = ?, domain = ?
+                WHERE id = ?
+            ''', (new_url, new_normalized, new_domain, link_id))
+            conn.commit()
+
+            logger.info(f"[Referral] Link {link_id} URL replaced by {username}: {new_domain}")
+
+        conn.close()
+
+        # 즉시 재검증 실행
+        result = verify_link(new_url)
+
+        now = int(time.time())
+        conn2 = models.get_db_connection()
+        log_verification(link_id, result, conn=conn2)
+
+        if result["link_found"]:
+            # 백링크 발견 → verified=TRUE 복구 (멤버십 유지!)
+            cursor2 = conn2.cursor()
+            cursor2.execute('''
+                UPDATE referral_links SET verified = TRUE, last_verified_at = ?
+                WHERE id = ?
+            ''', (now, link_id))
+            conn2.commit()
+            conn2.close()
+
+            logger.info(f"[Referral] Link {link_id} re-verified successfully — membership preserved")
+            return jsonify({
+                "success": True,
+                "verified": True,
+                "message": "Backlink verified! Your referral badge and membership are preserved."
+            })
+        else:
+            # 백링크 없음 → 3-strike 체크
+            fail_count = _count_verification_failures(link_id, conn2)
+            if fail_count >= TOTAL_FAIL_LIMIT:
+                _revoke_for_strike(link_id, username, fail_count, conn2)
+                conn2.close()
+                logger.warning(f"[Referral] Link {link_id} replacement 3-strike revoked ({fail_count} failures)")
+                return jsonify({
+                    "success": True,
+                    "verified": False,
+                    "revoked": True,
+                    "message": f"Backlink not found. Your referral has been revoked due to {fail_count} total verification failures (3-strike rule)."
+                })
+
+            # 아직 3-strike 아님 → verified=FALSE 유지, last_verified_at 갱신
+            cursor2 = conn2.cursor()
+            cursor2.execute('''
+                UPDATE referral_links SET last_verified_at = ?
+                WHERE id = ?
+            ''', (now, link_id))
+            conn2.commit()
+            conn2.close()
+
+            logger.warning(f"[Referral] Link {link_id} replacement re-verify failed — strike {fail_count}/{TOTAL_FAIL_LIMIT}")
+            return jsonify({
+                "success": True,
+                "verified": False,
+                "message": f"Backlink not found on the new URL (strike {fail_count}/{TOTAL_FAIL_LIMIT}). "
+                           "The grace period continues — please ensure a visible dofollow link to oratio.space is present."
+            })
+
+    except Exception as e:
+        logger.error(f"[Referral] Replace error: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+

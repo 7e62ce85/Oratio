@@ -29,7 +29,6 @@ interface Campaign {
   link_url: string;
   image_url: string | null;
   monthly_budget_usd: number;
-  spent_this_month_usd: number;
   approval_status: string;
   is_active: boolean;
   is_nsfw: boolean;
@@ -75,6 +74,7 @@ interface AdsPageState {
   // Add Credits modal state
   showAddCreditsModal: boolean;
   addCreditsAmount: number;
+  addCreditsAmountStr: string;
   addCreditsLoading: boolean;
   purchaseError: string | null;
   // BCH Balance info
@@ -122,6 +122,7 @@ export class AdsPage extends Component<any, AdsPageState> {
     // Add Credits modal
     showAddCreditsModal: false,
     addCreditsAmount: 10,
+    addCreditsAmountStr: "10",
     addCreditsLoading: false,
     purchaseError: null,
     // BCH Balance info
@@ -140,8 +141,9 @@ export class AdsPage extends Component<any, AdsPageState> {
   }
 
   async componentDidMount() {
+    let isAdmin = false;
     if (UserService.Instance.myUserInfo) {
-      const isAdmin = UserService.Instance.myUserInfo.local_user_view.local_user.admin;
+      isAdmin = UserService.Instance.myUserInfo.local_user_view.local_user.admin;
       this.setState({ 
         siteRes: {
           ...this.state.siteRes,
@@ -150,7 +152,7 @@ export class AdsPage extends Component<any, AdsPageState> {
         isAdmin
       });
     }
-    await this.fetchAdsData();
+    await this.fetchAdsData(isAdmin);
     // Fetch section stats (90 days) to compute monthly estimates
     this.fetchSectionStats(90).catch(e => console.error('fetchSectionStats error', e));
   }
@@ -177,72 +179,59 @@ export class AdsPage extends Component<any, AdsPageState> {
     return this.currentUser?.name || "";
   }
 
-  async fetchAdsData() {
+  async fetchAdsData(isAdminOverride?: boolean) {
     if (!this.currentUser) {
       this.setState({ loading: false });
       return;
     }
 
+    const isAdmin = isAdminOverride !== undefined ? isAdminOverride : this.state.isAdmin;
+
     this.setState({ loading: true });
     const baseUrl = getAdsAPIBaseUrl();
     const apiKey = getApiKey();
+    const authHeaders = { 'X-API-Key': apiKey || "" };
+
+    const safeFetch = (url: string, opts?: any) =>
+      fetch(url, opts).then(r => r.ok ? r.json() : null).catch(() => null);
 
     try {
-      // Fetch ad credits
-      const creditsResponse = await fetch(`${baseUrl}/credits/${this.username}`, {
-        headers: { 'X-API-Key': apiKey || "" }
+      // Fetch all data in parallel for speed
+      const fetches: Promise<any>[] = [
+        safeFetch(`${baseUrl}/credits/${this.username}`, { headers: authHeaders }),
+        safeFetch(`${baseUrl}/total-budget`),
+        safeFetch(`${baseUrl}/campaigns/user/${this.username}`, { headers: authHeaders }),
+      ];
+
+      // If admin, also fetch pending and active campaigns in parallel
+      if (isAdmin) {
+        const adminHeaders = { 'X-API-Key': apiKey || "", 'X-Admin-Username': this.username };
+        fetches.push(
+          safeFetch(`${baseUrl}/admin/pending`, { headers: adminHeaders }),
+          safeFetch(`${baseUrl}/admin/active`, { headers: adminHeaders }),
+        );
+      }
+
+      const results = await Promise.all(fetches) as any[];
+
+      const creditsData = results[0];
+      const budgetData = results[1];
+      const campaignsData = results[2];
+
+      this.setState({
+        adCredits: creditsData?.credit_balance_usd || 0,
+        totalActiveBudget: budgetData?.total_budget_usd || 0,
+        activeCampaignCount: budgetData?.active_campaign_count || 0,
+        campaigns: campaignsData?.campaigns || [],
       });
-      if (creditsResponse.ok) {
-        const data = await creditsResponse.json();
-        this.setState({ adCredits: data.credit_balance_usd || 0 });
-      }
 
-      // Fetch total active budget (for probability calculation)
-      const totalBudgetResponse = await fetch(`${baseUrl}/total-budget`);
-      if (totalBudgetResponse.ok) {
-        const data = await totalBudgetResponse.json();
-        this.setState({ 
-          totalActiveBudget: data.total_budget_usd || 0,
-          activeCampaignCount: data.active_campaign_count || 0
+      if (isAdmin) {
+        const pendingData = results[3];
+        const activeData = results[4];
+        this.setState({
+          pendingCampaigns: pendingData?.campaigns || [],
+          adminActiveCampaigns: activeData?.campaigns || [],
         });
-      }
-
-      // Fetch user campaigns
-      const campaignsResponse = await fetch(`${baseUrl}/campaigns/user/${this.username}`, {
-        headers: { 'X-API-Key': apiKey || "" }
-      });
-      if (campaignsResponse.ok) {
-        const data = await campaignsResponse.json();
-        this.setState({ campaigns: data.campaigns || [] });
-      }
-
-      // If admin, fetch pending campaigns
-      if (this.state.isAdmin) {
-        const pendingResponse = await fetch(`${baseUrl}/admin/pending`, {
-          headers: { 
-            'X-API-Key': apiKey || "",
-            'X-Admin-Username': this.username
-          }
-        });
-        if (pendingResponse.ok) {
-          const data = await pendingResponse.json();
-          this.setState({ pendingCampaigns: data.campaigns || [] });
-        }
-        // Also fetch active campaigns for admin overview
-        try {
-          const activeResponse = await fetch(`${baseUrl}/admin/active`, {
-            headers: {
-              'X-API-Key': apiKey || "",
-              'X-Admin-Username': this.username
-            }
-          });
-          if (activeResponse.ok) {
-            const adata = await activeResponse.json();
-            this.setState({ adminActiveCampaigns: adata.campaigns || [] });
-          }
-        } catch (e) {
-          console.error('Error fetching admin active campaigns', e);
-        }
       }
     } catch (e) {
       console.error("Error fetching ads data:", e);
@@ -252,12 +241,38 @@ export class AdsPage extends Component<any, AdsPageState> {
     this.setState({ loading: false });
   }
 
+  // 위치별 권장 이미지 사이즈
+  static AD_RECOMMENDED_SIZES: Record<string, { w: number; h: number; label: string }> = {
+    'Sidebar':    { w: 300, h: 600, label: '300×250 or 300×600' },
+    'PostTop':    { w: 728, h: 90,  label: '728×90' },
+    'PostBottom': { w: 728, h: 90,  label: '728×90' },
+  };
+
   // Pictrs 이미지 업로드 핸들러
   async handleImageUpload(position: string, file: File) {
     const uploadingKey = `uploading${position.charAt(0).toUpperCase() + position.slice(1).replace(/_(\w)/g, (_, c) => c.toUpperCase())}` as keyof AdsPageState;
     const imageKey = `formImage${position.charAt(0).toUpperCase() + position.slice(1).replace(/_(\w)/g, (_, c) => c.toUpperCase())}` as keyof AdsPageState;
     
     this.setState({ [uploadingKey]: true } as any);
+
+    // 업로드 전 이미지 사이즈 체크 (경고만, 거부 안 함)
+    const recommended = AdsPage.AD_RECOMMENDED_SIZES[position];
+    if (recommended) {
+      try {
+        const dimensions = await this.getImageDimensions(file);
+        if (dimensions.w > recommended.w * 2 || dimensions.h > recommended.h * 2) {
+          toast(
+            `⚠️ Image size (${dimensions.w}×${dimensions.h}) is much larger than recommended (${recommended.label}). It will be auto-scaled when displayed, but for best quality, use the recommended size.`,
+            "warning"
+          );
+        } else if (dimensions.w !== recommended.w || dimensions.h !== recommended.h) {
+          toast(
+            `ℹ️ Image size: ${dimensions.w}×${dimensions.h}. Recommended: ${recommended.label}. It will be auto-scaled to fit.`,
+            "info"
+          );
+        }
+      } catch { /* dimension check failed, continue upload anyway */ }
+    }
     
     try {
       const formData = new FormData();
@@ -285,6 +300,22 @@ export class AdsPage extends Component<any, AdsPageState> {
     }
     
     this.setState({ [uploadingKey]: false } as any);
+  }
+
+  // 이미지 파일에서 width/height 읽기
+  getImageDimensions(file: File): Promise<{ w: number; h: number }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ w: img.naturalWidth, h: img.naturalHeight });
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        reject(new Error("Failed to read image dimensions"));
+      };
+      img.src = URL.createObjectURL(file);
+    });
   }
 
   async handleCreateCampaign(i: AdsPage, e: Event) {
@@ -355,7 +386,7 @@ export class AdsPage extends Component<any, AdsPageState> {
       const result = await response.json();
 
       if (result.success) {
-        toast("Campaign created! Awaiting admin approval. (Default period: 1 month)", "success");
+        toast(I18NextService.i18n.t("ad_campaign_created", "Campaign created! Awaiting admin approval. (Default period: 1 month)"), "success");
         i.setState({
           showCreateForm: false,
           formTitle: "",
@@ -444,7 +475,7 @@ export class AdsPage extends Component<any, AdsPageState> {
       return (
         <div className="container-lg">
           <div className="alert alert-warning mt-4">
-            Please <Link to="/login">log in</Link> to manage advertisements.
+            {I18NextService.i18n.t("login_required")} <Link to="/login">{I18NextService.i18n.t("login", "Log in")}</Link>
           </div>
         </div>
       );
@@ -456,7 +487,7 @@ export class AdsPage extends Component<any, AdsPageState> {
           <div className="col-12">
             <h1 className="h4 mb-4">
               <Icon icon="megaphone" classes="me-2" />
-              Advertisement Management
+              {I18NextService.i18n.t("ads_management", "Advertisement Management")}
             </h1>
           </div>
         </div>
@@ -496,7 +527,7 @@ export class AdsPage extends Component<any, AdsPageState> {
     return (
       <div className="card mb-4">
         <div className="card-header">
-          <h5 className="mb-0">Ad Credits</h5>
+          <h5 className="mb-0">{I18NextService.i18n.t("ad_credits", "Ad Credits")}</h5>
         </div>
         <div className="card-body">
           <div className="row align-items-center">
@@ -504,7 +535,7 @@ export class AdsPage extends Component<any, AdsPageState> {
               <h2 className="text-success mb-0">
                 ${this.state.adCredits.toFixed(2)} USD
               </h2>
-              <small className="text-muted">Available ad credits</small>
+              <small className="text-muted">{I18NextService.i18n.t("available_ad_credits", "Available ad credits")}</small>
             </div>
             <div className="col-md-6 text-md-end mt-3 mt-md-0">
               <button 
@@ -512,16 +543,16 @@ export class AdsPage extends Component<any, AdsPageState> {
                 onClick={() => this.openAddCreditsModal()}
               >
                 <Icon icon="plus" classes="me-1" />
-                Add Credits via BCH
+                {I18NextService.i18n.t("add_credits_via_bch", "Add Credits via BCH")}
               </button>
             </div>
           </div>
           <hr />
           <div className="alert alert-info mb-0">
-            <strong>How it works:</strong> Your display probability = Your budget / Total all advertisers' budgets × 100%<br/>
+            <strong>{I18NextService.i18n.t("how_it_works", "How it works")}:</strong> {I18NextService.i18n.t("ads_probability_explanation", "Your display probability = Your budget / Total all advertisers' budgets × 100%")}<br/>
             <small>
-              Current total active budgets: <strong>${this.state.totalActiveBudget.toFixed(2)}</strong> 
-              ({this.state.activeCampaignCount} active campaigns)
+              {I18NextService.i18n.t("ad_current_total_budgets", "Current total active budgets")}: <strong>${this.state.totalActiveBudget.toFixed(2)}</strong> 
+              ({this.state.activeCampaignCount} {I18NextService.i18n.t("ad_active_campaigns", "active campaigns")})
             </small>
           </div>
         </div>
@@ -540,7 +571,7 @@ export class AdsPage extends Component<any, AdsPageState> {
             onClick={() => this.setState({ showCreateForm: true })}
           >
             <Icon icon="plus" classes="me-1" />
-            Create New Campaign
+            {I18NextService.i18n.t("create_new_campaign", "Create New Campaign")}
           </button>
         </div>
       );
@@ -549,18 +580,18 @@ export class AdsPage extends Component<any, AdsPageState> {
     return (
       <div className="card mb-4">
         <div className="card-header d-flex justify-content-between align-items-center">
-          <h5 className="mb-0">Create New Campaign</h5>
+          <h5 className="mb-0">{I18NextService.i18n.t("create_new_campaign", "Create New Campaign")}</h5>
           <button 
             className="btn btn-sm btn-outline-secondary"
             onClick={() => this.setState({ showCreateForm: false })}
           >
-            Cancel
+            {I18NextService.i18n.t("cancel")}
           </button>
         </div>
         <div className="card-body">
           <form onSubmit={linkEvent(this, this.handleCreateCampaign)}>
             <div className="mb-3">
-              <label className="form-label">Ad Title *</label>
+              <label className="form-label">{I18NextService.i18n.t("ad_title", "Ad Title")} *</label>
               <input
                 type="text"
                 className="form-control"
@@ -572,7 +603,7 @@ export class AdsPage extends Component<any, AdsPageState> {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Link URL *</label>
+              <label className="form-label">{I18NextService.i18n.t("link_url", "Link URL")} *</label>
               <input
                 type="url"
                 className="form-control"
@@ -585,27 +616,21 @@ export class AdsPage extends Component<any, AdsPageState> {
 
             {/* 4개 위치별 이미지 업로드 */}
             <div className="mb-4">
-              <h6 className="mb-3">Ad Images (at least one required)</h6>
-              <div className="alert alert-info small mb-3">
-                <strong>Note:</strong> Upload images for each position. Positions without images will show default ads.
-                <br/>Campaign is selected once per page load - all registered images will be shown simultaneously.
-                <br/><strong>Default campaign period: 1 month</strong>
-              </div>
+              <h6 className="mb-3">{I18NextService.i18n.t("ad_images", "Ad Images (at least one required)")}</h6>
+              <div className="alert alert-info small mb-3" dangerouslySetInnerHTML={{__html: I18NextService.i18n.t("ad_images_note", "Upload images for each position. Positions without images will show default ads.<br/>Campaign is selected once per page load - all registered images will be shown simultaneously.<br/><strong>Default campaign period: 1 month</strong>")}} />
+
+              {/* Image Size Guide */}
+              <div className="alert alert-secondary small mb-3" dangerouslySetInnerHTML={{__html: I18NextService.i18n.t("ad_image_size_guide", '📐 <strong>Image Size Guide:</strong><br/>• <strong>Recommended sizes:</strong> Top/Bottom 728×90px, Sidebar 300×250 or 300×600px<br/>• Images of any size are accepted — they will be <strong>auto-scaled to fit</strong> the ad slot.<br/>• Oversized images are cropped from center. For best results, use the recommended size.')}} />
               
               {/* Load Points System Info */}
-              <div className="alert alert-warning small mb-3">
-                <strong>🎯 Load Points System:</strong>
-                <br/>When your targeted ad (community/regex) doesn't match the current page, it earns "load points" instead of being wasted.
-                <br/>Ads with load points get <strong>priority display</strong> on matching pages.
-                <br/>This ensures fair exposure even with specific targeting.
-              </div>
+              <div className="alert alert-warning small mb-3" dangerouslySetInnerHTML={{__html: I18NextService.i18n.t("ad_load_points_info", '🎯 <strong>Load Points System:</strong><br/>When your targeted ad (community/regex) doesn\'t match the current page, it earns "load points" instead of being wasted.<br/>Ads with load points get <strong>priority display</strong> on matching pages.<br/>This ensures fair exposure even with specific targeting.')}} />
               
               {/* Sidebar Image */}
               <div className="card mb-2">
                 <div className="card-body py-2">
                   <div className="d-flex align-items-center justify-content-between">
                     <div>
-                      <strong>Sidebar</strong>
+                      <strong>{I18NextService.i18n.t("ad_pos_sidebar", "Sidebar")}</strong>
                       <small className="text-muted ms-2">300×250 or 300×600px</small>
                     </div>
                     <div className="d-flex align-items-center gap-2">
@@ -631,8 +656,8 @@ export class AdsPage extends Component<any, AdsPageState> {
                 <div className="card-body py-2">
                   <div className="d-flex align-items-center justify-content-between">
                     <div>
-                      <strong>Top</strong>
-                      <small className="text-muted ms-2">728×90 or 970×90px</small>
+                      <strong>{I18NextService.i18n.t("ad_pos_top", "Top")}</strong>
+                      <small className="text-muted ms-2">728×90px</small>
                     </div>
                     <div className="d-flex align-items-center gap-2">
                       {this.state.formImagePostTop && (
@@ -657,7 +682,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                 <div className="card-body py-2">
                   <div className="d-flex align-items-center justify-content-between">
                     <div>
-                      <strong>Bottom</strong>
+                      <strong>{I18NextService.i18n.t("ad_pos_bottom", "Bottom")}</strong>
                       <small className="text-muted ms-2">728×90px</small>
                     </div>
                     <div className="d-flex align-items-center gap-2">
@@ -682,7 +707,7 @@ export class AdsPage extends Component<any, AdsPageState> {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Campaign Cost (USD) *</label>
+              <label className="form-label">{I18NextService.i18n.t("campaign_cost", "Campaign Cost (USD)")} *</label>
               <div className="input-group">
                 <span className="input-group-text">$</span>
                 <input
@@ -695,11 +720,9 @@ export class AdsPage extends Component<any, AdsPageState> {
                   required
                 />
               </div>
-              <div className="alert alert-info mt-2 mb-0 py-2">
-                <strong>⚡ Instant Deduction:</strong> This amount will be <strong>immediately deducted</strong> from your credits when you create the campaign.
-              </div>
+              <div className="alert alert-info mt-2 mb-0 py-2" dangerouslySetInnerHTML={{__html: I18NextService.i18n.t("ad_instant_deduction", "⚡ <strong>Instant Deduction:</strong> This amount will be <strong>immediately deducted</strong> from your credits when you create the campaign.")}} />
               <div className="mt-2 p-2 bg-light border rounded">
-                <strong>Expected Display Probability: </strong>
+                <strong>{I18NextService.i18n.t("ad_expected_probability", "Expected Display Probability")}: </strong>
                 <span className="text-primary fs-5">
                   {this.calculateExpectedProbability(this.state.formBudget).toFixed(1)}%
                 </span>
@@ -708,18 +731,28 @@ export class AdsPage extends Component<any, AdsPageState> {
                   Formula: ${this.state.formBudget} / (${this.state.totalActiveBudget.toFixed(2)} + ${this.state.formBudget}) × 100%
                 </small>
               </div>
-              {/* Estimated monthly impressions based on last 90 days */}
+              {/* Estimated monthly impressions for THIS campaign based on last 90 days × probability */}
               <div className="mt-2 p-2 bg-white border rounded">
-                <strong>Estimated Monthly Impressions (based on last 90 days): </strong>
+                <strong>{I18NextService.i18n.t("ad_estimated_impressions", "📊 Estimated Impressions for Your Campaign")}: </strong>
                 {(() => {
                   const stats = this.state.sectionStats || {};
                   const postTop = stats['post_top'] || 0;
-                  const toMonthly = (n: number) => Math.round((n / 90) * 30);
-                  return <strong>{toMonthly(postTop).toLocaleString()}</strong>;
-                })()} / month
+                  const siteMonthly = Math.round((postTop / 90) * 30);
+                  const probability = this.calculateExpectedProbability(this.state.formBudget) / 100;
+                  const myMonthly = Math.round(siteMonthly * probability);
+                  return (
+                    <>
+                      <strong className="text-primary fs-5">~{myMonthly.toLocaleString()}</strong> {I18NextService.i18n.t("ad_per_month", "/ month")}
+                      <br/>
+                      <small className="text-muted">
+                        {I18NextService.i18n.t("ad_site_total", "Site total")}: ~{siteMonthly.toLocaleString()}/mo × {I18NextService.i18n.t("ad_your_probability", "your probability")} {(probability * 100).toFixed(1)}%
+                      </small>
+                    </>
+                  );
+                })()}
               </div>
               <small className="text-muted d-block mt-1">
-                Minimum $10. Your ad will be shown with this probability on each page load.
+                {I18NextService.i18n.t("ad_minimum_note", "Minimum $10. Your ad will be shown with this probability on each page load.")}
               </small>
             </div>
 
@@ -733,10 +766,10 @@ export class AdsPage extends Component<any, AdsPageState> {
                   onChange={linkEvent(this, (s, e: any) => s.setState({ formIsNsfw: e.target.checked }))}
                 />
                 <label className="form-check-label" htmlFor="formIsNsfw">
-                  NSFW Content
+                  {I18NextService.i18n.t("nsfw_content", "NSFW Content")}
                 </label>
               </div>
-              <small className="text-muted">NSFW ads only shown on NSFW pages</small>
+              <small className="text-muted">{I18NextService.i18n.t("nsfw_ads_note", "NSFW ads only shown on NSFW pages")}</small>
             </div>
 
             <div className="mb-3">
@@ -749,36 +782,36 @@ export class AdsPage extends Component<any, AdsPageState> {
                   onChange={linkEvent(this, (s, e: any) => s.setState({ formShowOnAll: e.target.checked }))}
                 />
                 <label className="form-check-label" htmlFor="formShowOnAll">
-                  Show on all communities
+                  {I18NextService.i18n.t("show_on_all_communities", "Show on all communities")}
                 </label>
               </div>
             </div>
 
             {!this.state.formShowOnAll && (
               <div className="mb-3">
-                <label className="form-label">Target Communities</label>
+                <label className="form-label">{I18NextService.i18n.t("ad_target_communities", "Target Communities")}</label>
                 <input
                   type="text"
                   className="form-control"
                   value={this.state.formTargetCommunities}
                   onInput={linkEvent(this, (s, e: any) => s.setState({ formTargetCommunities: e.target.value }))}
-                  placeholder="technology, programming, gaming"
+                  placeholder={I18NextService.i18n.t("ad_target_communities_placeholder", "technology, programming, gaming")}
                 />
-                <small className="text-muted">Comma-separated community names</small>
+                <small className="text-muted">{I18NextService.i18n.t("ad_target_communities_help", "Comma-separated community names")}</small>
               </div>
             )}
 
             <div className="mb-3">
-              <label className="form-label">Target Regex (optional, advanced)</label>
+              <label className="form-label">{I18NextService.i18n.t("ad_target_regex", "Target Regex (optional, advanced)")}</label>
               <input
                 type="text"
                 className="form-control"
                 value={this.state.formTargetRegex}
                 onInput={linkEvent(this, (s, e: any) => s.setState({ formTargetRegex: e.target.value }))}
-                placeholder="bitcoin|crypto|blockchain"
+                placeholder={I18NextService.i18n.t("ad_target_regex_placeholder", "bitcoin|crypto|blockchain")}
               />
               <small className="text-muted">
-                Regex pattern to match page content. Leave empty for no filtering.
+                {I18NextService.i18n.t("ad_target_regex_help", "Regex pattern to match page content. Leave empty for no filtering.")}
               </small>
             </div>
 
@@ -787,12 +820,12 @@ export class AdsPage extends Component<any, AdsPageState> {
               className="btn btn-success"
               disabled={this.state.submitting || this.state.adCredits < this.state.formBudget}
             >
-              {this.state.submitting ? <Spinner /> : `Create Campaign (−$${this.state.formBudget.toFixed(2)})`}
+              {this.state.submitting ? <Spinner /> : `${I18NextService.i18n.t("ad_create_btn", "Create Campaign")} (−$${this.state.formBudget.toFixed(2)})`}
             </button>
 
             {this.state.adCredits < this.state.formBudget && (
               <div className="alert alert-warning mt-3">
-                Insufficient credits. Campaign cost is ${this.state.formBudget.toFixed(2)} but you have ${this.state.adCredits.toFixed(2)}.
+                {I18NextService.i18n.t("ad_insufficient_credits", "Insufficient credits.").replace("${cost}", `$${this.state.formBudget.toFixed(2)}`).replace("${available}", `$${this.state.adCredits.toFixed(2)}`)}
               </div>
             )}
           </form>
@@ -805,24 +838,23 @@ export class AdsPage extends Component<any, AdsPageState> {
     return (
       <div className="card mb-4">
         <div className="card-header">
-          <h5 className="mb-0">My Campaigns ({this.state.campaigns.length})</h5>
+          <h5 className="mb-0">{I18NextService.i18n.t("my_campaigns", "My Campaigns")} ({this.state.campaigns.length})</h5>
         </div>
         <div className="card-body">
           {this.state.campaigns.length === 0 ? (
-            <p className="text-muted mb-0">No campaigns yet. Create your first ad!</p>
+            <p className="text-muted mb-0">{I18NextService.i18n.t("no_campaigns_yet", "No campaigns yet. Create your first ad!")}</p>
           ) : (
             <div className="table-responsive">
               <table className="table table-hover">
                 <thead>
                   <tr>
-                    <th>Title</th>
-                    <th>Status</th>
-                    <th>Cost</th>
-                    <th>End Date</th>
-                    <th>Spent</th>
-                    <th>Impressions</th>
-                    <th>Clicks</th>
-                    <th>CTR</th>
+                    <th>{I18NextService.i18n.t("title", "Title")}</th>
+                    <th>{I18NextService.i18n.t("status", "Status")}</th>
+                    <th>{I18NextService.i18n.t("cost", "Cost")}</th>
+                    <th>{I18NextService.i18n.t("end_date", "End Date")}</th>
+                    <th>{I18NextService.i18n.t("impressions", "Impressions")}</th>
+                    <th>{I18NextService.i18n.t("clicks", "Clicks")}</th>
+                    <th>{I18NextService.i18n.t("ctr", "CTR")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -832,7 +864,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                         <strong>{campaign.title}</strong>
                         {/* Image preview: prefer position-specific images (post_top/sidebar/feed), fall back to legacy image_url */}
                         <br />
-                        {(
+                        {!!(
                           (campaign as any).image_post_top_url || (campaign as any).image_sidebar_url || campaign.image_url
                         ) && (
                           <img
@@ -842,7 +874,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                             className="mt-2"
                           />
                         )}
-                        {campaign.is_nsfw && <span className="badge bg-danger ms-2">NSFW</span>}
+                        {!!campaign.is_nsfw && <span className="badge bg-danger ms-2">NSFW</span>}
                         <br />
                         <small className="text-muted">
                           <a href={campaign.link_url} target="_blank" rel="noopener">
@@ -869,7 +901,6 @@ export class AdsPage extends Component<any, AdsPageState> {
                           ? new Date((campaign as any).end_date * 1000).toLocaleDateString()
                           : '-'}
                       </td>
-                      <td>${campaign.spent_this_month_usd.toFixed(2)}</td>
                       <td>{campaign.total_impressions.toLocaleString()}</td>
                       <td>{campaign.total_clicks.toLocaleString()}</td>
                       <td>
@@ -908,7 +939,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                     <div className="flex-grow-1">
                       <h6 className="mb-1">
                         {campaign.title}
-                        {campaign.is_nsfw && <span className="badge bg-danger ms-2">NSFW</span>}
+                        {!!campaign.is_nsfw && <span className="badge bg-danger ms-2">NSFW</span>}
                       </h6>
                       <p className="mb-1">
                         <a href={campaign.link_url} target="_blank" rel="noopener">
@@ -917,7 +948,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                       </p>
                       {/* Image previews: show all position-specific images */}
                       <div className="d-flex flex-wrap gap-2 mb-2">
-                        {(campaign as any).image_post_top_url && (
+                        {!!(campaign as any).image_post_top_url && (
                           <div className="text-center">
                             <img 
                               src={(campaign as any).image_post_top_url} 
@@ -927,7 +958,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                             <div className="small text-muted">Top</div>
                           </div>
                         )}
-                        {(campaign as any).image_sidebar_url && (
+                        {!!(campaign as any).image_sidebar_url && (
                           <div className="text-center">
                             <img 
                               src={(campaign as any).image_sidebar_url} 
@@ -937,7 +968,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                             <div className="small text-muted">Sidebar</div>
                           </div>
                         )}
-                        {(campaign as any).image_post_bottom_url && (
+                        {!!(campaign as any).image_post_bottom_url && (
                           <div className="text-center">
                             <img 
                               src={(campaign as any).image_post_bottom_url} 
@@ -948,7 +979,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                           </div>
                         )}
                         {/* Legacy image_url fallback */}
-                        {!((campaign as any).image_post_top_url || (campaign as any).image_sidebar_url || (campaign as any).image_post_bottom_url) && campaign.image_url && (
+                        {!((campaign as any).image_post_top_url || (campaign as any).image_sidebar_url || (campaign as any).image_post_bottom_url) && !!campaign.image_url && (
                           <img 
                             src={campaign.image_url} 
                             alt="Ad preview" 
@@ -1006,7 +1037,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                     <div className="flex-grow-1">
                       <h6 className="mb-1">
                         {campaign.title}
-                        {campaign.is_nsfw && <span className="badge bg-danger ms-2">NSFW</span>}
+                        {!!campaign.is_nsfw && <span className="badge bg-danger ms-2">NSFW</span>}
                       </h6>
                       <p className="mb-1">
                         <a href={campaign.link_url} target="_blank" rel="noopener">
@@ -1014,7 +1045,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                         </a>
                       </p>
                       {/* image preview */}
-                      {(
+                      {!!(
                         (campaign as any).image_post_top_url || (campaign as any).image_sidebar_url || campaign.image_url
                       ) && (
                         <img
@@ -1070,7 +1101,7 @@ export class AdsPage extends Component<any, AdsPageState> {
             <div className="modal-header">
               <h5 className="modal-title">
                 <Icon icon="dollar-sign" classes="me-2" />
-                Purchase Ad Credits
+                {I18NextService.i18n.t("purchase_ad_credits", "Purchase Ad Credits")}
               </h5>
               <button
                 type="button"
@@ -1101,24 +1132,32 @@ export class AdsPage extends Component<any, AdsPageState> {
 
                   {/* Amount Input */}
                   <div className="mb-3">
-                    <label className="form-label fw-bold">Ad Credits Amount (USD)</label>
+                    <label className="form-label fw-bold">{I18NextService.i18n.t("ad_credits_amount", "Ad Credits Amount (USD)")}</label>
                     <div className="input-group">
                       <span className="input-group-text">$</span>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         className="form-control"
-                        value={addCreditsAmount}
-                        min={1}
-                        max={1000}
-                        step={1}
-                        onChange={(e: any) => this.setState({ 
-                          addCreditsAmount: parseFloat(e.target.value) || 1,
-                          purchaseError: null 
-                        })}
+                        value={this.state.addCreditsAmountStr}
+                        placeholder="Enter amount"
+                        onInput={(e: any) => {
+                          const raw = e.target.value.replace(/[^0-9.]/g, '');
+                          const val = parseFloat(raw);
+                          e.target.value = raw;
+                          this.setState({
+                            addCreditsAmountStr: raw,
+                            addCreditsAmount: isNaN(val) ? 0 : val,
+                            purchaseError: null,
+                          });
+                        }}
                       />
                     </div>
                     <small className="text-muted">
                       Requires: <strong>{requiredBch.toFixed(6)} BCH</strong>
+                      {addCreditsAmount < 0.1 && addCreditsAmount > 0 && (
+                        <span className="text-danger ms-2">Minimum: $0.10</span>
+                      )}
                     </small>
                   </div>
 
@@ -1130,7 +1169,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                           key={amt}
                           type="button"
                           className={`btn btn-outline-secondary ${addCreditsAmount === amt ? 'active' : ''}`}
-                          onClick={() => this.setState({ addCreditsAmount: amt, purchaseError: null })}
+                          onClick={() => this.setState({ addCreditsAmount: amt, addCreditsAmountStr: String(amt), purchaseError: null })}
                         >
                           ${amt}
                         </button>
@@ -1158,7 +1197,7 @@ export class AdsPage extends Component<any, AdsPageState> {
                   {/* Purchase Button */}
                   <button
                     className="btn btn-success w-100"
-                    disabled={addCreditsLoading || !hasEnoughBalance || addCreditsAmount <= 0}
+                    disabled={addCreditsLoading || !hasEnoughBalance || addCreditsAmount < 0.1}
                     onClick={() => this.purchaseAdCredits()}
                   >
                     {addCreditsLoading ? (
@@ -1191,6 +1230,7 @@ export class AdsPage extends Component<any, AdsPageState> {
       loadingBalances: true,
       purchaseError: null,
       addCreditsAmount: 10,
+      addCreditsAmountStr: "10",
     });
     
     // Fetch user's BCH balance

@@ -139,7 +139,7 @@
     <!-- Navigation -->
     <div class="navbar-like">
         <div class="container text-center">
-            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
+            <a href="https://oratio.space/" class="site-title" data-i18n="site_title">✨ oratio</a>
         </div>
     </div>
 
@@ -148,35 +148,35 @@
             <div class="col-lg-8 offset-lg-2">
                 <!-- Non-refundable Warning -->
                 <div class="alert alert-danger mb-4 text-center">
-                    <h5><span style="font-size: 1.5rem; margin-right: 0.5rem;">⚠️</span><strong>Non-Refundable Policy</strong></h5>
-                    <p class="mb-0">All payments are non-refundable. Please verify the amount and address before payment.</p>
+                    <h5><span style="font-size: 1.5rem; margin-right: 0.5rem;">⚠️</span><strong data-i18n="invoice_nonrefundable_title">Non-Refundable Policy</strong></h5>
+                    <p class="mb-0" data-i18n="invoice_nonrefundable_desc">All payments are non-refundable. Please verify the amount and address before payment.</p>
                 </div>
                 
                 <!-- Premium Benefits Information -->
                 <div class="alert alert-info mb-4 text-center">
-                    <h6><span style="font-size: 1.2rem; margin-right: 0.5rem;">💎</span><strong>Ad Removal Benefits for 0.0003 BCH+ Payments</strong></h6>
-                    <p class="mb-0 small">After payment completion, ad banners will be removed from the entire site for a cleaner experience.</p>
+                    <h6><span style="font-size: 1.2rem; margin-right: 0.5rem;">💎</span><strong data-i18n="invoice_membership_title">Annual Membership — $5 USD/year</strong></h6>
+                    <p class="mb-0 small" data-i18n="invoice_membership_desc">5× voting power, 💰 gold badge, ad-free browsing, and members-only feed.</p>
                 </div>
                 
                 <div class="card">
                     <div class="card-header text-center">
-                        <h3 class="mb-0">💳 Bitcoin Cash Payment</h3>
+                        <h3 class="mb-0" data-i18n="invoice_payment_title">💳 Bitcoin Cash Payment</h3>
                     </div>
                     <div class="card-body">
                         <!-- Invoice Information -->
                         <div class="info-section">
                             <div class="mb-3">
-                                <strong>📋 Invoice ID:</strong> <span id="invoice-id" style="font-family: monospace;">{{ invoice.invoice_id }}</span>
+                                <strong data-i18n="invoice_id_label">📋 Invoice ID:</strong> <span id="invoice-id" style="font-family: monospace;">{{ invoice.invoice_id }}</span>
                             </div>
                             <div class="mb-3">
-                                <strong>💰 Payment Amount:</strong> <span style="font-size: 1.2rem; color: #667eea;">{{ invoice.amount }} BCH</span>
+                                <strong data-i18n="invoice_amount_label">💰 Payment Amount:</strong> <span style="font-size: 1.2rem; color: #667eea;">{{ invoice.amount }} BCH</span>
                             </div>
                             <div class="mb-3">
-                                <strong>📊 Status:</strong> <span id="payment-status" class="badge bg-warning text-dark">{{ invoice.status }}</span>
+                                <strong data-i18n="invoice_status_label">📊 Status:</strong> <span id="payment-status" class="badge bg-warning text-dark">{{ invoice.status }}</span>
                             </div>
                             {% if invoice.tx_hash %}
                             <div class="mb-0">
-                                <strong>🔗 Transaction:</strong> 
+                                <strong data-i18n="invoice_tx_label">🔗 Transaction:</strong> 
                                 <a href="https://blockchair.com/bitcoin-cash/transaction/{{ invoice.tx_hash }}" target="_blank" style="color: #667eea;">
                                     {{ invoice.tx_hash[:16] }}...
                                 </a>
@@ -191,22 +191,22 @@
 
                         <div class="input-group mb-4">
                             <input type="text" class="form-control" value="{{ invoice.payment_address }}" id="payment-address" readonly>
-                            <button class="btn btn-outline-primary" type="button" onclick="copyAddress()">📋 Copy</button>
+                            <button class="btn btn-outline-primary" type="button" onclick="copyAddress()" data-i18n="invoice_copy_btn">📋 Copy</button>
                         </div>
 
                         <!-- QR Code -->
                         <div class="qr-container">
-                            <h5 class="mb-3" style="color: #333;">📱 Scan QR Code to Pay</h5>
+                            <h5 class="mb-3" style="color: #333;" data-i18n="invoice_qr_title">📱 Scan QR Code to Pay</h5>
                             <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code" class="img-fluid">
                         </div>
 
                         <!-- Payment Confirmation Button -->
                         <div class="d-grid gap-2 mb-3">
-                            <button id="check-button" class="btn btn-primary btn-lg" onclick="checkPayment()">🔍 Check Payment Status</button>
+                            <button id="check-button" class="btn btn-primary btn-lg" onclick="checkPayment()" data-i18n="invoice_check_btn">🔍 Check Payment Status</button>
                         </div>
 
                         <div class="text-center mt-3">
-                            <a href="/" class="btn btn-outline-secondary">🏠 Back to Main</a>
+                            <a href="/" class="btn btn-outline-secondary" data-i18n="invoice_back_btn">🏠 Back to Main</a>
                         </div>
                     </div>
                 </div>
@@ -214,12 +214,26 @@
         </div>
     </div>
 
+    <script src="/payments/static/js/i18n.js"></script>
     <script>
         function copyAddress() {
             const addressInput = document.getElementById('payment-address');
             addressInput.select();
             document.execCommand('copy');
             alert('Address copied');
+        }
+
+        // i18n-aware text for JS
+        function t(key, fallback) {
+            try {
+                var lng = (localStorage.getItem('i18nextLng') || navigator.language || 'en').split('-')[0].toLowerCase();
+                var xhr = new XMLHttpRequest();
+                // Use cached translations if available
+                if (window._i18nCache && window._i18nCache[lng] && window._i18nCache[lng][key]) {
+                    return window._i18nCache[lng][key];
+                }
+            } catch(e) {}
+            return fallback;
         }
 
         async function checkPayment() {

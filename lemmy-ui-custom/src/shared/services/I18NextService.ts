@@ -110,6 +110,12 @@ export function findTranslationChunkNames(
 
 export async function loadUserLanguage() {
   await new Promise(r => I18NextService.i18n.changeLanguage(undefined, r));
+  // Store resolved language in localStorage so other pages (e.g. /payments/) can read it
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem("i18nextLng", I18NextService.i18n.language);
+    } catch {}
+  }
   await setupDateFns();
 }
 
@@ -137,6 +143,12 @@ export class LanguageService {
   static updateLanguages(languages: readonly string[]) {
     this._serverLanguages = languages;
     I18NextService.i18n.changeLanguage();
+    // Sync resolved language to localStorage for cross-page i18n (e.g. /payments/)
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem("i18nextLng", I18NextService.i18n.language);
+      } catch {}
+    }
     setupDateFns();
   }
   static get userLanguages(): readonly string[] {

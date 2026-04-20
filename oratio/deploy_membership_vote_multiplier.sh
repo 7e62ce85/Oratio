@@ -48,7 +48,7 @@ POSTGRES_PASSWORD=$(grep "POSTGRES_PASSWORD=" .env | cut -d'=' -f2)
 echo "Waiting for PostgreSQL to be ready..."
 max_attempts=30
 attempt=0
-until docker exec postgres pg_isready -U lemmy > /dev/null 2>&1; do
+until docker exec oratio-postgres-1 pg_isready -U lemmy > /dev/null 2>&1; do
     attempt=$((attempt + 1))
     if [ $attempt -eq $max_attempts ]; then
         echo -e "${RED}Error: PostgreSQL is not responding${NC}"
@@ -62,7 +62,7 @@ echo -e "${GREEN}✓ PostgreSQL is ready${NC}"
 
 # Apply the SQL migration
 echo "Applying migration..."
-docker exec -i postgres psql -U lemmy -d lemmy < migrations/membership_vote_multiplier.sql
+docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy < migrations/membership_vote_multiplier.sql
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ SQL migration applied successfully${NC}"
@@ -88,17 +88,26 @@ echo ""
 
 echo -e "${YELLOW}Step 4: Verifying installation...${NC}"
 
-# Check if triggers exist
-TRIGGER_CHECK=$(docker exec -i postgres psql -U lemmy -d lemmy -t -c "SELECT COUNT(*) FROM pg_trigger WHERE tgname = 'membership_post_vote_multiplier';")
+# Check if post trigger exists
+TRIGGER_CHECK=$(docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy -t -c "SELECT COUNT(*) FROM pg_trigger WHERE tgname = 'membership_post_vote_multiplier';")
 
 if [ "$TRIGGER_CHECK" -gt 0 ]; then
-    echo -e "${GREEN}✓ Vote multiplier trigger installed${NC}"
+    echo -e "${GREEN}✓ Post vote multiplier trigger installed${NC}"
 else
-    echo -e "${RED}✗ Vote multiplier trigger not found${NC}"
+    echo -e "${RED}✗ Post vote multiplier trigger not found${NC}"
+fi
+
+# Check if comment trigger exists
+COMMENT_TRIGGER_CHECK=$(docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy -t -c "SELECT COUNT(*) FROM pg_trigger WHERE tgname = 'membership_comment_vote_multiplier';")
+
+if [ "$COMMENT_TRIGGER_CHECK" -gt 0 ]; then
+    echo -e "${GREEN}✓ Comment vote multiplier trigger installed${NC}"
+else
+    echo -e "${RED}✗ Comment vote multiplier trigger not found${NC}"
 fi
 
 # Check if table exists
-TABLE_CHECK=$(docker exec -i postgres psql -U lemmy -d lemmy -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'user_memberships';")
+TABLE_CHECK=$(docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'user_memberships';")
 
 if [ "$TABLE_CHECK" -gt 0 ]; then
     echo -e "${GREEN}✓ user_memberships table created${NC}"
@@ -117,25 +126,27 @@ echo -e "${GREEN}Deployment Complete!${NC}"
 echo "=========================================="
 echo ""
 echo "📊 System Status:"
-echo "  - Vote Multiplier: ACTIVE (5x for membership users)"
+echo "  - Post Vote Multiplier: ACTIVE (5x for membership users)"
+echo "  - Comment Vote Multiplier: ACTIVE (5x for membership users)"
 echo "  - Membership Sync: Running every 60 seconds"
-echo "  - Database Triggers: Installed"
+echo "  - Database Triggers: Installed (posts + comments)"
 echo ""
 echo "📝 What happens now:"
 echo "  1. When a membership user votes on a post, their vote counts as 5x"
-echo "  2. Membership status syncs from SQLite → PostgreSQL every 60 seconds"
-echo "  3. Database triggers automatically apply the multiplier"
+echo "  2. When a membership user votes on a comment, their vote counts as 5x"
+echo "  3. Membership status syncs from SQLite → PostgreSQL every 60 seconds"
+echo "  4. Database triggers automatically apply the multiplier"
 echo ""
 echo "🧪 Testing:"
 echo "  1. Purchase a membership for a test user"
-echo "  2. Have that user vote on a post"
-echo "  3. Check post_aggregates to see vote count increased by 5"
+echo "  2. Have that user vote on a post → check post_aggregates"
+echo "  3. Have that user vote on a comment → check comment_aggregates"
 echo ""
 echo "📖 View logs:"
 echo "  docker compose logs -f bitcoincash-service | grep -i membership"
 echo ""
 echo "🔍 Verify membership sync:"
-echo "  docker exec -i postgres psql -U lemmy -d lemmy -c 'SELECT * FROM user_memberships;'"
+echo "  docker exec -i oratio-postgres-1 psql -U lemmy -d lemmy -c 'SELECT * FROM user_memberships;'"
 echo ""
 echo "⚠️  Note: You may need to refresh passwords first if this is a new deployment:"
 echo "  bash refresh_passwords.sh"

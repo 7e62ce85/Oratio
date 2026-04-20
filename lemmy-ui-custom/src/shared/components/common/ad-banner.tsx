@@ -553,17 +553,18 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
     
     const heightStyle = size === "large" ? "120px" : size === "medium" ? "90px" : "60px";
     
-    // 위치별 최대 높이 설정 (권장 사이즈 기준)
-    // Sidebar: 300x250 or 300x600 → maxHeight 600px
-    // Top/Bottom: 728x90 → maxHeight 90px
+    // 위치별 고정 사이즈 설정 — 어떤 이미지든 이 박스 안에 맞춰 표시
+    // Sidebar: max 300×600, Top/Bottom(header/footer): max 728×90
     const { position } = this.props;
-    const maxHeightMap: Record<string, string> = {
-      'sidebar': '600px',
-      'header': '90px',
-      'footer': '90px',
-      'comment': '250px',
+    const adSlotSizeMap: Record<string, { maxW: string; h: string; w: string }> = {
+      'sidebar':  { maxW: '300px',  h: 'auto',  w: '300px' },
+      'header':   { maxW: '728px',  h: '90px',  w: '100%' },
+      'footer':   { maxW: '728px',  h: '90px',  w: '100%' },
+      'comment':  { maxW: '300px',  h: 'auto',  w: '300px' },
     };
-    const maxHeight = maxHeightMap[position] || '250px';
+    const adSlotSize = adSlotSizeMap[position] || { maxW: '728px', h: '90px', w: '100%' };
+    // sidebar/comment는 height auto + maxHeight 제한, header/footer는 고정 height
+    const sidebarMaxH = position === 'sidebar' ? '600px' : position === 'comment' ? '250px' : undefined;
     
     const handleClick = () => {
       this.recordAdClick(adData.impression_id);
@@ -577,25 +578,33 @@ export class AdBanner extends Component<AdBannerProps, AdBannerState> {
         textAlign: "center",
         color: "#333",
         fontFamily: "Arial, sans-serif",
-        minHeight: heightStyle,
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
-        border: "1px solid #e6e6e6"
+        border: "1px solid #e6e6e6",
+        maxWidth: adSlotSize.maxW,
+        margin: "0 auto",
       }}>
         <a 
           href={adData.link_url}
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleClick}
-          style={{ display: "block" }}
+          style={{ display: "block", width: adSlotSize.w, maxWidth: adSlotSize.maxW }}
         >
           <img 
             src={imageUrl} 
             alt={adData.alt_text || adData.title}
-            style={{ maxWidth: "100%", maxHeight: maxHeight, objectFit: "contain", borderRadius: "4px" }}
+            style={{
+              width: "100%",
+              maxWidth: adSlotSize.maxW,
+              height: adSlotSize.h,
+              ...(sidebarMaxH ? { maxHeight: sidebarMaxH } : {}),
+              objectFit: "cover",
+              borderRadius: "4px",
+            }}
           />
         </a>
         {adData.is_nsfw === true && (

@@ -119,6 +119,9 @@ interface HomeState {
   siteRes: GetSiteResponse;
   isIsomorphic: boolean;
   reportedPostIds: Set<number>; // CP reported posts (pre-fetched in SSR)
+  membershipOnly: boolean; // Membership posts filter
+  membershipPage: number; // Current page for membership posts (1-indexed)
+  isCurrentUserMember: boolean; // Whether current logged-in user has active membership
 }
 
 interface HomeProps {
@@ -254,6 +257,9 @@ export class Home extends Component<HomeRouteProps, HomeState> {
     subscribedCollapsed: false,
     isIsomorphic: false,
     reportedPostIds: new Set(), // Initialize empty, will be filled from isoData if available
+    membershipOnly: false,
+    membershipPage: 1,
+    isCurrentUserMember: false,
   };
 
   loadingSettled(): boolean {
@@ -273,6 +279,9 @@ export class Home extends Component<HomeRouteProps, HomeState> {
     this.handleShowHiddenChange = this.handleShowHiddenChange.bind(this);
     this.handlePageNext = this.handlePageNext.bind(this);
     this.handlePagePrev = this.handlePagePrev.bind(this);
+    this.handleMembershipFilterChange = this.handleMembershipFilterChange.bind(this);
+    this.handleMembershipPageNext = this.handleMembershipPageNext.bind(this);
+    this.handleMembershipPagePrev = this.handleMembershipPagePrev.bind(this);
 
     this.handleCreateComment = this.handleCreateComment.bind(this);
     this.handleEditComment = this.handleEditComment.bind(this);
@@ -328,6 +337,12 @@ export class Home extends Component<HomeRouteProps, HomeState> {
       this.setState({ reportedPostIds: ssrReportedIds.data });
     }
     
+    // Check current user's membership status BEFORE fetchData
+    // so we know whether to load membership posts or normal posts (avoid double fetch)
+    if (isBrowser()) {
+      await this.checkCurrentUserMembership();
+    }
+    
     if (
       (!this.state.isIsomorphic ||
         !Object.values(this.isoData.routeData).some(
@@ -335,6 +350,10 @@ export class Home extends Component<HomeRouteProps, HomeState> {
         )) &&
       isBrowser()
     ) {
+      await this.fetchData(this.props);
+    } else if (this.state.membershipOnly && isBrowser()) {
+      // SSR loaded normal posts, but user has membership filter default ON
+      // Need to re-fetch with membership filter
       await this.fetchData(this.props);
     }
   }
@@ -627,17 +646,41 @@ export class Home extends Component<HomeRouteProps, HomeState> {
   }
 
   get posts() {
+    const { membershipOnly, membershipPage } = this.state;
+
     return (
       <div className="main-content-wrapper">
         <div>
           {this.selects}
           {this.listings}
-          <PaginatorCursor
-            nextPage={this.getNextPage}
-            onNext={this.handlePageNext}
-            onPrev={this.handlePagePrev}
-            prevDisabled={!this.props.pageCursor}
-          />
+          {membershipOnly ? (
+            <div className="my-3 d-flex justify-content-between">
+              <button
+                className="btn btn-secondary"
+                disabled={membershipPage <= 1}
+                onClick={this.handleMembershipPagePrev}
+              >
+                ← {I18NextService.i18n.t("prev")}
+              </button>
+              <span className="align-self-center text-muted">
+                {I18NextService.i18n.t("page")} {membershipPage}
+              </span>
+              <button
+                className="btn btn-secondary"
+                disabled={!this.getNextPage}
+                onClick={this.handleMembershipPageNext}
+              >
+                {I18NextService.i18n.t("next")} →
+              </button>
+            </div>
+          ) : (
+            <PaginatorCursor
+              nextPage={this.getNextPage}
+              onNext={this.handlePageNext}
+              onPrev={this.handlePagePrev}
+              prevDisabled={!this.props.pageCursor}
+            />
+          )}
         </div>
       </div>
     );
@@ -769,6 +812,37 @@ export class Home extends Component<HomeRouteProps, HomeState> {
         <div className="col-auto">
           <SortSelect sort={sort} onChange={this.handleSortChange} />
         </div>
+        {dataType === DataType.Post && (
+          <div className="col-auto">
+            <label
+              className={`form-check form-check-inline mb-0 d-flex align-items-center${
+                !this.state.isCurrentUserMember ? " text-muted" : ""
+              }`}
+              style={{
+                cursor: this.state.isCurrentUserMember ? "pointer" : "not-allowed",
+                fontSize: "0.85rem",
+                opacity: this.state.isCurrentUserMember ? 1 : 0.55,
+              }}
+              title={
+                this.state.isCurrentUserMember
+                  ? I18NextService.i18n.t("membership_posts_only")
+                  : I18NextService.i18n.t("membership_posts_only") + " (💰 Members only)"
+              }
+            >
+              <input
+                type="checkbox"
+                className="form-check-input"
+                checked={this.state.membershipOnly}
+                disabled={!this.state.isCurrentUserMember}
+                onChange={this.handleMembershipFilterChange}
+                style={{ marginRight: "4px" }}
+              />
+              <span className="form-check-label" style={{ whiteSpace: "nowrap" }}>
+                💰 {I18NextService.i18n.t("membership_posts_only")}
+              </span>
+            </label>
+          </div>
+        )}
         <div className="col-auto ps-0">
           {getRss(
             listingType ??
@@ -804,6 +878,29 @@ export class Home extends Component<HomeRouteProps, HomeState> {
       }
     }
     
+    // If membership filter is ON, fetch from our custom API instead
+    if (this.state.membershipOnly && dataType === DataType.Post) {
+      this.setState({ postsRes: LOADING_REQUEST, commentsRes: EMPTY_REQUEST });
+      try {
+        const membershipPostsRes = await this.fetchMembershipPosts(
+          sort,
+          this.state.membershipPage,
+          listingType,
+        );
+        if (token === this.fetchDataToken) {
+          this.setState({ postsRes: membershipPostsRes });
+        }
+      } catch (error) {
+        console.error("❌ [HOME] Failed to fetch membership posts:", error);
+        if (token === this.fetchDataToken) {
+          this.setState({
+            postsRes: { state: "success", data: { posts: [], next_page: undefined } },
+          });
+        }
+      }
+      return;
+    }
+    
     if (dataType === DataType.Post) {
       this.setState({ postsRes: LOADING_REQUEST, commentsRes: EMPTY_REQUEST });
       const postsRes = await HttpService.client.getPosts({
@@ -828,6 +925,90 @@ export class Home extends Component<HomeRouteProps, HomeState> {
       if (token === this.fetchDataToken) {
         this.setState({ commentsRes });
       }
+    }
+  }
+
+  /**
+   * Fetch membership posts from our custom API (bitcoincash-service).
+   * Returns data in the same format as Lemmy's GetPostsResponse.
+   */
+  async fetchMembershipPosts(
+    sort: SortType,
+    page: number,
+    listingType?: ListingType,
+  ): Promise<RequestState<GetPostsResponse>> {
+    try {
+      const baseUrl = `/api/membership/posts`;
+      const params = new URLSearchParams({
+        sort: sort.toString(),
+        page: page.toString(),
+        limit: fetchLimit.toString(),
+        type_: listingType ?? "Local",
+      });
+      
+      const url = `${baseUrl}?${params.toString()}`;
+      console.log(`💰 [HOME] Fetching membership posts: ${url}`);
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Membership posts API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log(`💰 [HOME] Got ${data.posts?.length ?? 0} membership posts, next_page: ${data.next_page}`);
+      
+      return {
+        state: "success",
+        data: {
+          posts: data.posts ?? [],
+          next_page: data.next_page ?? undefined,
+        },
+      };
+    } catch (error) {
+      console.error("❌ [HOME] Membership posts fetch error:", error);
+      return {
+        state: "success",
+        data: { posts: [], next_page: undefined },
+      };
+    }
+  }
+
+  /**
+   * Check if the currently logged-in user has an active membership.
+   * Used to enable/disable the membership filter checkbox.
+   * Also loads the default membership filter setting from DB (via bitcoincash-service API).
+   * NOTE: Only sets state — does NOT trigger fetchData. Caller should call fetchData after.
+   */
+  async checkCurrentUserMembership() {
+    const myUser = UserService.Instance.myUserInfo;
+    if (!myUser) {
+      this.setState({ isCurrentUserMember: false, membershipOnly: false });
+      return;
+    }
+    try {
+      const username = myUser.local_user_view.person.name;
+
+      // Fetch membership status and saved settings in parallel
+      // Use direct API call instead of checkUserHasGoldBadge to avoid rate-limiting queue delay
+      const [memberRes, settingsRes] = await Promise.all([
+        fetch(`/api/membership/check/${username}`).then(r => r.json()).catch(() => null),
+        fetch(`/api/membership/settings/${username}`).then(r => r.json()).catch(() => null),
+      ]);
+
+      const isMember = memberRes?.is_active ?? false;
+      const savedFilter = settingsRes?.settings?.membership_default_filter ?? false;
+      console.log(`💰 [HOME] membership=${isMember}, savedFilter=${savedFilter}`);
+
+      if (isMember && savedFilter) {
+        // Member with default filter enabled → activate filter
+        // fetchData will be called by componentWillMount after this returns
+        this.setState({ isCurrentUserMember: true, membershipOnly: true, membershipPage: 1 });
+      } else {
+        this.setState({ isCurrentUserMember: isMember, membershipOnly: false });
+      }
+    } catch (error) {
+      console.error("❌ [HOME] Failed to check current user membership:", error);
+      this.setState({ isCurrentUserMember: false, membershipOnly: false });
     }
   }
 
@@ -856,11 +1037,24 @@ export class Home extends Component<HomeRouteProps, HomeState> {
   }
 
   handleSortChange(val: SortType) {
-    this.updateUrl({ sort: val, pageCursor: undefined });
+    if (this.state.membershipOnly) {
+      // Reset to page 1 and re-fetch with new sort
+      this.setState({ membershipPage: 1 }, () => {
+        this.updateUrl({ sort: val, pageCursor: undefined });
+      });
+    } else {
+      this.updateUrl({ sort: val, pageCursor: undefined });
+    }
   }
 
   handleListingTypeChange(val: ListingType) {
-    this.updateUrl({ listingType: val, pageCursor: undefined });
+    if (this.state.membershipOnly) {
+      this.setState({ membershipPage: 1 }, () => {
+        this.updateUrl({ listingType: val, pageCursor: undefined });
+      });
+    } else {
+      this.updateUrl({ listingType: val, pageCursor: undefined });
+    }
   }
 
   handleDataTypeChange(val: DataType) {
@@ -871,6 +1065,36 @@ export class Home extends Component<HomeRouteProps, HomeState> {
     this.updateUrl({
       showHidden: show,
       pageCursor: undefined,
+    });
+  }
+
+  handleMembershipFilterChange() {
+    const newMembershipOnly = !this.state.membershipOnly;
+    console.log(`💰 [HOME] Membership filter toggled: ${newMembershipOnly}`);
+    this.setState(
+      { membershipOnly: newMembershipOnly, membershipPage: 1 },
+      () => {
+        // Re-fetch data with the new membership filter state
+        this.fetchData(this.props);
+      },
+    );
+  }
+
+  handleMembershipPageNext() {
+    const nextPage = this.state.membershipPage + 1;
+    console.log(`💰 [HOME] Membership page next: ${nextPage}`);
+    this.setState({ membershipPage: nextPage }, () => {
+      snapToTop();
+      this.fetchData(this.props);
+    });
+  }
+
+  handleMembershipPagePrev() {
+    const prevPage = Math.max(1, this.state.membershipPage - 1);
+    console.log(`💰 [HOME] Membership page prev: ${prevPage}`);
+    this.setState({ membershipPage: prevPage }, () => {
+      snapToTop();
+      this.fetchData(this.props);
     });
   }
 

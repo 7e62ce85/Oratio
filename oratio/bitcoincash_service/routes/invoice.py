@@ -58,7 +58,7 @@ def view_invoice(invoice_id):
     invoice = models.get_invoice(invoice_id)
     
     if not invoice:
-        return render_template('error.html', message="인보이스를 찾을 수 없습니다"), 404
+        return render_template('error.html', message="Invoice not found"), 404
     
     # QR 코드 생성
     qr = qrcode.QRCode(
@@ -126,7 +126,7 @@ def payment_success(invoice_id):
     invoice = models.get_invoice(invoice_id)
     
     if not invoice or invoice['status'] != 'completed':
-        return render_template('error.html', message="완료된 결제를 찾을 수 없습니다"), 404
+        return render_template('error.html', message="Completed payment not found"), 404
     
     # 템플릿에 전달할 데이터 준비
     tx_hash = invoice['tx_hash']

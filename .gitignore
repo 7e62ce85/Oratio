@@ -70,3 +70,14 @@ lemmy-ui-custom/accessibility_tests.sh
 
 # 백업 폴더
 backups/
+
+# Python 가상환경
+.venv/
+venv/
+
+# IDE 설정
+.vscode/
+.idea/
+
+# 운영 전용 스크립트 (유저명 등 하드코딩)
+oratio/reset_referral_*.sh

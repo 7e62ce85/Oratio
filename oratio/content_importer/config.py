@@ -77,7 +77,7 @@ DEFAULT_SOURCES = [
         "sort": "hot",
         "limit": 25,
         "community": "reddit",
-        "ai_picks": 3,
+        "ai_picks": 5,
         "fallback_thumbnail": "https://www.redditstatic.com/desktop2x/img/favicon/android-icon-192x192.png",
         "enabled": True,
     },
@@ -88,7 +88,7 @@ DEFAULT_SOURCES = [
         "sort": "hot",
         "limit": 25,
         "community": "reddit",
-        "ai_picks": 3,
+        "ai_picks": 5,
         "fallback_thumbnail": "https://www.redditstatic.com/desktop2x/img/favicon/android-icon-192x192.png",
         "enabled": True,
     },
@@ -121,7 +121,7 @@ DEFAULT_SOURCES = [
         "url": "https://news.google.com/rss/search?q=site:reuters.com&hl=en&gl=US&ceid=US:en",
         "source_label": "reuters",
         "community": "reuters",
-        "ai_picks": 3,
+        "ai_picks": 10,
         "limit": 25,
         "follow_redirects": True,
         "fallback_thumbnail": "https://cdn.brandfetch.io/id81tTzGrw/w/400/h/400/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1758338730664",
@@ -181,17 +181,16 @@ DEFAULT_SOURCES = [
         "limit": 20,
         "enabled": True,
     },
-    # ── Upgoat (전체 게시물 import, AI 미사용) ────────────────────────────
+    # ── Upgoat (AI 선별, 사이클당 10개) ──────────────────────────────────
     {
         "name": "upgoat",
         "type": "upgoat",
         "community": "upgoat",
-        "import_all": True,         # Fetch ALL posts (multi-page pagination)
+        "import_all": False,
         "min_age_hours": 13,        # Only import posts older than 13 hours
         "max_age_hours": 72,        # Never import posts older than 72 hours
-        "skip_ai": True,            # Bypass AI selection — import everything
-        "ai_picks": 999,            # Ignored when skip_ai=True, but set high as safety
-        "limit": 200,               # Safety cap per cycle
+        "ai_picks": 10,
+        "limit": 25,                # Fetch top 25, AI picks 10
         "fallback_thumbnail": "https://oratio.space/files/logos/upgoat.png",
         "enabled": True,
     },

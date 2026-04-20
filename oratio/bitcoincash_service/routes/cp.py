@@ -19,6 +19,7 @@ from services.cp_moderation import (
     review_cp_report,
     # Appeals
     create_appeal, get_appeal, review_appeal,
+    APPEAL_TYPE_REPORT_ABILITY,
     # Notifications
     get_user_notifications, mark_notification_read,
     # Background tasks
@@ -96,8 +97,34 @@ def is_user_admin():
 
 def is_user_moderator(community_id: int):
     """Check if current user is moderator of community"""
-    # TODO: Implement proper moderator check from Lemmy database
-    return False
+    user_info = extract_user_info_from_jwt()
+    if not user_info:
+        return False
+    try:
+        from lemmy_integration import LemmyAPI
+        lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+        lemmy_api = LemmyAPI(lemmy_api_url)
+        moderated = lemmy_api.get_moderated_communities(int(user_info['person_id']))
+        return community_id in moderated
+    except Exception as e:
+        logger.error(f"Error checking moderator status: {e}")
+        return False
+
+
+def get_current_user_moderated_communities() -> list:
+    """Get list of community IDs the current user moderates.
+    Returns empty list if not a moderator or not logged in."""
+    user_info = extract_user_info_from_jwt()
+    if not user_info:
+        return []
+    try:
+        from lemmy_integration import LemmyAPI
+        lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+        lemmy_api = LemmyAPI(lemmy_api_url)
+        return lemmy_api.get_moderated_communities(int(user_info['person_id']))
+    except Exception as e:
+        logger.error(f"Error getting moderated communities: {e}")
+        return []
 
 
 # ==========================================
@@ -370,14 +397,32 @@ def api_get_report(report_id):
 @cp_bp.route('/reports/pending', methods=['GET'])
 @require_api_key
 def api_get_pending_reports():
-    """Get pending CP reports for moderation"""
+    """Get pending CP reports for moderation.
+    
+    For moderator-level requests: only returns reports from communities
+    the requesting user moderates (JWT-based filtering).
+    For admin-level requests: returns all pending admin-escalated reports.
+    """
     try:
         community_id = request.args.get('community_id', type=int)
         escalation_level = request.args.get('escalation_level', 'moderator')
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         
-        reports = get_pending_reports(community_id, escalation_level, limit, offset)
+        community_ids = None
+        
+        # For moderator-level: filter by communities the user actually moderates
+        if escalation_level == 'moderator' and not community_id:
+            # Check if user is admin (admins can see all moderator reports too)
+            if not is_user_admin():
+                community_ids = get_current_user_moderated_communities()
+                if not community_ids:
+                    logger.info(f"[CP PENDING] User is not a moderator of any community - returning empty")
+                    return jsonify({"reports": [], "count": 0}), 200
+                logger.info(f"[CP PENDING] Moderator filtering: community_ids={community_ids}")
+        
+        reports = get_pending_reports(community_id, escalation_level, limit, offset,
+                                     community_ids=community_ids)
         return jsonify({"reports": reports, "count": len(reports)}), 200
     except Exception as e:
         logger.error(f"Error getting pending reports: {e}\n{traceback.format_exc()}")
@@ -539,7 +584,13 @@ def api_review_report(report_id):
         if reviewer_role not in ['moderator', 'admin']:
             return jsonify({"error": "Invalid reviewer_role"}), 400
         
-        # TODO: Add authorization check - ensure user is actually moderator/admin
+        # Authorization check: ensure user is actually moderator of this report's community
+        if reviewer_role == 'moderator':
+            report_data = get_cp_report(report_id)
+            if report_data and report_data.get('community_id'):
+                if not is_user_admin() and not is_user_moderator(report_data['community_id']):
+                    logger.warning(f"❌ [CP REVIEW API] User {reviewer_username} is not moderator of community {report_data['community_id']}")
+                    return jsonify({"error": "You are not a moderator of this community"}), 403
         
         report = review_cp_report(report_id, reviewer_person_id, reviewer_username,
                                  reviewer_role, decision, notes)
@@ -561,37 +612,67 @@ def api_review_report(report_id):
 
 @cp_bp.route('/appeal', methods=['POST'])
 def api_create_appeal():
-    """Create an appeal (membership users only) - No auth required for banned users"""
+    """Create an appeal (membership users only for report-ability appeals).
+    - Ban appeals: allowed only when user is currently banned (public, no auth required)
+    - Report-ability appeals: allowed only for membership users whose report ability is revoked
+    """
     try:
         data = request.json
         username = data.get('username')
-        appeal_type = data.get('appeal_type')  # 'ban' or 'report_ability_loss'
+        appeal_type = data.get('appeal_type')  # 'ban' or 'report_ability' / 'report_ability_loss'
         appeal_reason = data.get('appeal_reason')
         related_report_id = data.get('related_report_id')
         
         if not all([username, appeal_type, appeal_reason]):
             return jsonify({"error": "Missing required fields: username, appeal_type, appeal_reason"}), 400
         
-        if appeal_type not in ['ban', 'report_ability_loss']:
+        # Accept both naming variants for report-ability appeals
+        normalized_type = None
+        if appeal_type == 'ban':
+            normalized_type = 'ban'
+        elif appeal_type in ['report_ability', 'report_ability_loss', APPEAL_TYPE_REPORT_ABILITY]:
+            normalized_type = APPEAL_TYPE_REPORT_ABILITY
+        else:
             return jsonify({"error": "Invalid appeal_type"}), 400
         
-        # Verify user exists and is actually banned (prevent spam appeals)
+        # Verify user exists
         perms = get_user_permissions(username)
         if not perms:
             return jsonify({"error": "User not found"}), 404
-        
-        if not perms.get('is_banned'):
-            return jsonify({"error": "You are not banned. Appeals are only available for banned users."}), 400
-        
+
         # Get person_id from permissions (stored in DB)
         person_id = perms.get('person_id')
         if not person_id:
             return jsonify({"error": "Could not retrieve person_id for this user"}), 500
-        
+
+        # Handle ban appeals: only allowed if user is banned
+        if normalized_type == 'ban':
+            if not perms.get('is_banned'):
+                return jsonify({"error": "You are not banned. Appeals are only available for banned users."}), 400
+
+        # Handle report-ability appeals: only allowed if user's report ability is revoked
+        if normalized_type == APPEAL_TYPE_REPORT_ABILITY:
+            # Check local permission flags
+            can_report = perms.get('can_report_cp', True)
+            revoked_at = perms.get('report_ability_revoked_at')
+            if can_report and not revoked_at:
+                return jsonify({"error": "Your report ability is not revoked. There is nothing to appeal."}), 400
+
+            # Require membership for report-ability appeals
+            try:
+                from models import get_membership_status
+                membership_info = get_membership_status(username)
+                if not membership_info or not membership_info.get('is_active', False):
+                    return jsonify({"error": "You are not a membership user and cannot appeal report-ability revocation."}), 403
+            except Exception as e:
+                logger.warning(f"Membership lookup failed during appeal creation: {e}")
+                # Fail closed: do not allow appeal if membership cannot be verified
+                return jsonify({"error": "Could not verify membership status. Please try again later."}), 503
+
         # Use username as user_id
         user_id = username
         
-        appeal = create_appeal(user_id, person_id, username, appeal_type,
+        appeal = create_appeal(user_id, person_id, username, normalized_type,
                               appeal_reason, related_report_id)
 
         return jsonify(appeal), 201

@@ -128,7 +128,7 @@ services:
     env_file:
       - .env
 
-  # Proof of Work 검증 서비스 (회원가입 봇 방지)
+  # Proof of Work 검증 서비스 (회원가입/게시글/댓글 봇 방지)
   pow-validator:
     build:
       context: ./pow_validator_service
@@ -137,8 +137,10 @@ services:
     restart: always
     environment:
       - POW_DIFFICULTY=17
+      - COMMENT_POW_DIFFICULTY=13
       - POW_MAX_AGE_SECONDS=600
       - LEMMY_BACKEND_URL=http://lemmy:8536
+      - LEMMY_API_KEY=${LEMMY_API_KEY:-changeme}
     depends_on:
       - lemmy
     logging: *default-logging

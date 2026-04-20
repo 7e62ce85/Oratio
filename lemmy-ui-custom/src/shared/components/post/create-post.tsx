@@ -376,7 +376,13 @@ export class CreatePost extends Component<
       this.setState({
         loading: false,
       });
-      toast(I18NextService.i18n.t(res.err.message), "danger");
+      // PoW 관련 에러인 경우 사용자에게 더 친절한 메시지 표시
+      const errMsg = res.err.message;
+      if (errMsg === "invalid_proof_of_work" || errMsg === "proof_of_work_required") {
+        toast("⏳ Bot verification expired or invalid. Please click 'Verify I'm Not a Bot' again and re-submit.", "danger", 7000);
+      } else {
+        toast(I18NextService.i18n.t(errMsg), "danger");
+      }
     }
   }
 

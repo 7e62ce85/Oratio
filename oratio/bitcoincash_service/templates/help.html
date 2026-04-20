@@ -83,17 +83,17 @@
 <body>
     <div class="navbar-like">
         <div class="container text-center">
-            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
+            <a href="https://oratio.space/" class="site-title" data-i18n="site_title">✨ oratio</a>
         </div>
     </div>
     <div class="container">
         <div class="card">
             <div class="card-header text-center">
-                <h2>🛈 Bitcoin Cash Help (Be your own bank)</h2>
+                <h2 data-i18n="help_title">🛈 Bitcoin Cash Help (Be your own bank)</h2>
             </div>
             <div class="card-body">
-                <h5 class="mb-3">What is Bitcoin Cash</h5>
-                <ul>
+                <h5 class="mb-3" data-i18n="help_what_is_bch">What is Bitcoin Cash</h5>
+                <ul data-i18n="help_what_is_bch_desc" data-i18n-html="true">
                     Bitcoin Cash (BCH) is a branch of Bitcoin that retains the original goals of the creator(s) of Bitcoin. It is fast, cheap and can be anonymous to use.
 
 It is an open source decentalized payment system that no one controls and to summarize has no inflation.
@@ -102,14 +102,14 @@ It is an open source decentalized payment system that no one controls and to sum
                 </ul>
                 
 
-                <h5 class="mb-3">Installing a wallet</h5>
-                <ul>
+                <h5 class="mb-3" data-i18n="help_install_wallet">Installing a wallet</h5>
+                <ul data-i18n="help_install_wallet_desc" data-i18n-html="true">
                     You can download a Bitcoin Cash wallet here: <a href="https://electroncash.org/#_download" target="_blank">Electron Cash downloads</a>
                 </ul>
             
 
-                <h5 class="mb-3">Getting Bitcoin Cash</h5>
-                <ul>
+                <h5 class="mb-3" data-i18n="help_getting_bch">Getting Bitcoin Cash</h5>
+                <ul data-i18n="help_getting_bch_desc" data-i18n-html="true">
                     You can get Bitcoin Cash from ATMs or private trade using this <a href="https://www.coinmap.it/" target="_blank">map of cryptocurrency ATMs and merchants.</a> Here is <a href="https://coinatmradar.com/bitcoin-cash-atm-map" target="_blank">another map.</a>
 
 You can get Bitcoin Cash paying with a credit card here: <a href="https://buy.bitcoin.com/" target="_blank">bitcoin.com</a> (select the BCH option instead of BTC).
@@ -119,17 +119,17 @@ This is not anonymous, but after receiving the BCH your wallet can mix it. See h
 
                 </ul>
 
-                <h5 class="mb-3">Mixing/privatizing your Bitcoin Cash</h5>
+                <h5 class="mb-3" data-i18n="help_mixing">Mixing/privatizing your Bitcoin Cash</h5>
                 <ul>
-                    Right-click the following symbol: 
+                    <span data-i18n="help_mixing_desc_1">Right-click the following symbol:</span>
                     <br>
                     <img src="/payments/static/js/electronfusing1.png" alt="Electron fusing" class="mix-guide-img1">
                     <br>
-                    Set up these settings for fast and effective mixing:
+                    <span data-i18n="help_mixing_desc_2">Set up these settings for fast and effective mixing:</span>
                     <br>
                     <img src="/payments/static/js/electronfusing2.png" alt="Electron fusing 2" class="mix-guide-img2">
                     <br>
-                    Make the wallet use only mixed outputs with the setting shown below. You will have to wait for mixing to complete first. Leave the wallet running while doing something else.
+                    <span data-i18n="help_mixing_desc_3">Make the wallet use only mixed outputs with the setting shown below. You will have to wait for mixing to complete first. Leave the wallet running while doing something else.</span>
                     <br>
                     <img src="/payments/static/js/electronfusing3.png" alt="Electron fusing 3" class="mix-guide-img3">
 
@@ -139,8 +139,10 @@ This is not anonymous, but after receiving the BCH your wallet can mix it. See h
         </div>
     </div>
     <div class="container text-center mb-5">
-        <a href="https://oratio.space/payments/" class="btn btn-primary me-2">💳 Payment Service Home</a>
-        <a href="https://oratio.space/" class="btn btn-outline-secondary">🏠 Go to oratio</a>
+        <a href="https://oratio.space/payments/" class="btn btn-primary me-2" data-i18n="payment_home_btn">💳 Payment Service Home</a>
+        <a href="https://oratio.space/" class="btn btn-outline-secondary" data-i18n="go_to_oratio_btn">🏠 Go to oratio</a>
     </div>
+
+    <script src="/payments/static/js/i18n.js"></script>
 </body>
 </html>

@@ -272,3 +272,145 @@ def check_expiry():
         return jsonify({
             "error": "Internal server error"
         }), 500
+
+
+# ==================== User Settings Endpoints ====================
+
+@membership_bp.route('/api/membership/settings/<username>', methods=['GET'])
+def get_user_settings(username):
+    """
+    Get user's custom settings (membership_default_filter etc.)
+    Public endpoint — returns settings for given username.
+    """
+    try:
+        settings = models.get_user_settings(username)
+        return jsonify({
+            "success": True,
+            "username": username,
+            "settings": settings
+        })
+    except Exception as e:
+        logger.error(f"Error getting user settings for {username}: {str(e)}")
+        return jsonify({
+            "success": False,
+            "settings": {"membership_default_filter": False, "updated_at": 0}
+        }), 500
+
+
+@membership_bp.route('/api/membership/settings', methods=['POST'])
+def save_user_settings():
+    """
+    Save user's custom settings.
+    Request body: { "username": "...", "membership_default_filter": true/false }
+    No auth required — but only membership users can enable the filter (enforced by frontend).
+    """
+    try:
+        data = request.get_json()
+        if not data or 'username' not in data:
+            return jsonify({"error": "Missing username"}), 400
+        
+        username = data['username']
+        membership_default_filter = bool(data.get('membership_default_filter', False))
+        
+        # If trying to enable filter, verify the user actually has active membership
+        if membership_default_filter:
+            status = models.get_membership_status(username)
+            if not status.get('is_active', False):
+                return jsonify({
+                    "success": False,
+                    "error": "Active membership required to enable this setting"
+                }), 403
+        
+        success = models.save_user_settings(username, membership_default_filter)
+        
+        return jsonify({
+            "success": success,
+            "username": username,
+            "membership_default_filter": membership_default_filter
+        })
+    except Exception as e:
+        logger.error(f"Error saving user settings: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@membership_bp.route('/api/membership/posts', methods=['GET'])
+def get_membership_posts():
+    """
+    Public endpoint to fetch posts from membership users.
+    Returns data in Lemmy API GetPostsResponse format.
+    
+    Query params:
+        sort: SortType (Active, Hot, New, Old, etc.) — default: Active
+        page: Page number (1-indexed) — default: 1
+        limit: Posts per page — default: 20
+        type_: ListingType (Local, All) — default: Local
+    """
+    try:
+        from services.membership_posts import fetch_membership_posts
+        
+        sort = request.args.get('sort', 'Active')
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        listing_type = request.args.get('type_', 'Local')
+        
+        # Validate inputs
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 50:
+            limit = 20
+        
+        result = fetch_membership_posts(
+            sort=sort,
+            page=page,
+            limit=limit,
+            listing_type=listing_type,
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error fetching membership posts: {str(e)}")
+        return jsonify({
+            "posts": [],
+            "next_page": None,
+            "error": str(e)
+        }), 500
+
+
+@membership_bp.route('/api/membership/active-users', methods=['GET'])
+def get_active_membership_users():
+    """
+    Public endpoint to get list of active membership usernames.
+    Used by frontend to display membership filter checkbox.
+    """
+    try:
+        from services.membership_posts import get_postgres_connection, get_membership_user_ids
+        
+        conn = get_postgres_connection()
+        member_ids = get_membership_user_ids(conn)
+        
+        # Also get usernames
+        if member_ids:
+            cursor = conn.cursor()
+            placeholders = ','.join(['%s'] * len(member_ids))
+            cursor.execute(f"SELECT id, name FROM person WHERE id IN ({placeholders})", member_ids)
+            users = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+            cursor.close()
+        else:
+            users = []
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "active_users": users,
+            "count": len(users)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching active membership users: {str(e)}")
+        return jsonify({
+            "success": False,
+            "active_users": [],
+            "count": 0
+        }), 500

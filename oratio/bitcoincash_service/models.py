@@ -314,6 +314,33 @@ def init_db():
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_referral_vlog_link ON referral_verification_log(link_id)')
         
+        # ==================== Background Task State ====================
+        # 백그라운드 작업의 마지막 실행 시각을 저장 (컨테이너 재시작에도 유지)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS background_task_state (
+            task_name TEXT PRIMARY KEY,
+            last_run_at INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0
+        )
+        ''')
+        
+        # ==================== User Settings ====================
+        # 유저별 커스텀 설정 (Lemmy API가 지원하지 않는 Oratio 전용 설정)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id TEXT PRIMARY KEY,
+            membership_default_filter BOOLEAN DEFAULT FALSE,
+            updated_at INTEGER NOT NULL DEFAULT 0
+        )
+        ''')
+        
+        # ★ 중복 크레딧 방지: 같은 invoice_id + credit type 조합은 1건만 허용
+        # race condition으로 인한 동시 INSERT 방지 (DB 레벨 안전장치)
+        cursor.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_unique_credit_per_invoice 
+        ON transactions(invoice_id, type) WHERE invoice_id IS NOT NULL AND type = 'credit'
+        ''')
+        
         # 프라그마 설정 - 외래 키 활성화 및 저널 모드 WAL로 변경
         cursor.execute("PRAGMA foreign_keys = ON")
         cursor.execute("PRAGMA journal_mode = WAL")
@@ -504,7 +531,11 @@ def expire_pending_invoices():
     return count
 
 def credit_user(user_id, amount, invoice_id):
-    """사용자 계정에 크레딧 추가 - username 기반으로 저장"""
+    """사용자 계정에 크레딧 추가 - username 기반으로 저장
+    
+    중복 방지: DB 레벨 UNIQUE 제약조건 + 락 기반으로 race condition 방지.
+    같은 invoice_id로 이미 크레딧이 추가된 경우 무시.
+    """
     if not user_id:
         return False
     
@@ -527,29 +558,52 @@ def credit_user(user_id, amount, invoice_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 현재 시간
-    now = int(time.time())
-    
-    # 사용자 크레딧 업데이트 (username으로 저장)
-    cursor.execute(
-        "INSERT INTO user_credits (user_id, credit_balance, last_updated) VALUES (?, ?, ?) "
-        "ON CONFLICT(user_id) DO UPDATE SET credit_balance = credit_balance + ?, last_updated = ?",
-        (username, amount, now, amount, now)
-    )
-    
-    # 트랜잭션 기록 저장 (username으로 저장)
-    transaction_id = str(uuid.uuid4())
-    cursor.execute(
-        "INSERT INTO transactions (id, user_id, amount, type, description, created_at, invoice_id) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (transaction_id, username, amount, "credit", "Bitcoin Cash 충전", now, invoice_id)
-    )
-    
-    conn.commit()
-    conn.close()
-    
-    logger.info(f"사용자 {username} (원본 ID: {user_id})에게 {amount} BCH 크레딧 추가됨, 인보이스: {invoice_id}")
-    return True
+    try:
+        # ★ IMMEDIATE 트랜잭션으로 DB 레벨 락 획득 (race condition 방지)
+        cursor.execute("BEGIN IMMEDIATE")
+        
+        # 중복 방지: 같은 invoice_id로 이미 크레딧이 추가된 경우 무시
+        if invoice_id:
+            cursor.execute(
+                "SELECT COUNT(*) FROM transactions WHERE invoice_id = ? AND type = 'credit'",
+                (invoice_id,)
+            )
+            existing_count = cursor.fetchone()[0]
+            if existing_count > 0:
+                conn.rollback()
+                conn.close()
+                logger.warning(f"⚠️ 중복 크레딧 방지: 인보이스 {invoice_id}에 대한 크레딧이 이미 존재함 (기존 {existing_count}건). 무시합니다.")
+                return False
+        
+        # 현재 시간
+        now = int(time.time())
+        
+        # 사용자 크레딧 업데이트 (username으로 저장)
+        cursor.execute(
+            "INSERT INTO user_credits (user_id, credit_balance, last_updated) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET credit_balance = credit_balance + ?, last_updated = ?",
+            (username, amount, now, amount, now)
+        )
+        
+        # 트랜잭션 기록 저장 (username으로 저장)
+        transaction_id = str(uuid.uuid4())
+        cursor.execute(
+            "INSERT INTO transactions (id, user_id, amount, type, description, created_at, invoice_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (transaction_id, username, amount, "credit", "Bitcoin Cash Deposit", now, invoice_id)
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"사용자 {username} (원본 ID: {user_id})에게 {amount} BCH 크레딧 추가됨, 인보이스: {invoice_id}")
+        return True
+        
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        logger.error(f"크레딧 추가 중 오류 (user={username}, invoice={invoice_id}): {str(e)}")
+        return False
 
 def get_user_credit(user_id):
     """사용자 크레딧 조회 - person_id를 username으로 변환하여 조회"""
@@ -897,6 +951,8 @@ def check_and_expire_memberships():
                 WHERE user_id = ?
             ''', (user_id,))
             logger.info(f"사용자 {user_id}의 멤버십이 만료되어 비활성화됨")
+            # 멤버십 만료 시 membership_default_filter 설정도 자동 해제
+            clear_user_membership_filter(user_id)
         
         conn.commit()
         conn.close()
@@ -939,6 +995,81 @@ def get_membership_transactions(user_id, limit=50):
     except Exception as e:
         logger.error(f"멤버십 거래 내역 조회 중 오류: {str(e)}")
         return []
+
+
+# ==================== User Settings Functions ====================
+
+def get_user_settings(user_id):
+    """유저의 커스텀 설정 조회"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT membership_default_filter, updated_at FROM user_settings WHERE user_id = ?',
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                "membership_default_filter": bool(row[0]),
+                "updated_at": row[1]
+            }
+        else:
+            return {
+                "membership_default_filter": False,
+                "updated_at": 0
+            }
+    except Exception as e:
+        logger.error(f"유저 설정 조회 오류 ({user_id}): {str(e)}")
+        return {
+            "membership_default_filter": False,
+            "updated_at": 0
+        }
+
+
+def save_user_settings(user_id, membership_default_filter):
+    """유저의 커스텀 설정 저장 (upsert)"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        now = int(time.time())
+        cursor.execute('''
+            INSERT INTO user_settings (user_id, membership_default_filter, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                membership_default_filter = excluded.membership_default_filter,
+                updated_at = excluded.updated_at
+        ''', (user_id, membership_default_filter, now))
+        conn.commit()
+        conn.close()
+        logger.info(f"유저 설정 저장: {user_id} → membership_default_filter={membership_default_filter}")
+        return True
+    except Exception as e:
+        logger.error(f"유저 설정 저장 오류 ({user_id}): {str(e)}")
+        return False
+
+
+def clear_user_membership_filter(user_id):
+    """멤버십 만료 시 해당 유저의 membership_default_filter를 자동으로 false로 변경"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        now = int(time.time())
+        cursor.execute('''
+            UPDATE user_settings SET membership_default_filter = FALSE, updated_at = ?
+            WHERE user_id = ? AND membership_default_filter = TRUE
+        ''', (now, user_id))
+        if cursor.rowcount > 0:
+            logger.info(f"멤버십 만료 → 유저 설정 자동 해제: {user_id}")
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"유저 설정 자동 해제 오류 ({user_id}): {str(e)}")
+        return False
+
 
 # 데이터베이스 초기화 함수 호출
 init_db()

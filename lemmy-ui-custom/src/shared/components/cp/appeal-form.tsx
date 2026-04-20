@@ -160,7 +160,7 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
 
     if (user) {
       // Logged-in flow
-      const hasGoldBadge = checkUserHasGoldBadgeSync(user);
+      const hasGoldBadge = checkUserHasGoldBadgeSync(user.local_user_view.person);
       if (!hasGoldBadge) {
         toast("Only membership users can submit appeals. Please verify your membership status.", "danger");
         return;
@@ -176,11 +176,23 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
         return;
       }
 
+      // Determine appeal_type based on current CP permissions
+      const perms = this.state.permissions as CPPermissions | null;
+      let appealType = 'ban';
+      if (perms) {
+        if (perms.is_banned) {
+          appealType = 'ban';
+        } else if (!perms.can_report_cp) {
+          // User's report ability revoked -> appeal that
+          appealType = 'report_ability';
+        }
+      }
+
       payload = {
         username: user.local_user_view.person.name,
         person_id: user.local_user_view.person.id,
         is_member: hasGoldBadge,
-        appeal_type: 'ban',
+        appeal_type: appealType,
         appeal_reason: appealText.trim()
       };
     } else {
@@ -200,10 +212,22 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
         return;
       }
 
+      // For unauthenticated users, determine appeal_type by checking the user's CP permissions
+      let appealType = 'ban';
+      try {
+        const anonPerms = await checkUserCPPermissions(anonUsername as string);
+        if (anonPerms) {
+          if (anonPerms.is_banned) appealType = 'ban';
+          else if (!anonPerms.can_report_cp) appealType = 'report_ability';
+        }
+      } catch (err) {
+        // ignore and default to ban (server-side will validate)
+      }
+
       payload = {
         username: anonUsername,
         is_member: !!anonIsMember,
-        appeal_type: 'ban',
+        appeal_type: appealType,
         appeal_reason: appealText.trim()
       };
     }
@@ -251,17 +275,17 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
       const { appealText, submitting, submitted, anonUsername, anonIsMember } = this.state as any;
 
       return (
-        <div className="card border-danger">
-          <div className="card-header border-danger" style={{ backgroundColor: "var(--bs-card-bg, #303030)" }}>
-            <h4 className="mb-0 text-danger">
+        <div className="card border-warning">
+          <div className="card-header border-warning" style={{ backgroundColor: "var(--bs-card-bg, #303030)" }}>
+            <h4 className="mb-0 text-warning">
               <Icon icon="alert-triangle" classes="me-2" />
-              Submit Ban Appeal (Not logged in)
+              Submit Appeal (Not logged in)
             </h4>
           </div>
           <div className="card-body">
             <div className="alert alert-warning">
               <Icon icon="info" classes="me-2" />
-              You are not logged in. If you are a membership user but cannot log in due to a ban, you may submit an appeal here by providing your username. The server will validate your membership and ban status.
+              You are not logged in. If you are a membership user, you may submit an appeal here by providing your username. The server will automatically determine whether this is a ban appeal or a report-ability appeal based on your account status.
             </div>
 
             {submitted ? (
@@ -336,7 +360,7 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
                   <textarea 
                     className="form-control" 
                     rows={6} 
-                    placeholder="Explain why you believe your ban should be reconsidered..."
+                    placeholder="Explain why you believe the decision should be reconsidered..."
                     value={appealText || ''} 
                     onInput={(e: any) => this.setState({ appealText: e.target.value })} 
                     maxLength={2000} 
@@ -375,23 +399,28 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
       );
     }
 
-    if (!permissions.is_banned) {
+    // Allow appeals for both ban and report-ability revocation
+    const isBanned = !!permissions.is_banned;
+    const isReportRevoked = !permissions.can_report_cp;
+
+    if (!isBanned && !isReportRevoked) {
       return (
         <div className="alert alert-info">
           <Icon icon="info" classes="me-2" />
-          You are not currently banned. Appeals are only available for banned users.
+          You are not currently banned and your report ability is active. There is nothing to appeal.
         </div>
       );
     }
 
-    const hasGoldBadge = checkUserHasGoldBadgeSync(user);
+    const hasGoldBadge = checkUserHasGoldBadgeSync(user.local_user_view.person);
+    const appealTarget = isBanned ? 'ban' : 'report_ability';
 
     return (
-      <div className="card border-danger">
-        <div className="card-header border-danger" style={{ backgroundColor: "var(--bs-card-bg, #303030)" }}>
-          <h4 className="mb-0 text-danger">
+      <div className={`card ${isBanned ? 'border-danger' : 'border-warning'}`}>
+        <div className={`card-header ${isBanned ? 'border-danger' : 'border-warning'}`} style={{ backgroundColor: "var(--bs-card-bg, #303030)" }}>
+          <h4 className={`mb-0 ${isBanned ? 'text-danger' : 'text-warning'}`}>
             <Icon icon="alert-triangle" classes="me-2" />
-            Submit CP Ban Appeal
+            {isBanned ? 'Submit CP Ban Appeal' : 'Submit Report Ability Appeal'}
           </h4>
         </div>
         <div className="card-body">
@@ -399,14 +428,24 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
             <div className="alert alert-warning">
               <Icon icon="lock" classes="me-2" />
               <strong>Membership Required:</strong> Only membership users (Gold Badge holders) can submit appeals.
-              Please renew or purchase membership to appeal this ban.
+              Please renew or purchase membership to appeal.
             </div>
           )}
 
-          {permissions.ban_end && (
+          {isBanned && permissions.ban_end && (
             <div className="alert alert-info">
               <Icon icon="clock" classes="me-2" />
               <strong>Current Ban:</strong> Your ban expires on {new Date(permissions.ban_end * 1000).toLocaleString()}
+            </div>
+          )}
+
+          {isReportRevoked && !isBanned && (
+            <div className="alert alert-warning">
+              <Icon icon="alert-triangle" classes="me-2" />
+              <strong>Report Ability Revoked:</strong> Your CP reporting ability was revoked due to a false report.
+              {permissions.report_ability_revoked_at && (
+                <> Revoked on {new Date(permissions.report_ability_revoked_at * 1000).toLocaleDateString()}.</>
+              )}
             </div>
           )}
 
@@ -423,14 +462,17 @@ export class AppealForm extends Component<AppealFormProps, AppealFormState> {
             <form onSubmit={(e: any) => this.handleSubmit(e)}>
               <div className="mb-3">
                 <label className="form-label">
-                  <strong>Why should your ban be lifted?</strong>
+                  <strong>{isBanned ? 'Why should your ban be lifted?' : 'Why should your report ability be restored?'}</strong>
                 </label>
                 <textarea
                   className="form-control"
                   rows={8}
-                  placeholder="Explain why you believe your ban was incorrect or should be reconsidered. Be honest and specific. False or abusive appeals may result in permanent restrictions."
+                  placeholder={isBanned
+                    ? "Explain why you believe your ban was incorrect or should be reconsidered. Be honest and specific. False or abusive appeals may result in permanent restrictions."
+                    : "Explain why you believe your report ability was incorrectly revoked. Be honest and specific."
+                  }
                   value={appealText}
-                  onChange={(e: any) => this.setState({ appealText: e.target.value })}
+                  onInput={(e: any) => this.setState({ appealText: e.target.value })}
                   disabled={submitting || !hasGoldBadge}
                   maxLength={2000}
                 />

@@ -252,7 +252,7 @@
     <!-- Navigation Bar -->
     <div class="navbar-like">
         <div class="container text-center">
-            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
+            <a href="https://oratio.space/" class="site-title" data-i18n="site_title">✨ oratio</a>
         </div>
     </div>
 
@@ -261,9 +261,9 @@
             <div class="col-lg-8 offset-lg-2">
                 <!-- Non-Refundable Policy Warning -->
                 <div class="alert alert-danger mb-4 text-center">
-                    <h5 class="alert-heading"><span style="font-size: 1.5rem; margin-right: 0.5rem;">⚠️</span><strong>Non-Refundable Policy</strong></h5>
-                    <p class="mb-1"><strong>All payments are non-refundable.</strong> Please verify the amount and address before payment.</p>
-                    <p class="mb-0">For security reasons and to avoid AML laws, deposits are non-refundable.</p>
+                    <h5 class="alert-heading"><span style="font-size: 1.5rem; margin-right: 0.5rem;">⚠️</span><strong data-i18n="invoice_nonrefundable_title">Non-Refundable Policy</strong></h5>
+                    <p class="mb-1" data-i18n="invoice_nonrefundable_desc" data-i18n-html="true"><strong>All payments are non-refundable.</strong> Please verify the amount and address before payment.</p>
+                    <p class="mb-0" data-i18n="nonrefundable_2">For security reasons and to avoid AML laws, deposits are non-refundable.</p>
                 </div>
                 
                 <div class="card">
@@ -404,6 +404,7 @@
         </div>
     </div>
 
+    <script src="/payments/static/js/i18n.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/js/sha256.js"></script>
     <script src="/static/js/payment-verifier.js"></script>

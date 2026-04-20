@@ -137,7 +137,7 @@
     <!-- Navigation Bar -->
     <div class="navbar-like">
         <div class="container text-center">
-            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
+            <a href="https://oratio.space/" class="site-title" data-i18n="site_title">✨ oratio</a>
         </div>
     </div>
 
@@ -145,30 +145,32 @@
         <div class="card">
             <div class="card-header text-center">
                 <div class="error-icon">⚠️</div>
-                <h2 class="mb-0">Oops! Something Went Wrong</h2>
+                <h2 class="mb-0" data-i18n="error_title">Oops! Something Went Wrong</h2>
             </div>
             <div class="card-body">
                 <div class="alert alert-danger">
-                    <h5 class="alert-heading"><span style="font-size: 1.3rem; margin-right: 0.5rem;">❌</span>Error Message</h5>
+                    <h5 class="alert-heading"><span style="font-size: 1.3rem; margin-right: 0.5rem;">❌</span><span data-i18n="error_message_label">Error Message</span></h5>
                     <p class="mb-0"><strong>{{ message }}</strong></p>
                 </div>
                 
                 <div class="alert alert-info">
-                    <h6 class="alert-heading"><span style="font-size: 1.2rem; margin-right: 0.5rem;">💡</span>How to Resolve This</h6>
+                    <h6 class="alert-heading"><span style="font-size: 1.2rem; margin-right: 0.5rem;">💡</span><span data-i18n="error_resolve_title">How to Resolve This</span></h6>
                     <ul class="mb-0">
-                        <li>Refresh the page and try again</li>
-                        <li>Wait a moment and retry your action</li>
-                        <li>If the problem persists, contact customer support</li>
-                        <li>Check your internet connection</li>
+                        <li data-i18n="error_resolve_1">Refresh the page and try again</li>
+                        <li data-i18n="error_resolve_2">Wait a moment and retry your action</li>
+                        <li data-i18n="error_resolve_3">If the problem persists, contact customer support</li>
+                        <li data-i18n="error_resolve_4">Check your internet connection</li>
                     </ul>
                 </div>
                 
                 <div class="text-center mt-4">
-                    <a href="/" class="btn btn-primary me-3">💳 Payment Service Home</a>
-                    <a href="https://oratio.space/" class="btn btn-outline-secondary">🏠 oratio Main</a>
+                    <a href="/" class="btn btn-primary me-3" data-i18n="payment_home_btn">💳 Payment Service Home</a>
+                    <a href="https://oratio.space/" class="btn btn-outline-secondary" data-i18n="go_to_oratio_btn">🏠 oratio Main</a>
                 </div>
             </div>
         </div>
     </div>
+
+    <script src="/payments/static/js/i18n.js"></script>
 </body>
 </html>

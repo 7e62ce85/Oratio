@@ -217,7 +217,7 @@
     <!-- Navigation Bar -->
     <div class="navbar-like">
         <div class="container text-center">
-            <a href="https://oratio.space/" class="site-title">✨ oratio</a>
+            <a href="https://oratio.space/" class="site-title" data-i18n="site_title">✨ oratio</a>
         </div>
     </div>
 
@@ -226,38 +226,38 @@
             <div class="card">
                 <div class="card-header">
                     <div class="success-icon">🎉</div>
-                    <h1 class="message mb-0">Payment Successfully Completed!</h1>
+                    <h1 class="message mb-0" data-i18n="success_title">Payment Successfully Completed!</h1>
                 </div>
                 <div class="card-body">
                     <!-- Non-Refundable Policy Reconfirmation -->
                     <div class="alert alert-success mb-4 text-center">
-                        <h5 class="alert-heading"><span style="font-size: 1.5rem; margin-right: 0.5rem;">✅</span>Payment Confirmed</h5>
-                        <p class="mb-0">Bitcoin Cash payment successfully confirmed on the blockchain.</p>
+                        <h5 class="alert-heading"><span style="font-size: 1.5rem; margin-right: 0.5rem;">✅</span><span data-i18n="success_confirmed_title">Payment Confirmed</span></h5>
+                        <p class="mb-0" data-i18n="success_confirmed_desc">Bitcoin Cash payment successfully confirmed on the blockchain.</p>
                     </div>
                     
                     <div class="details">
                         <div class="detail-item">
-                            <div class="detail-label">📋 Invoice ID</div>
+                            <div class="detail-label" data-i18n="success_invoice_id">📋 Invoice ID</div>
                             <div class="detail-value">{{ invoice_id }}</div>
                         </div>
                         
                         {% if tx_hash %}
                         <div class="detail-item">
-                            <div class="detail-label">🔗 Transaction Hash</div>
+                            <div class="detail-label" data-i18n="success_tx_hash">🔗 Transaction Hash</div>
                             <div class="detail-value">
                                 <a href="https://blockchair.com/bitcoin-cash/transaction/{{ tx_hash }}" 
                                    target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">
                                    {{ tx_hash }}
                                 </a>
                                 <br>
-                                <small style="color: #666;">Click to view transaction details on Blockchair</small>
+                                <small style="color: #666;" data-i18n="success_tx_view">Click to view transaction details on Blockchair</small>
                             </div>
                         </div>
                         {% endif %}
                         
                         {% if amount %}
                         <div class="detail-item">
-                            <div class="detail-label">💰 Payment Amount</div>
+                            <div class="detail-label" data-i18n="success_amount">💰 Payment Amount</div>
                             <div class="detail-value"><strong style="font-size: 1.2rem; color: #28a745;">{{ amount }} BCH</strong></div>
                         </div>
                         {% endif %}
@@ -265,14 +265,14 @@
                     
                     {% if user_id and credit_added %}
                     <div class="credit-info">
-                        <h3><span style="font-size: 1.5rem; margin-right: 0.5rem;">💰</span>Account Credit Added Successfully</h3>
-                        <p class="mb-2"><strong style="color: #28a745; font-size: 1.2rem;">{{ amount }} BCH</strong> has been successfully added to your account.</p>
-                        <p class="mb-0">Current credit balance: <strong style="color: #667eea; font-size: 1.1rem;">{{ total_credit }} BCH</strong></p>
+                        <h3><span style="font-size: 1.5rem; margin-right: 0.5rem;">💰</span><span data-i18n="success_credit_title">Account Credit Added Successfully</span></h3>
+                        <p class="mb-2"><strong style="color: #28a745; font-size: 1.2rem;">{{ amount }} BCH</strong> <span data-i18n="success_credit_desc">has been successfully added to your account.</span></p>
+                        <p class="mb-0"><span data-i18n="success_credit_balance">Current credit balance:</span> <strong style="color: #667eea; font-size: 1.1rem;">{{ total_credit }} BCH</strong></p>
                         
                         {% if total_credit >= 0.035 %}
                         <div class="alert alert-success mt-3 mb-0">
-                            <h6 class="alert-heading"><span style="font-size: 1.2rem; margin-right: 0.5rem;">�</span>Premium Benefits Activated!</h6>
-                            <p class="mb-0 small">With 0.0003 BCH or more, ads are removed from the entire site. Enjoy clean browsing.</p>
+                            <h6 class="alert-heading"><span style="font-size: 1.2rem; margin-right: 0.5rem;">🎉</span><span data-i18n="success_premium_title">Premium Benefits Activated!</span></h6>
+                            <p class="mb-0 small" data-i18n="success_premium_desc">5× voting power, 💰 gold badge, ad-free browsing, members-only feed, and premium community access. Enjoy your membership!</p>
                         </div>
                         {% endif %}
                     </div>
@@ -280,22 +280,24 @@
                     
                     <!-- Non-Refundable Policy Reminder -->
                     <div class="alert alert-warning mt-4">
-                        <h6 class="fw-bold mb-2"><span style="font-size: 1.2rem; margin-right: 0.5rem;">📌</span>Important Notes:</h6>
+                        <h6 class="fw-bold mb-2"><span style="font-size: 1.2rem; margin-right: 0.5rem;">📌</span><span data-i18n="success_notes_title">Important Notes:</span></h6>
                         <small>
-                            • This payment is non-refundable<br>
-                            • Keep the transaction hash as payment proof<br>
-                            • Ad removal benefits apply when holding 0.0003 BCH or more<br>
-                            • Contact oratio customer support for inquiries
+                            <span data-i18n="success_note_1">• This payment is non-refundable</span><br>
+                            <span data-i18n="success_note_2">• Keep the transaction hash as payment proof</span><br>
+                            <span data-i18n="success_note_3">• Purchase annual membership ($5/year) from your wallet page for full benefits</span><br>
+                            <span data-i18n="success_note_4">• Contact oratio customer support for inquiries</span>
                         </small>
                     </div>
                     
                     <div class="text-center mt-4">
-                        <a href="https://oratio.space/" class="btn btn-primary btn-lg me-3">🏠 Go to oratio</a>
-                        <a href="/" class="btn btn-outline-secondary">💳 Payment Service Home</a>
+                        <a href="https://oratio.space/" class="btn btn-primary btn-lg me-3" data-i18n="go_to_oratio_btn">🏠 Go to oratio</a>
+                        <a href="/" class="btn btn-outline-secondary" data-i18n="payment_home_btn">💳 Payment Service Home</a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <script src="/payments/static/js/i18n.js"></script>
 </body>
 </html>

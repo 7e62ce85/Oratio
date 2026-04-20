@@ -15,6 +15,54 @@ from services.referral_verifier import reverify_approved_links, reverify_early_b
 # Initialize membership sync service
 membership_sync_service = None
 
+# ==================== DB-based Task Scheduler ====================
+# 컨테이너 재시작에도 유지되는 DB 기반 스케줄러
+
+REFERRAL_REVERIFY_INTERVAL = 12 * 3600  # 12시간 (초)
+REFERRAL_REVERIFY_TASK_NAME = "referral_reverify"
+
+
+def _get_last_task_run(task_name: str) -> int:
+    """DB에서 특정 작업의 마지막 실행 시각(unix timestamp) 조회. 없으면 0 반환."""
+    try:
+        conn = models.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT last_run_at FROM background_task_state WHERE task_name = ?",
+            (task_name,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else 0
+    except Exception as e:
+        logger.error(f"[TaskScheduler] Failed to read last run for {task_name}: {e}")
+        return 0
+
+
+def _set_last_task_run(task_name: str, timestamp: int = None):
+    """DB에 특정 작업의 마지막 실행 시각 기록."""
+    if timestamp is None:
+        timestamp = int(time.time())
+    try:
+        conn = models.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO background_task_state (task_name, last_run_at, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(task_name) DO UPDATE SET last_run_at = ?, updated_at = ?
+        ''', (task_name, timestamp, timestamp, timestamp, timestamp))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"[TaskScheduler] Failed to update last run for {task_name}: {e}")
+
+
+def _is_task_due(task_name: str, interval_seconds: int) -> bool:
+    """작업의 마지막 실행으로부터 interval_seconds 이상 경과했는지 확인."""
+    last_run = _get_last_task_run(task_name)
+    now = int(time.time())
+    return (now - last_run) >= interval_seconds
+
 def cleanup_expired_invoices():
     """만료된 인보이스 처리"""
     count = models.expire_pending_invoices()
@@ -115,10 +163,6 @@ def check_pending_invoices():
 
 def run_background_tasks():
     """백그라운드 작업 처리"""
-    # Referral 재검증은 12시간(=2880 iterations × 15s)마다 실행
-    _referral_reverify_counter = 0
-    _REFERRAL_REVERIFY_EVERY = 2880  # 12h @ 15s interval
-
     while True:
         try:
             # 만료된 인보이스 처리
@@ -142,10 +186,12 @@ def run_background_tasks():
             # CP 시스템 백그라운드 작업 (auto-unban, auto-delete)
             run_cp_background_tasks()
 
-            # ── Referral Phase B: 주기적 재검증 (12시간 간격) ──
-            _referral_reverify_counter += 1
-            if _referral_reverify_counter >= _REFERRAL_REVERIFY_EVERY:
-                _referral_reverify_counter = 0
+            # ── Referral Phase B: 주기적 재검증 (DB 기반 12시간 간격) ──
+            # 컨테이너 재시작에도 영향받지 않음: DB에 마지막 실행 시각 저장
+            if _is_task_due(REFERRAL_REVERIFY_TASK_NAME, REFERRAL_REVERIFY_INTERVAL):
+                logger.info("[Referral] 12h interval reached — starting re-verification cycle")
+                _set_last_task_run(REFERRAL_REVERIFY_TASK_NAME)
+
                 try:
                     # 승인 직후 지수 백오프 재검증 (12h~64d 구간)
                     early_checked = reverify_early_backoff()

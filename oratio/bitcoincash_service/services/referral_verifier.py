@@ -23,6 +23,7 @@ REFERRAL_TARGET_DOMAIN = "oratio.space"
 VERIFY_HTTP_TIMEOUT = 12          # seconds
 REVERIFY_INTERVAL_DAYS = 90       # 3개월마다 재검증
 GRACE_PERIOD_DAYS = 14            # 재검증 실패 후 유예 기간
+TOTAL_FAIL_LIMIT = 3              # 승인 후 1년간 누적 실패 N회 → 즉시 revoke (유예 무시)
 
 # 승인 직후 지수 백오프 재검증 스케줄 (초 단위)
 # 12h → 1d → 2d → 4d → 8d → 16d → 32d → 64d
@@ -145,6 +146,67 @@ def log_verification(link_id: str, result: dict, conn=None):
             conn.close()
 
 
+# ==================== Fail Count & Ban Helpers ====================
+
+def _count_verification_failures(link_id: str, conn=None) -> int:
+    """
+    특정 링크의 승인 이후 1년간 재검증 실패(link_found=FALSE) 누적 횟수.
+    referral_verification_log 테이블 기준.
+    """
+    should_close = False
+    if conn is None:
+        conn = models.get_db_connection()
+        should_close = True
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) FROM referral_verification_log
+            WHERE link_id = ? AND link_found = 0
+        ''', (link_id,))
+        return cursor.fetchone()[0]
+    except Exception as e:
+        logger.error(f"[ReferralVerifier] Failed to count failures for {link_id}: {e}")
+        return 0
+    finally:
+        if should_close:
+            conn.close()
+
+
+def _revoke_for_strike(link_id: str, submitted_by: str, fail_count: int, conn=None):
+    """
+    누적 실패 횟수 초과(3-strike)로 인한 즉시 revoke.
+    유예 기간을 무시하고 즉시 badge + membership 취소.
+    """
+    should_close = False
+    if conn is None:
+        conn = models.get_db_connection()
+        should_close = True
+    try:
+        cursor = conn.cursor()
+        reason = f"3-strike auto-revoked: {fail_count} verification failures"
+
+        cursor.execute('''
+            UPDATE referral_awards SET revoked = TRUE, revoke_reason = ?
+            WHERE link_id = ? AND username = ? AND revoked = FALSE
+        ''', (reason, link_id, submitted_by))
+
+        cursor.execute('''
+            UPDATE referral_links SET status = 'rejected', reject_reason = ?
+            WHERE id = ?
+        ''', (reason, link_id))
+
+        conn.commit()
+
+        _revoke_referral_membership(link_id, submitted_by, conn)
+        logger.warning(f"[ReferralVerifier] 3-STRIKE REVOKE: {link_id} by {submitted_by} "
+                       f"({fail_count} failures)")
+    except Exception as e:
+        logger.error(f"[ReferralVerifier] Strike revoke error for {link_id}: {e}")
+    finally:
+        if should_close:
+            conn.close()
+
+
 # ==================== Submit-time Auto-Verify ====================
 
 def auto_verify_on_submit(link_id: str, url: str, submitted_by: str) -> dict:
@@ -228,7 +290,7 @@ def reverify_early_backoff():
     - 64일 이후부터는 기존 90일 정기 재검증(reverify_approved_links)에 합류.
     - 실패 시 기존 유예 로직(14일)과 동일하게 처리.
 
-    background_tasks.py에서 12시간마다 호출.
+    background_tasks.py에서 12시간마다 호출 (DB 기반 스케줄 — 컨테이너 재시작에 영향 없음).
     """
     now = int(time.time())
     max_backoff = EARLY_BACKOFF_SCHEDULE[-1]  # 64일
@@ -308,14 +370,18 @@ def reverify_early_backoff():
                 ''', (now, link_id))
                 conn.commit()
             else:
-                if currently_verified:
+                # ── 3-strike 체크: 누적 실패 횟수가 한도 이상이면 즉시 revoke ──
+                fail_count = _count_verification_failures(link_id, conn)
+                if fail_count >= TOTAL_FAIL_LIMIT:
+                    _revoke_for_strike(link_id, submitted_by, fail_count, conn)
+                elif currently_verified:
                     # 첫 실패 → verified=FALSE (유예 시작)
                     cursor.execute('''
                         UPDATE referral_links SET verified = FALSE, last_verified_at = ?
                         WHERE id = ?
                     ''', (now, link_id))
                     conn.commit()
-                    logger.warning(f"[ReferralVerifier] Early backoff: {link_id} failed — grace period started")
+                    logger.warning(f"[ReferralVerifier] Early backoff: {link_id} failed (strike {fail_count}/{TOTAL_FAIL_LIMIT}) — grace period started")
                 else:
                     # 이미 실패 상태 — 유예 초과 여부 확인
                     if last_verified_at and last_verified_at < grace_cutoff:
@@ -365,7 +431,7 @@ def reverify_approved_links():
     - 백링크 사라지면 verified=FALSE 표시, 14일 유예
     - 유예 후에도 미복구 시 badge revoke
 
-    background_tasks.py 의 run_background_tasks() 루프에서 호출됨.
+    background_tasks.py 의 run_background_tasks() 루프에서 호출됨 (DB 기반 스케줄).
     """
     cutoff = int(time.time()) - (REVERIFY_INTERVAL_DAYS * 86400)
     grace_cutoff = int(time.time()) - (GRACE_PERIOD_DAYS * 86400)
@@ -402,14 +468,18 @@ def reverify_approved_links():
                 ''', (now, link_id))
                 conn.commit()
             else:
-                if currently_verified:
+                # ── 3-strike 체크: 누적 실패 횟수가 한도 이상이면 즉시 revoke ──
+                fail_count = _count_verification_failures(link_id, conn)
+                if fail_count >= TOTAL_FAIL_LIMIT:
+                    _revoke_for_strike(link_id, submitted_by, fail_count, conn)
+                elif currently_verified:
                     # 처음 실패 → verified=FALSE 표시 (유예 기간 시작)
                     cursor.execute('''
                         UPDATE referral_links SET verified = FALSE, last_verified_at = ?
                         WHERE id = ?
                     ''', (now, link_id))
                     conn.commit()
-                    logger.warning(f"[ReferralVerifier] Link {link_id} failed re-verify — grace period started")
+                    logger.warning(f"[ReferralVerifier] Link {link_id} failed re-verify (strike {fail_count}/{TOTAL_FAIL_LIMIT}) — grace period started")
                 else:
                     # 이미 verified=FALSE인데, 유예 기간 초과?
                     if last_verified_at and last_verified_at < grace_cutoff:

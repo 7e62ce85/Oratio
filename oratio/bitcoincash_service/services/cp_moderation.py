@@ -666,17 +666,30 @@ def get_cp_report(report_id: str) -> Optional[Dict]:
 
 def get_pending_reports(community_id: Optional[int] = None, 
                        escalation_level: str = ESCALATION_MODERATOR,
-                       limit: int = 50, offset: int = 0) -> List[Dict]:
-    """Get pending CP reports for moderation"""
+                       limit: int = 50, offset: int = 0,
+                       community_ids: Optional[List[int]] = None) -> List[Dict]:
+    """Get pending CP reports for moderation.
+    
+    Args:
+        community_id: Filter by single community (legacy, optional)
+        escalation_level: 'moderator' or 'admin'
+        limit: Max results
+        offset: Offset for pagination
+        community_ids: Filter by list of communities (for moderator-scoped queries)
+    """
     query = '''
         SELECT * FROM cp_reports 
         WHERE status = ? AND escalation_level = ?
     '''
-    params = [REPORT_STATUS_PENDING, escalation_level]
+    params: list = [REPORT_STATUS_PENDING, escalation_level]
     
     if community_id:
         query += ' AND community_id = ?'
         params.append(community_id)
+    elif community_ids:
+        placeholders = ','.join('?' * len(community_ids))
+        query += f' AND community_id IN ({placeholders})'
+        params.extend(community_ids)
     
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
     params.extend([limit, offset])
@@ -1218,17 +1231,86 @@ def mark_notification_read(notification_id: str):
 
 
 def notify_community_moderators(community_id: int, report_id: str, content_type: str, content_id: int):
-    """Notify all moderators of a community about a CP report"""
-    # TODO: Implement moderator lookup from Lemmy database
-    # For now, this is a placeholder
-    logger.info(f"Would notify moderators of community {community_id} about report {report_id}")
+    """Notify only moderators of the specific community about a CP report.
+    
+    Uses Lemmy API to look up community moderators, then creates
+    a CP notification for each one.
+    """
+    try:
+        from lemmy_integration import LemmyAPI
+        import os
+        
+        lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+        lemmy_api = LemmyAPI(lemmy_api_url)
+        
+        moderators = lemmy_api.get_community_moderators(community_id)
+        
+        if not moderators:
+            logger.warning(f"⚠️  [CP NOTIFY] No moderators found for community {community_id}, report {report_id}")
+            return
+        
+        for mod in moderators:
+            create_notification(
+                mod['person_id'],
+                mod['username'],
+                NOTIFICATION_REVIEW_NEEDED,
+                "New CP Report for Review",
+                f"A {content_type} (ID: {content_id}) in your community has been reported as CP. "
+                f"Please review at /cp/moderator-review",
+                related_report_id=report_id
+            )
+        
+        mod_names = [m['username'] for m in moderators]
+        logger.info(f"✅ [CP NOTIFY] Notified {len(moderators)} moderators of community {community_id}: {mod_names}")
+        
+    except Exception as e:
+        logger.error(f"❌ [CP NOTIFY] Error notifying community moderators: {e}")
+        import traceback
+        logger.error(f"❌ [CP NOTIFY] Traceback: {traceback.format_exc()}")
 
 
 def notify_admins(report_id: Optional[str], content_type: str, content_id: int, message: str):
-    """Notify admins about escalated CP reports or appeals"""
-    # TODO: Implement admin lookup from Lemmy database
-    # For now, this is a placeholder
-    logger.info(f"Would notify admins about {content_type} {content_id}: {message}")
+    """Notify admins about escalated CP reports or appeals.
+    
+    Uses Lemmy API to look up site admins, then creates a CP notification for each one.
+    """
+    try:
+        from lemmy_integration import LemmyAPI
+        import os
+        
+        lemmy_api_url = os.environ.get('LEMMY_API_URL', 'http://lemmy:8536')
+        lemmy_api = LemmyAPI(lemmy_api_url)
+        
+        site_data = lemmy_api.get_site_config()
+        if not site_data:
+            logger.warning(f"⚠️  [CP NOTIFY] Could not fetch site config for admin notification")
+            return
+        
+        admins = site_data.get('admins', [])
+        if not admins:
+            logger.warning(f"⚠️  [CP NOTIFY] No admins found in site config")
+            return
+        
+        for admin_view in admins:
+            person = admin_view.get('person', {})
+            if person.get('id'):
+                create_notification(
+                    person['id'],
+                    person.get('name', ''),
+                    NOTIFICATION_REVIEW_NEEDED,
+                    "CP Report Escalated to Admin",
+                    f"A {content_type} (ID: {content_id}) has been escalated for admin review. "
+                    f"{message}. Please review at /cp/admin-panel",
+                    related_report_id=report_id
+                )
+        
+        admin_names = [a.get('person', {}).get('name', '') for a in admins]
+        logger.info(f"✅ [CP NOTIFY] Notified {len(admins)} admins: {admin_names}")
+        
+    except Exception as e:
+        logger.error(f"❌ [CP NOTIFY] Error notifying admins: {e}")
+        import traceback
+        logger.error(f"❌ [CP NOTIFY] Traceback: {traceback.format_exc()}")
 
 
 # ==========================================

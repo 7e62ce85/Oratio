@@ -77,6 +77,7 @@ import { getHttpBaseInternal } from "../../utils/env";
 import { IRoutePropsWithFetch } from "../../routes";
 import { RouteComponentProps } from "inferno-router/dist/Route";
 import { simpleScrollMixin } from "../mixins/scroll-mixin";
+import { checkUserHasGoldBadge } from "@utils/bch-payment";
 
 type SettingsData = RouteDataResponse<{
   instancesRes: GetFederatedInstancesResponse;
@@ -142,6 +143,8 @@ interface SettingsState {
   importSettingsRes: RequestState<any>;
   exportSettingsRes: RequestState<any>;
   settingsFile?: File;
+  isCurrentUserMember: boolean;
+  membershipDefaultFilter: boolean;
 }
 
 type FilterType = "user" | "community" | "instance";
@@ -244,6 +247,8 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
     show2faModal: false,
     importSettingsRes: EMPTY_REQUEST,
     exportSettingsRes: EMPTY_REQUEST,
+    isCurrentUserMember: false,
+    membershipDefaultFilter: false,
   };
 
   constructor(props: any, context: any) {
@@ -355,6 +360,9 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
   async componentWillMount() {
     if (isBrowser()) {
       this.setState({ themeList: await fetchThemeList() });
+
+      // Check current user membership status + load settings from DB
+      await this.checkCurrentUserMembership();
 
       if (!this.state.isIsomorphic) {
         this.setState({
@@ -917,6 +925,30 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
               />
             </div>
           </form>
+          <div className="input-group mb-3">
+            <div className="form-check">
+              <input
+                className="form-check-input"
+                id="user-membership-default-filter"
+                type="checkbox"
+                checked={this.state.membershipDefaultFilter}
+                disabled={!this.state.isCurrentUserMember}
+                onChange={linkEvent(this, this.handleMembershipDefaultFilterChange)}
+                style={{ cursor: this.state.isCurrentUserMember ? "pointer" : "not-allowed" }}
+              />
+              <label
+                className={`form-check-label${!this.state.isCurrentUserMember ? " text-muted" : ""}`}
+                htmlFor="user-membership-default-filter"
+                title={
+                  !this.state.isCurrentUserMember
+                    ? "💰 Membership required"
+                    : ""
+                }
+              >
+                {I18NextService.i18n.t("membership_default_filter")}
+              </label>
+            </div>
+          </div>
           <div className="input-group mb-3">
             <div className="form-check">
               <input
@@ -1589,6 +1621,66 @@ export class Settings extends Component<SettingsRouteProps, SettingsState> {
     this.setState(
       s => ((s.saveUserSettingsForm.default_listing_type = val), s),
     );
+  }
+
+  handleMembershipDefaultFilterChange(i: Settings) {
+    const newValue = !i.state.membershipDefaultFilter;
+    i.setState({ membershipDefaultFilter: newValue });
+    
+    // Save to DB via API
+    const myUser = UserService.Instance.myUserInfo;
+    if (myUser) {
+      const username = myUser.local_user_view.person.name;
+      fetch("/api/membership/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username,
+          membership_default_filter: newValue,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          console.log(`💰 [SETTINGS] Saved membership_default_filter=${newValue} to DB:`, data);
+        })
+        .catch(err => {
+          console.error("❌ [SETTINGS] Failed to save setting to DB:", err);
+        });
+    }
+  }
+
+  async checkCurrentUserMembership() {
+    const myUser = UserService.Instance.myUserInfo;
+    if (!myUser) {
+      this.setState({ isCurrentUserMember: false, membershipDefaultFilter: false });
+      return;
+    }
+    try {
+      const person = myUser.local_user_view.person;
+      const username = person.name;
+
+      // Fetch membership status and saved settings in parallel
+      const [memberRes, settingsRes] = await Promise.all([
+        checkUserHasGoldBadge(person),
+        fetch(`/api/membership/settings/${username}`).then(r => r.json()).catch(() => null),
+      ]);
+
+      const isMember = memberRes;
+      const savedFilter = settingsRes?.settings?.membership_default_filter ?? false;
+
+      console.log(`💰 [SETTINGS] membership=${isMember}, savedFilter=${savedFilter}`);
+
+      this.setState({
+        isCurrentUserMember: isMember,
+        membershipDefaultFilter: isMember ? savedFilter : false,
+      });
+
+      // If not a member but filter was saved as true, the backend's expiry check
+      // will auto-clear it. No need to do anything here.
+    } catch (error) {
+      console.error("❌ [SETTINGS] Failed to check membership:", error);
+      this.setState({ isCurrentUserMember: false });
+    }
   }
 
   handleEmailChange(i: Settings, event: any) {

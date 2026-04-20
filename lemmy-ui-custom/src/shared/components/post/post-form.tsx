@@ -120,7 +120,21 @@ interface PostFormState {
   powDifficulty: number;
 }
 
-function handlePostSubmit(i: PostForm, event: any) {
+// 챌린지 타임스탬프가 만료 임박(기본 8분 이상 경과)인지 확인
+function isChallengeExpiringSoon(challenge?: string, thresholdSeconds: number = 480): boolean {
+  if (!challenge) return true;
+  try {
+    const parts = challenge.split('-');
+    const timestampMs = parseInt(parts[0], 10);
+    if (isNaN(timestampMs)) return true;
+    const ageSeconds = (Date.now() - timestampMs) / 1000;
+    return ageSeconds >= thresholdSeconds;
+  } catch {
+    return true;
+  }
+}
+
+async function handlePostSubmit(i: PostForm, event: any) {
   event.preventDefault();
   
   // PoW 검증 (새 게시글 작성 시에만, 수정 시에는 필요 없음)
@@ -128,6 +142,24 @@ function handlePostSubmit(i: PostForm, event: any) {
     if (!i.state.powHash || !i.state.powNonce || !i.state.powChallenge) {
       toast("Please complete the bot verification first.", "danger");
       return;
+    }
+
+    // 제출 시점에 챌린지가 만료 임박(8분+)이면 자동으로 재계산
+    if (isChallengeExpiringSoon(i.state.powChallenge)) {
+      toast("⏳ Verification expired, re-verifying... Please wait.", "info");
+      // 기존 POW 데이터 초기화 후 재계산
+      i.setState({
+        powChallenge: undefined,
+        powNonce: undefined,
+        powHash: undefined,
+      });
+      await i.handleComputePoW(i);
+
+      // 재계산 실패 시 중단
+      if (!i.state.powHash || !i.state.powNonce || !i.state.powChallenge) {
+        toast("Re-verification failed. Please try again.", "danger");
+        return;
+      }
     }
   }
   
@@ -560,6 +592,18 @@ export class PostForm extends Component<PostFormProps, PostFormState> {
     }
     if (this.props.loading && !nextProps.loading) {
       this.setState({ submitted: false, bypassNavWarning: false });
+      // 서버에서 에러를 받은 경우(성공이면 이미 페이지 이동됨)
+      // POW 상태를 리셋하여 사용자가 재인증 후 재제출할 수 있게 함
+      if (this.state.powHash) {
+        this.setState({
+          powChallenge: undefined,
+          powNonce: undefined,
+          powHash: undefined,
+          powComputing: false,
+          powProgress: 0,
+          powAttempts: 0,
+        });
+      }
     }
     if (this.props.params !== nextProps.params && nextProps.params) {
       const params = nextProps.params;

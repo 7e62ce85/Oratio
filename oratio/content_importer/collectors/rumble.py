@@ -53,6 +53,33 @@ logger = logging.getLogger("content_importer.rumble")
 RUMBLE_API_URL = "https://rumble.com/service.php"
 DEFAULT_SEARCH_QUERIES = ["news", "politics", "live", "trending", "breaking", "world", "viral"]
 
+# ── Religious content filter ──────────────────────────────────────────
+# Block religious/Christian content that frequently appears in Rumble trending.
+# Case-insensitive regex applied to post titles.
+_RELIGIOUS_TITLE_RE = re.compile(
+    r"""(?ix)
+      # ── Generic religious keywords ──
+      \b(?:bible|biblical|scripture|gospel|sermon|church|pray(?:er|ing)?
+         |worship|devotional|hallelujah|rapture|end\s+times
+         |jesus\s+christ|christ\s+the|son\s+of\s+god|holy\s+spirit
+         |god\'?s\s+word|prophec(?:y|ies)|christian\s+living
+         |pastor\s+\w+|bishop\s+\w+|apostle\s+\w+)\b
+      |
+      # ── Bible book + chapter:verse pattern (e.g. "Joshua 1:9", "Matthew 16") ──
+      \b(?:genesis|exodus|leviticus|numbers|deuteronomy
+         |joshua|judges|ruth|samuel|kings|chronicles
+         |ezra|nehemiah|esther|job|psalms?|proverbs
+         |ecclesiastes|song\s+of\s+solomon|isaiah|jeremiah
+         |lamentations|ezekiel|daniel|hosea|joel|amos
+         |obadiah|jonah|micah|nahum|habakkuk|zephaniah
+         |haggai|zechariah|malachi
+         |matthew|mark|luke|john|acts
+         |romans|corinthians|galatians|ephesians|philippians
+         |colossians|thessalonians|timothy|titus|philemon
+         |hebrews|james|peter|jude|revelation)\s+\d
+    """,
+)
+
 # Authenticated session cache (module-level, survives across fetch cycles)
 _session_cache: dict = {
     "scraper": None,
@@ -96,6 +123,10 @@ class RumbleCollector(BaseCollector):
 
                     post = self._item_to_post(item)
                     if post:
+                        # ── Religious content filter ──
+                        if _RELIGIOUS_TITLE_RE.search(post.title or ""):
+                            logger.debug("Rumble: skipping religious content: %s", post.title)
+                            continue
                         # ── Per-channel cap: max 1 video per author ──
                         # Rumble trending is dominated by daily shows from
                         # the same creators (Timcast, Bongino, X22 Report…).

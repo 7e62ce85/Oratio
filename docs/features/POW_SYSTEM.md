@@ -1,12 +1,13 @@
 # 🔐 Proof of Work (PoW) Bot Verification System
 
-> **AI 봇 자동 가입 및 스팸 게시글 방지를 위한 하이브리드 PoW 시스템**
+> **AI 봇 자동 가입 및 스팸 게시글 방지를 위한 하이브리드 PoW + 스팸 필터 시스템**
 
-**버전**: 3.0  
-**최종 업데이트**: 2026-02-17  
+**버전**: 5.0  
+**최종 업데이트**: 2026-04-15  
 **상태**: 프로덕션 배포 완료 ✅
 
 ---
+<!-- (*새 스팸 보이면 `pow_validator_service/app.py`의 'SPAM_KEYWORD_PATTERNS'에 추가하고 재배포*) -->
 
 ## 📌 개요
 
@@ -21,12 +22,13 @@
 ```
 
 ### 적용 범위
-| 기능 | PoW 필요 | 엔드포인트 |
-|------|----------|------------|
-| ✅ 회원가입 | 필수 | `/api/v3/user/register` |
-| ✅ 게시글 작성 | 필수 | `/api/v3/post` |
-| ❌ 게시글 수정 | 불필요 | - |
-| ❌ 댓글 작성 | 불필요 | - |
+| 기능 | PoW 필요 | 스팸 필터 | 엔드포인트 | 난이도 |
+|------|----------|-----------|------------|--------|
+| ✅ 회원가입 | 필수 | ✅ 적용 | `/api/v3/user/register` | 17~18 |
+| ✅ 게시글 작성 | 필수 | ✅ 적용 | `/api/v3/post` | 17~18 |
+| ✅ 댓글 작성 | 필수 (경량) | ✅ 적용 | `/api/v3/comment` | 13~15 (멤버십 유저 면제) |
+| ❌ 게시글 수정 | 불필요 | — | - | - |
+| ❌ 댓글 수정 | 불필요 | — | - | - |
 
 ---
 
@@ -34,12 +36,14 @@
 
 ```
 사용자 브라우저 (TypeScript)
-    ↓ PoW 계산 (3-10초)
+    ↓ PoW 계산 (3-10초: 회원가입/게시글, 0.5-2초: 댓글)
 Nginx
     ↓ /api/v3/user/register (회원가입)
     ↓ /api/v3/post (게시글 작성)
-PoW Validator (Python Flask) ← 검증!
-    ↓ 검증 통과 시만
+    ↓ /api/v3/comment (댓글 작성)
+PoW Validator (Python Flask) ← 검증 + 스팸 필터!
+    ↓ 1) 스팸 필터 (보이지 않는 문자 제거 → 키워드 매칭)
+    ↓ 2) PoW 검증 통과 시만
 Lemmy Backend (Rust) ← 수정 불필요 (PoW 필드 제거됨)
 ```
 
@@ -50,9 +54,10 @@ Lemmy Backend (Rust) ← 수정 불필요 (PoW 필드 제거됨)
 ### 프론트엔드
 | 파일 | 설명 |
 |------|------|
-| `lemmy-ui-custom/src/shared/utils/proof-of-work.ts` | PoW 계산 로직 |
+| `lemmy-ui-custom/src/shared/utils/proof-of-work.ts` | PoW 계산 로직 (댓글용 경량 PoW 포함) |
 | `lemmy-ui-custom/src/shared/components/home/signup.tsx` | 회원가입 UI 통합 |
 | `lemmy-ui-custom/src/shared/components/post/post-form.tsx` | 게시글 작성 UI 통합 |
+| `lemmy-ui-custom/src/shared/components/comment/comment-form.tsx` | 댓글 작성 UI 통합 |
 
 ### 백엔드 검증 서비스
 | 파일 | 설명 |
@@ -136,6 +141,7 @@ powDifficulty: 18  // 기본 난이도 (고사양 기기 기준)
 ```yaml
 environment:
   - POW_DIFFICULTY=16  # 최소 난이도 (적응형 범위: 16~18)
+  - COMMENT_POW_DIFFICULTY=13  # 댓글 최소 난이도 (적응형 범위: 13~15)
 ```
 
 ### 난이도별 특성
@@ -365,6 +371,7 @@ docker-compose restart pow-validator
 | `/api/pow/verify` | POST | PoW 검증 테스트 |
 | `/api/v3/user/register` | POST | 회원가입 (PoW 검증 후 Lemmy로 전달) |
 | `/api/v3/post` | POST | 게시글 작성 (PoW 검증 후 Lemmy로 전달) |
+| `/api/v3/comment` | POST | 댓글 작성 (경량 PoW 검증 후 Lemmy로 전달, PoW 없이도 허용) |
 
 ### 요청 예시
 
@@ -402,13 +409,94 @@ docker-compose restart pow-validator
 ```
 Lemmy (Rust) = Docker 이미지 (dessalines/lemmy:0.19.8)
     └─> PoW에 대해 전혀 모름
-    └─> 일반 회원가입/게시글 작성으로 처리
+    └─> 일반 회원가입/게시글/댓글 작성으로 처리
 
 PoW Validator (Python Flask) = 프록시 역할
-    └─> PoW 검증 후 Lemmy로 전달
+    └─> 1단계: 스팸 필터 (보이지 않는 문자 제거 후 키워드 매칭)
+    └─> 2단계: PoW 검증 후 Lemmy로 전달
     └─> PoW 필드 제거 (pow_challenge, pow_nonce, pow_hash)
-    └─> 회원가입 + 게시글 작성 모두 지원
+    └─> 회원가입 + 게시글 작성 + 댓글 작성 모두 지원
+    └─> 댓글도 PoW 필수 (PoW 없으면 403 거부 — 스팸봇 API 직접 호출 차단)
+    └─> 멤버십 유저(Gold Badge)는 댓글 PoW 면제 (프론트엔드에서 면제 처리)
+    └─> content-importer 등 내부 서비스는 Docker 내부에서 Lemmy 직접 연결 (PoW 경로 안 탐)
 ```
+
+---
+
+## 🛡️ 스팸 필터 시스템 (v5.0)
+
+### 왜 PoW만으로는 부족한가?
+
+2026-04-14 댓글 PoW 도입 후에도 'HeidiMaynard' 같은 봇이 18개 스팸 댓글을 작성함.  
+이 봇은 bitchute.com 등 대규모 사이트에서도 활동하는 광범위한 스팸 네트워크.
+
+**봇의 회피 전략**: 글자 사이에 보이지 않는 유니코드 문자(Soft Hyphen, U+00AD)를 삽입  
+- 사람 눈에 보이는 것: `PayAtHome1.Com`  
+- 실제 데이터: `P[U+00AD]a[U+00AD]y[U+00AD]A[U+00AD]t[U+00AD]H[U+00AD]o[U+00AD]m[U+00AD]e[U+00AD]1[U+00AD].[U+00AD]C[U+00AD]o[U+00AD]m`  
+- Lemmy slur filter: `PayAtHome1.Com` 패턴을 넣어도 **매치 실패** (중간에 숨겨진 문자가 끼어있으므로)
+
+### 해결 방법
+
+**pow-validator에서 Lemmy로 전달하기 전에 텍스트를 정규화(normalize)** → 스팸 키워드 매칭:
+
+```
+요청 텍스트 → 보이지 않는 문자 전부 제거 → 깨끗한 텍스트 → regex 패턴 매칭 → 스팸이면 403 거부
+```
+
+### 제거되는 보이지 않는 문자 목록
+
+| 문자 | 유니코드 | 이름 | 봇 사용 사례 |
+|------|----------|------|-------------|
+| Soft Hyphen | U+00AD | SOFT HYPHEN | ✅ HeidiMaynard 봇이 사용 |
+| Zero-Width Space | U+200B | ZERO WIDTH SPACE | URL/키워드 분리 |
+| Zero-Width Non-Joiner | U+200C | ZWNJ | 키워드 분리 |
+| Zero-Width Joiner | U+200D | ZWJ | 키워드 분리 |
+| LTR/RTL Mark | U+200E/200F | 방향 마크 | 텍스트 방향 조작 |
+| 기타 | 유니코드 Cf 카테고리 전체 | Format 문자들 | 다양한 회피 기법 |
+
+### 스팸 키워드 패턴
+
+`pow_validator_service/app.py`의 `SPAM_KEYWORD_PATTERNS` 리스트에서 관리:
+
+```python
+SPAM_KEYWORD_PATTERNS = [
+    # 스캠 도메인
+    r'payathome\d*\.com',
+    r'workathome\d*\.com',
+    r'earnathome\d*\.com',
+    # 스캠 문구 패턴
+    r'i\s*(basically\s*)?make\s*(about\s*)?\$\d[\d,]*.*?a\s*month\s*online',
+    r'enough\s*to\s*(comfortably\s*)?replace\s*my\s*(old\s*)?jobs?\s*income',
+    r'only\s*work\s*(about\s*)?\d+.*?hours?\s*a\s*week\s*from\s*home',
+    # ... (전체 목록은 app.py 참조)
+]
+```
+
+**새 스팸 패턴 추가 방법**:
+1. `app.py`의 `SPAM_KEYWORD_PATTERNS`에 regex 추가 → 컨테이너 재빌드
+2. 또는 환경변수 `SPAM_EXTRA_PATTERNS`에 JSON 배열로 추가 (재빌드 없이):
+   ```yaml
+   # docker-compose.yml
+   environment:
+     - SPAM_EXTRA_PATTERNS=["newscam\d*\\.com", "other\\.pattern"]
+   ```
+
+### 관리/테스트 API
+
+| URL | 메소드 | 설명 |
+|-----|--------|------|
+| `/api/spam/test` | POST | 텍스트 스팸 여부 테스트 (body: `{"text": "..."}`) |
+| `/api/spam/patterns` | GET | 현재 등록된 스팸 패턴 목록 조회 |
+
+### 테스트 결과
+
+| 테스트 | 입력 | 결과 |
+|--------|------|------|
+| 실제 봇 스팸 (soft hyphen 포함) | `P­a­y­A­t­H­o­m­e­1­.­C­o­m` | 🚫 차단 |
+| soft hyphen 없는 스팸 | `I basically make about $8,000...` | 🚫 차단 |
+| zero-width space 변형 | `P​a​y​A​t​H​o​m​e​1​.​C​o​m` | 🚫 차단 |
+| 정상 한국어 댓글 | `이 게시글 정말 좋은 정보네요` | ✅ 통과 |
+| 정상 영어 댓글 (make, home 포함) | `I make things at home sometimes` | ✅ 통과 |
 
 ---
 
@@ -446,3 +534,7 @@ PoW Validator (Python Flask) = 프록시 역할
 | 2.0 | 2025-10-13 | 게시글 작성 PoW 추가 |
 | 3.0 | 2026-02-17 | 문서 통합, 편차 문제 해결책 추가 |
 | 3.1 | 2026-02-17 | 적응형 난이도 구현 (모바일/저사양 기기 자동 감지) |
+| 4.0 | 2026-04-14 | 댓글 작성 PoW 추가 (경량 난이도 13~15, graceful degradation) |
+| 4.1 | 2026-04-14 | 멤버십(Gold Badge) 유저 댓글 PoW 면제 |
+| 4.2 | 2026-04-14 | 댓글 graceful degradation 제거 → PoW 필수 (API 직접 호출 스팸봇 차단) |
+| 5.0 | 2026-04-15 | 스팸 필터 추가: 보이지 않는 유니코드 문자(soft hyphen 등) 제거 후 키워드 매칭. 회원가입/게시글/댓글 전 엔드포인트 적용. PayAtHome 류 스캠봇 차단. |

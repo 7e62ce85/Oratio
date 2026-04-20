@@ -118,6 +118,103 @@ CREATE TRIGGER membership_post_vote_multiplier
     FOR EACH ROW
     EXECUTE FUNCTION apply_post_vote_multiplier();
 
+-- =====================================================
+-- Comment Vote Multiplier (5x for membership users)
+-- =====================================================
+
+-- Function to handle comment vote multiplier
+-- Same logic as post votes, but targets comment_aggregates
+CREATE OR REPLACE FUNCTION apply_comment_vote_multiplier()
+RETURNS TRIGGER AS $$
+DECLARE
+    person_name TEXT;
+    is_member BOOLEAN;
+    extra_votes INTEGER := 0;
+    score_diff INTEGER;
+    upvote_diff INTEGER := 0;
+    downvote_diff INTEGER := 0;
+BEGIN
+    -- Get the person's name from NEW if available, otherwise from OLD
+    IF TG_OP = 'DELETE' THEN
+        SELECT name INTO person_name FROM person WHERE id = OLD.person_id;
+    ELSE
+        SELECT name INTO person_name FROM person WHERE id = NEW.person_id;
+    END IF;
+    
+    -- Check if user is a membership holder
+    is_member := check_user_membership(person_name);
+    
+    -- Membership users get 5x total (so +4 extra), normal users get 1x (so +0 extra)
+    IF is_member THEN
+        extra_votes := 4;  -- 5x - 1x = 4x extra
+    ELSE
+        extra_votes := 0;  -- Normal users stay at default 1x
+    END IF;
+    
+    -- Calculate the score difference and upvote/downvote changes based on operation
+    IF TG_OP = 'INSERT' THEN
+        -- New vote: add extra votes based on vote direction
+        score_diff := NEW.score * extra_votes;
+        IF NEW.score = 1 THEN
+            upvote_diff := extra_votes;
+            downvote_diff := 0;
+        ELSE
+            upvote_diff := 0;
+            downvote_diff := extra_votes;
+        END IF;
+        
+    ELSIF TG_OP = 'UPDATE' THEN
+        -- Vote changed (e.g., from up to down or vice versa)
+        score_diff := (NEW.score * extra_votes) - (OLD.score * extra_votes);
+        
+        IF OLD.score = 1 AND NEW.score = -1 THEN
+            -- Was upvote, now downvote
+            upvote_diff := -extra_votes;
+            downvote_diff := extra_votes;
+        ELSIF OLD.score = -1 AND NEW.score = 1 THEN
+            -- Was downvote, now upvote
+            upvote_diff := extra_votes;
+            downvote_diff := -extra_votes;
+        END IF;
+        
+    ELSIF TG_OP = 'DELETE' THEN
+        -- Vote removed (user clicked same button to toggle off)
+        score_diff := -(OLD.score * extra_votes);
+        IF OLD.score = 1 THEN
+            upvote_diff := -extra_votes;
+            downvote_diff := 0;
+        ELSE
+            upvote_diff := 0;
+            downvote_diff := -extra_votes;
+        END IF;
+    END IF;
+    
+    -- Update comment_aggregates with the extra votes
+    IF score_diff != 0 OR upvote_diff != 0 OR downvote_diff != 0 THEN
+        UPDATE comment_aggregates
+        SET 
+            score = score + score_diff,
+            upvotes = upvotes + upvote_diff,
+            downvotes = downvotes + downvote_diff
+        WHERE comment_id = COALESCE(NEW.comment_id, OLD.comment_id);
+    END IF;
+    
+    -- Return appropriate value based on operation
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for comment likes (after standard Lemmy processing)
+DROP TRIGGER IF EXISTS membership_comment_vote_multiplier ON comment_like;
+CREATE TRIGGER membership_comment_vote_multiplier
+    AFTER INSERT OR UPDATE OR DELETE ON comment_like
+    FOR EACH ROW
+    EXECUTE FUNCTION apply_comment_vote_multiplier();
+
 -- Create table to sync membership status from bitcoincash service
 CREATE TABLE IF NOT EXISTS user_memberships (
     user_id TEXT PRIMARY KEY,
@@ -151,5 +248,7 @@ $$ LANGUAGE plpgsql;
 -- Comments and documentation
 COMMENT ON FUNCTION check_user_membership IS 'Checks if a user has an active annual membership';
 COMMENT ON FUNCTION apply_post_vote_multiplier IS 'Applies 5x vote multiplier for membership users on posts';
-COMMENT ON TRIGGER membership_post_vote_multiplier ON post_like IS 'Trigger to apply vote multiplier for membership users';
+COMMENT ON FUNCTION apply_comment_vote_multiplier IS 'Applies 5x vote multiplier for membership users on comments';
+COMMENT ON TRIGGER membership_post_vote_multiplier ON post_like IS 'Trigger to apply vote multiplier for membership users on posts';
+COMMENT ON TRIGGER membership_comment_vote_multiplier ON comment_like IS 'Trigger to apply vote multiplier for membership users on comments';
 COMMENT ON TABLE user_memberships IS 'Synced membership status from bitcoincash service for vote multiplier';

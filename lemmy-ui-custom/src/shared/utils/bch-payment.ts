@@ -613,10 +613,61 @@ export async function getReferralStatus(username: string): Promise<any> {
         }
       }
 
+      // Store referral warning state in localStorage for navbar to pick up
+      if (data && typeof window !== 'undefined') {
+        const hasWarning = (data.links || []).some(
+          (l: any) => l.status === 'approved' && !l.verified
+        );
+        localStorage.setItem('referral_warning', hasWarning ? '1' : '0');
+        window.dispatchEvent(new CustomEvent('referral-warning-updated'));
+      }
+
       return data;
     }
   } catch (err) {
     console.error("[Referral] Status error:", err);
   }
   return null;
+}
+
+/**
+ * Replace the URL of a referral link (user-initiated, during grace period)
+ */
+export async function replaceReferralLink(
+  username: string,
+  linkId: string,
+  newUrl: string
+): Promise<{ success: boolean; verified: boolean; message: string }> {
+  try {
+    const baseUrl = getReferralAPIBaseUrl();
+    const response = await fetch(`${baseUrl}/api/referral/replace/${linkId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': getApiKey() || ""
+      },
+      body: JSON.stringify({ username, url: newUrl })
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      return { success: true, verified: data.verified, message: data.message || "Link replaced" };
+    } else {
+      return { success: false, verified: false, message: data.error || "Replacement failed" };
+    }
+  } catch (err) {
+    console.error("[Referral] Replace error:", err);
+    return { success: false, verified: false, message: "Network error" };
+  }
+}
+
+/**
+ * Check if current user has a referral warning (approved but backlink not found).
+ * Reads from localStorage (set by getReferralStatus).
+ * Used by navbar to show a warning indicator.
+ */
+export function hasReferralWarning(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('referral_warning') === '1';
 }

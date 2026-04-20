@@ -1,6 +1,6 @@
 # 🔗 Link Referral System
 
-> **Version**: v0.8 | **Status**: ✅ Phase C Complete | **Priority**: Phase D (Dashboard)
+> **Version**: v1.0 | **Status**: ✅ Phase C+ Complete (3-Strike · Replace · UI) | **Priority**: Phase D (Dashboard)
 
 ---
 
@@ -48,7 +48,7 @@
 
 | 시점 | 행동 |
 |------|------|
-| 제출 후 24시간 이내 | 1차 자동 크롤 검증 |
+| 제출 시 | 1차 자동 크롤 검증 (즉시) |
 | 승인 후 초반 (0~64일) | **지수 백오프 재검증** — 12h→1d→2d→4d→8d→16d→32d→64d 간격 |
 | 매 3개월 (64일 이후~) | 정기 재검증 (링크 존재 여부) |
 | 재검증 실패 시 | 14일 유예 → 유예 후에도 미복구 시 멤버십 비활성화 + 뱃지 제거 |
@@ -56,9 +56,35 @@
 
 > **지수 백오프 재검증**: 승인 직후가 악용 위험이 가장 높으므로, 초반에 촘촘하게 검증하고 점점 간격을 넓혀서 90일 정기 재검증에 합류시킨다. 백그라운드 작업(12시간 루프)에서 자동 실행.
 
+### 5. 3-Strike 자동취소 ⭐ (v1.0 — 영구차단 제거됨)
+
+| 규칙 | 값 | 설명 |
+|------|----|------|
+| **누적 실패 한도** | **3회** (`TOTAL_FAIL_LIMIT`) | 승인 후 누적 재검증 실패 3회 → 유예 없이 **즉시 자동취소** |
+
+**흐름**:
+```
+검증 실패 1회 → 경고 (fail 1/3)
+검증 실패 2회 → 경고 + 14일 유예 시작 (fail 2/3)
+검증 실패 3회 → 즉시 자동취소 (3-strike), 유예 무시
+         └→ 취소 후 새 링크 재제출 가능 (영구차단 없음)
+```
+
+> **누적**이란 연속이 아닌 **총 횟수** 기준. 중간에 검증 성공해도 카운터 리셋되지 않음.
+> **v1.0 변경**: 영구차단(`AUTO_REVOKE_BAN_THRESHOLD`) 제거 — 자동취소 후에도 새 링크 제출 허용.
+
+### 6. 링크 교체 (Replace) ⭐ NEW
+
+| 조건 | 설명 |
+|------|------|
+| 대상 | `approved` + `verified=false` (유예 기간 중) 링크만 |
+| 권한 | 원래 제출자 본인만 |
+| 동작 | 새 URL로 교체 → 즉시 자동 검증 → 성공 시 `verified=true` |
+| 차단 | ~~영구차단 사용자는 교체도 불가~~ (v1.0: 영구차단 제거됨) |
+
 ---
 
-## 🗄️ DB 스키마 (예정)
+## 🗄️ DB 스키마
 
 ```sql
 -- 제출된 링크 목록
@@ -94,24 +120,33 @@ CREATE TABLE IF NOT EXISTS referral_verification_log (
     link_id TEXT NOT NULL,
     checked_at INTEGER NOT NULL,
     http_status INTEGER,
-    link_found BOOLEAN,
+    link_found BOOLEAN,                  -- 0=실패, 1=성공 (3-strike 카운트 대상)
     notes TEXT,
     FOREIGN KEY(link_id) REFERENCES referral_links(id)
+);
+
+-- 백그라운드 작업 스케줄러 상태 (v0.9)
+CREATE TABLE IF NOT EXISTS background_task_state (
+    task_name TEXT PRIMARY KEY,
+    last_run_at INTEGER,
+    updated_at INTEGER
 );
 ```
 
 ---
 
-## 📡 API 엔드포인트 (예정)
+## 📡 API 엔드포인트
 
 | Method | Path | Auth | 설명 |
 |--------|------|------|------|
 | POST | `/api/referral/submit` | ✅ user | URL 제출 |
-| GET | `/api/referral/status/<username>` | ✅ user | 내 제출 상태 조회 |
+| GET | `/api/referral/status/<username>` | ✅ user | 내 제출 상태 조회 (`fail_count`, `next_check_in_hours`, `recent_checks` 포함) |
+| GET | `/api/referral/check/<username>` | ✅ user | 뱃지/멤버십 보유 여부 조회 |
 | GET | `/api/referral/list` | ✅ admin | 전체 목록 (필터: status) |
-| POST | `/api/referral/approve/<link_id>` | ✅ admin | 승인 |
+| POST | `/api/referral/approve/<link_id>` | ✅ admin | 승인 + 자동 멤버십 부여 |
 | POST | `/api/referral/reject/<link_id>` | ✅ admin | 거부 (reason 포함) |
-| POST | `/api/referral/verify/<link_id>` | ✅ admin | 수동 재검증 트리거 (Phase B) |
+| POST | `/api/referral/verify/<link_id>` | ✅ admin | 수동 재검증 트리거 |
+| POST | `/api/referral/replace/<link_id>` | ✅ user | 유예 기간 중 URL 교체 ⭐ NEW |
 
 ---
 
@@ -167,6 +202,17 @@ Sprint 3 ─ Phase C: 멤버십 부여 ✅ (구현 완료)
     │   ├── 멤버십 만료 후 재제출 허용 (user/domain/url 제한 해제) ✅
     │   └── Navbar admin 아이콘에 pending referrals 개수 합산 표시 ✅
     │
+    │   추가 (v1.0 — 영구차단 제거 + 버그 수정 + 상세 UI):
+    │   ├── 누적 3회 검증 실패 → 유예 없이 즉시 자동취소 (3-strike) ✅
+    │   ├── ~~영구차단~~ 제거 — 자동취소 후 재제출 허용 ✅
+    │   ├── manual_verify (admin 수동 재검증) 3-strike 로직 누락 버그 수정 ✅
+    │   ├── 유예 기간 중 링크 URL 교체 API + UI (POST /replace/<link_id>) ✅
+    │   ├── Navbar 경고 아이콘 (유예 기간 링크 보유 시 ⚠ 표시, mobile+desktop) ✅
+    │   ├── Wallet 상세 검증 현황 UI (실패 횟수 X/3, 다음 검증 시간, 유예 기간) ✅
+    │   ├── Wallet revoke 알림에 검증 로그 테이블 (시간, HTTP, 결과, 상세) 추가 ✅
+    │   ├── background_task_state DB 테이블 기반 정확한 다음 검증 시간 계산 ✅
+    │   └── is_user_referral_banned() 전면 제거 (submit/status/replace 4곳) ✅
+    │
 Sprint 4 ─ Phase D: 운영 강화 ⬜
         ├── 대시보드 (제출 수, 승인율, 악용률)
         ├── 도메인 Authority 점수 연동 (선택)
@@ -178,7 +224,7 @@ Sprint 4 ─ Phase D: 운영 강화 ⬜
 ## ⚙️ 설정값 (Config)
 
 ```python
-# referral_config.py (예정)
+# referral_verifier.py 상수
 REFERRAL_ENABLED = True
 REFERRAL_DOMAIN_LIMIT = 1          # 도메인당 최대 보상 횟수
 REFERRAL_USER_LIMIT = 1            # 사용자당 최대 보상 횟수
@@ -186,13 +232,13 @@ REFERRAL_MIN_DOMAIN_AGE_DAYS = 180 # 최소 도메인 나이 (일)
 REFERRAL_REVERIFY_INTERVAL_DAYS = 90
 REFERRAL_GRACE_PERIOD_DAYS = 14    # 재검증 실패 후 유예 기간
 REFERRAL_EARLY_BACKOFF_SCHEDULE = [0.5, 1, 2, 4, 8, 16, 32, 64]  # 승인 후 재검증 간격 (일)
+TOTAL_FAIL_LIMIT = 3               # 누적 검증 실패 N회 → 즉시 자동취소 ⭐
+# AUTO_REVOKE_BAN_THRESHOLD 제거됨 (v1.0) — 영구차단 폐지
 REFERRAL_TARGET_DOMAIN = "oratio.space"
 REFERRAL_BLACKLISTED_DOMAINS = [
     "bit.ly", "t.co", "tinyurl.com", "goo.gl",
-    # 추가 예정
 ]
 REFERRAL_BLACKLISTED_PLATFORMS = [
-    # 무료 블로그 서브도메인 (빈 페이지 악용 방지)
     "*.blogspot.com",
     "*.wordpress.com",
     "*.tumblr.com",
@@ -201,4 +247,4 @@ REFERRAL_BLACKLISTED_PLATFORMS = [
 
 ---
 
-_Document Version: 0.8 | Updated: 2026-04-09 | Active membership guard added_
+_Document Version: 1.0 | Updated: 2026-04-20 | Permanent ban removed, manual_verify 3-strike bug fixed, detailed revoke UI_

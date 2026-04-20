@@ -194,6 +194,38 @@ export async function getAdaptiveDifficulty(baseDifficulty: number = 18): Promis
   };
 }
 /**
+ * 댓글용 경량 PoW 계산
+ * 댓글은 즉시성이 중요하므로 회원가입/게시글보다 낮은 난이도를 사용
+ * 기본 난이도: 15 (약 0.3~1초, 저사양 기기에서도 2초 이내)
+ * 
+ * @param onProgress - 진행률 콜백 (0-100)
+ * @returns challenge, nonce, hash, attempts
+ */
+export async function computeCommentPoW(
+  onProgress?: (progress: number, attemptCount: number) => void
+): Promise<{ challenge: string; nonce: number; hash: string; attempts: number; difficulty: number }> {
+  // 챌린지 생성 (타임스탬프 + 랜덤값)
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2);
+  const challenge = `${timestamp}-${random}`;
+
+  // 댓글용 적응형 난이도 (기본 15, 범위 13~15)
+  const adaptiveResult = await getAdaptiveDifficulty(15);
+  // 댓글은 최소 13까지 허용 (저사양 기기 배려)
+  const difficulty = Math.max(13, adaptiveResult.difficulty);
+
+  const result = await computeProofOfWork(challenge, difficulty, onProgress);
+
+  return {
+    challenge,
+    nonce: result.nonce,
+    hash: result.hash,
+    attempts: result.attempts,
+    difficulty,
+  };
+}
+
+/**
  * 난이도에 따른 예상 소요 시간 계산 (초 단위)
  * @param difficulty - 난이도 (비트 수)
  * @returns 예상 소요 시간 (초)

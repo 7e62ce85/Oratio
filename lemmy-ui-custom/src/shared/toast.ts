@@ -3,7 +3,7 @@ import { ThemeColor } from "@utils/types";
 import Toastify from "toastify-js";
 import { I18NextService } from "./services";
 
-export function toast(text: string, background: ThemeColor = "success") {
+export function toast(text: string, background: ThemeColor = "success", duration: number = 5000) {
   if (isBrowser()) {
     const backgroundColor = `var(--bs-${background})`;
     Toastify({
@@ -11,7 +11,7 @@ export function toast(text: string, background: ThemeColor = "success") {
       backgroundColor: backgroundColor,
       gravity: "bottom",
       position: "left",
-      duration: 5000,
+      duration: duration,
     }).showToast();
   }
 }

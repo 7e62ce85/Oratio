@@ -5,9 +5,13 @@ import time
 import hmac
 import hashlib
 import base64
+import os
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger('lemmy_integration')
+
+# JWT 토큰 캐시 파일 경로
+JWT_TOKEN_CACHE_FILE = os.environ.get('JWT_TOKEN_CACHE_FILE', '/data/jwt_token_cache.json')
 
 class LemmyAPI:
     """Lemmy API 통합 클래스"""
@@ -24,6 +28,7 @@ class LemmyAPI:
         self.api_key = api_key
         self.jwt_token = None
         self.admin_credentials = None
+        self._load_cached_token()
     
     def set_admin_credentials(self, username: str, password: str):
         """관리자 인증 정보 설정"""
@@ -31,6 +36,65 @@ class LemmyAPI:
             "username_or_email": username,
             "password": password
         }
+    
+    def _load_cached_token(self):
+        """파일에서 캐시된 JWT 토큰 로드"""
+        try:
+            if os.path.exists(JWT_TOKEN_CACHE_FILE):
+                with open(JWT_TOKEN_CACHE_FILE, 'r') as f:
+                    cache = json.load(f)
+                token = cache.get('jwt_token')
+                cached_at = cache.get('cached_at', 0)
+                # 토큰이 7일 이내면 사용 (Lemmy 기본 토큰 만료 = 무제한이지만 안전하게 7일)
+                if token and (time.time() - cached_at) < 7 * 24 * 3600:
+                    self.jwt_token = token
+                    logger.info(f"✅ [LEMMY TOKEN] 캐시된 JWT 토큰 로드 성공 (age: {int((time.time() - cached_at) / 3600)}h)")
+                else:
+                    logger.info("ℹ️ [LEMMY TOKEN] 캐시된 토큰이 만료됨, 새로 로그인 필요")
+        except Exception as e:
+            logger.warning(f"⚠️ [LEMMY TOKEN] 토큰 캐시 로드 실패: {e}")
+    
+    def _save_cached_token(self):
+        """JWT 토큰을 파일에 캐시"""
+        try:
+            cache = {
+                'jwt_token': self.jwt_token,
+                'cached_at': time.time()
+            }
+            os.makedirs(os.path.dirname(JWT_TOKEN_CACHE_FILE), exist_ok=True)
+            with open(JWT_TOKEN_CACHE_FILE, 'w') as f:
+                json.dump(cache, f)
+            logger.info("✅ [LEMMY TOKEN] JWT 토큰 캐시 저장 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ [LEMMY TOKEN] 토큰 캐시 저장 실패: {e}")
+    
+    def _verify_token(self) -> bool:
+        """현재 JWT 토큰이 유효한지 검증"""
+        if not self.jwt_token:
+            return False
+        try:
+            url = f"{self.base_url}/api/v3/site"
+            headers = {"Authorization": f"Bearer {self.jwt_token}"}
+            response = requests.get(url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                # my_user가 있으면 인증된 상태
+                if data.get("my_user"):
+                    return True
+            logger.info("ℹ️ [LEMMY TOKEN] 토큰 검증 실패, 재로그인 필요")
+            self.jwt_token = None
+            return False
+        except Exception as e:
+            logger.warning(f"⚠️ [LEMMY TOKEN] 토큰 검증 중 오류: {e}")
+            return False
+    
+    def _ensure_authenticated(self) -> bool:
+        """인증 상태 보장 - 캐시된 토큰 확인 후 필요시만 로그인"""
+        # 1. 이미 토큰이 있으면 검증
+        if self.jwt_token and self._verify_token():
+            return True
+        # 2. 토큰이 없거나 만료됐으면 로그인
+        return self.login_as_admin()
     
     def login_as_admin(self, max_retries: int = 3) -> bool:
         """관리자로 로그인하여 JWT 토큰 획득
@@ -67,6 +131,7 @@ class LemmyAPI:
                     logger.info(f"🔐 [LEMMY LOGIN] Response JSON keys: {data.keys()}")
                     if "jwt" in data:
                         self.jwt_token = data["jwt"]
+                        self._save_cached_token()
                         logger.info(f"✅ [LEMMY LOGIN] 관리자 로그인 성공! JWT token length: {len(self.jwt_token)}")
                         return True
                     else:
@@ -174,7 +239,7 @@ class LemmyAPI:
         # 방법 1: 데이터베이스 직접 접근 (여기서는 포함되지 않음)
         # 방법 2: 사용자 지정 메모 필드 사용 (예시)
         
-        if not self.jwt_token and not self.login_as_admin():
+        if not self._ensure_authenticated():
             return False
         
         # 현재 사용자 정보 조회
@@ -191,7 +256,7 @@ class LemmyAPI:
     
     def create_notification(self, user_id: int, message: str) -> bool:
         """사용자에게 알림 생성"""
-        if not self.jwt_token and not self.login_as_admin():
+        if not self._ensure_authenticated():
             return False
         
         # 참고: Lemmy API v3에는 직접적인 알림 생성 엔드포인트가 없습니다.
@@ -263,6 +328,73 @@ class LemmyAPI:
         
         return None
 
+    def get_community_moderators(self, community_id: int) -> list:
+        """
+        커뮤니티 모더레이터 목록 조회
+        
+        Args:
+            community_id: 커뮤니티 ID
+            
+        Returns:
+            [{"person_id": 123, "username": "mod1"}, ...] 형태의 리스트
+        """
+        url = f"{self.base_url}/api/v3/community"
+        params = {"id": community_id}
+        
+        try:
+            response = requests.get(url, params=params, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                moderators = data.get("moderators", [])
+                result = []
+                for mod_view in moderators:
+                    person = mod_view.get("moderator", {})
+                    if person.get("id"):
+                        result.append({
+                            "person_id": person["id"],
+                            "username": person.get("name", "")
+                        })
+                logger.info(f"✅ Community {community_id} moderators: {[m['username'] for m in result]}")
+                return result
+            else:
+                logger.warning(f"커뮤니티 모더레이터 조회 실패: community_id={community_id}, status={response.status_code}")
+        except Exception as e:
+            logger.error(f"커뮤니티 모더레이터 조회 오류: community_id={community_id}, error={str(e)}")
+        
+        return []
+
+    def get_moderated_communities(self, person_id: int) -> list:
+        """
+        특정 유저가 모더레이터인 커뮤니티 목록 조회
+        
+        Args:
+            person_id: 유저의 person_id
+            
+        Returns:
+            [community_id, ...] 형태의 리스트
+        """
+        url = f"{self.base_url}/api/v3/user"
+        params = {"person_id": person_id}
+        
+        try:
+            response = requests.get(url, params=params, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                moderates = data.get("moderates", [])
+                community_ids = []
+                for mod_view in moderates:
+                    community = mod_view.get("community", {})
+                    if community.get("id"):
+                        community_ids.append(community["id"])
+                logger.info(f"✅ Person {person_id} moderates communities: {community_ids}")
+                return community_ids
+            else:
+                logger.warning(f"유저 모더레이트 커뮤니티 조회 실패: person_id={person_id}, status={response.status_code}")
+        except Exception as e:
+            logger.error(f"유저 모더레이트 커뮤니티 조회 오류: person_id={person_id}, error={str(e)}")
+        
+        return []
+
     def get_community_by_post_id(self, post_id: int) -> Optional[Dict[str, str]]:
         """
         게시글 ID로 커뮤니티 정보 조회 (광고 타겟팅용)
@@ -288,7 +420,7 @@ class LemmyAPI:
         logger.info(f"🔧 [LEMMY API] remove_post called: post_id={post_id}, removed={removed}, reason={reason}")
         logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
         
-        if not self.jwt_token and not self.login_as_admin():
+        if not self._ensure_authenticated():
             logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
             return False
         
@@ -327,7 +459,7 @@ class LemmyAPI:
         logger.info(f"🔧 [LEMMY API] remove_comment called: comment_id={comment_id}, removed={removed}, reason={reason}")
         logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
         
-        if not self.jwt_token and not self.login_as_admin():
+        if not self._ensure_authenticated():
             logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
             return False
         
@@ -366,7 +498,7 @@ class LemmyAPI:
         logger.info(f"🔧 [LEMMY API] purge_post called: post_id={post_id}, reason={reason}")
         logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
         
-        if not self.jwt_token and not self.login_as_admin():
+        if not self._ensure_authenticated():
             logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
             return False
         
@@ -401,7 +533,7 @@ class LemmyAPI:
         logger.info(f"🔧 [LEMMY API] purge_comment called: comment_id={comment_id}, reason={reason}")
         logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
         
-        if not self.jwt_token and not self.login_as_admin():
+        if not self._ensure_authenticated():
             logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
             return False
         
@@ -449,7 +581,7 @@ class LemmyAPI:
         logger.info(f"🔧 [LEMMY API] ban_person called: person_id={person_id}, ban={ban}, reason={reason}, expires={expires}")
         logger.info(f"🔧 [LEMMY API] JWT token present: {bool(self.jwt_token)}")
         
-        if not self.jwt_token and not self.login_as_admin():
+        if not self._ensure_authenticated():
             logger.error("❌ [LEMMY API] JWT 토큰이 없습니다. 관리자 로그인이 필요합니다.")
             return False
         

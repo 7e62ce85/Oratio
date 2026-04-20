@@ -33,6 +33,16 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
+# ── Blocked channels / title patterns ─────────────────────────────────
+# Channels whose content is repetitive spam (daily auto-generated episodes).
+_BLOCKED_CHANNELS = frozenset({
+    "restored republic",       # "Restored Republic via a GCR Update as of ..."
+})
+_BLOCKED_TITLE_RE = re.compile(
+    r"Restored\s+Republic\s+via\s+a\s+GCR",
+    re.IGNORECASE,
+)
+
 
 class BitchuteCollector(BaseCollector):
     """Collect trending videos from Bitchute via old.bitchute.com HTML scraping."""
@@ -108,6 +118,14 @@ class BitchuteCollector(BaseCollector):
 
             post = self._parse_video_card(card, seen_urls)
             if post:
+                # ── Blocked channel / title filter ──
+                author_lower = (post.author or "").strip().lower()
+                if author_lower in _BLOCKED_CHANNELS:
+                    logger.debug("Bitchute: blocked channel '%s'", post.author)
+                    continue
+                if _BLOCKED_TITLE_RE.search(post.title or ""):
+                    logger.debug("Bitchute: blocked title pattern: %s", post.title)
+                    continue
                 # ── Per-channel cap: max 1 video per author ──
                 # Bitchute trending is dominated by daily episodes from
                 # the same channels (Alex Jones, X22 Report, And We Know…).

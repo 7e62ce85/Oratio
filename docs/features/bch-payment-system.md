@@ -623,6 +623,23 @@ Zero-Conf 트랜잭션 검증 전담 모듈 (작성됨)
 4. **트랜잭션 재확인**: 딜레이 후 트랜잭션 존재 확인
 5. **백그라운드 검증**: 첫 컨펌까지 계속 모니터링
 
+#### ✅ 중복 크레딧 방지 (2026-04-15 수정)
+
+**문제**: `process_payment()`가 프론트엔드 폴링(30초)과 백그라운드 태스크(15초)에서 
+동시에 호출되어 같은 인보이스에 크레딧이 2번 들어가는 Race Condition 발생.
+
+**3중 방어 구현**:
+
+| 레이어 | 위치 | 방어 방식 |
+|--------|------|-----------|
+| 1단계 | `process_payment()` | 크레딧 추가 직전 DB에서 인보이스 상태 재조회 → 이미 completed이면 스킵 |
+| 2단계 | `credit_user()` | `BEGIN IMMEDIATE` 트랜잭션으로 SQLite 쓰기 락 획득 → 같은 invoice_id 크레딧 존재 시 `return False` |
+| 3단계 | DB UNIQUE 인덱스 | `idx_transactions_unique_credit_per_invoice` → 같은 `(invoice_id, type='credit')` 조합 INSERT 물리적 차단 |
+
+**수정 파일**:
+- `models.py`: `credit_user()`에 `BEGIN IMMEDIATE` + 중복 체크 + UNIQUE 인덱스
+- `services/payment.py`: 4개 크레딧 추가 경로 모두에 상태 재확인 가드 추가
+
 #### ⚠️ 제한사항
 ```python
 # ElectronCash의 제한으로 생략된 기능
@@ -756,6 +773,7 @@ docker logs bitcoincash-service | grep -i error
 1. ✅ **Zero-Conf 구현**: 1-2초 결제 완료
 2. ✅ **이중지불 모니터링**: 백그라운드 체크
 3. ✅ **수수료 검증**: 자동 검증 시스템
+4. ✅ **중복 크레딧 방지**: Race Condition 해결 (3중 방어 — DB 락 + UNIQUE 인덱스)
 
 ### 중기 (1-2개월)
 1. **크레딧 회수 시스템**: 이중지불 감지 시 자동 회수
@@ -770,7 +788,7 @@ docker logs bitcoincash-service | grep -i error
 ---
 
 **프로젝트 시작일**: 2025-07-01  
-**현재 버전**: v3.0 (Zero-Conf)  
-**마지막 업데이트**: 2025-10-23  
+**현재 버전**: v3.1 (중복 크레딧 방지)  
+**마지막 업데이트**: 2026-04-15  
 **운영 상태**: ✅ Production (oratio.space)  
 **개발자**: oratio Team

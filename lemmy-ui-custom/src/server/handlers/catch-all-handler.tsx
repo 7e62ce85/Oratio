@@ -64,6 +64,7 @@ export default async (req: Request, res: Response) => {
     let site: GetSiteResponse | undefined = undefined;
     let routeData: RouteData = {};
     let errorPageData: ErrorPageData | undefined = undefined;
+    let ssrLanguages: string[] = languages;
     let try_site = await client.getSite();
 
     if (
@@ -84,7 +85,15 @@ export default async (req: Request, res: Response) => {
     if (try_site.state === "success") {
       site = try_site.data;
       initializeSite(site);
-      LanguageService.updateLanguages(languages);
+
+      // Prepend user's interface_language so SSR renders in the correct language
+      // instead of the browser's Accept-Language header language.
+      const userLang =
+        site.my_user?.local_user_view.local_user.interface_language;
+      if (userLang && userLang !== "browser") {
+        ssrLanguages = [userLang, ...languages];
+      }
+      LanguageService.updateLanguages(ssrLanguages);
 
       if (path !== "/setup" && !site.site_view.local_site.site_setup) {
         return res.redirect("/setup");
@@ -171,7 +180,7 @@ export default async (req: Request, res: Response) => {
 
     // Another request could have initialized a new site.
     initializeSite(site);
-    LanguageService.updateLanguages(languages);
+    LanguageService.updateLanguages(ssrLanguages);
 
     const root = renderToString(wrapper);
 

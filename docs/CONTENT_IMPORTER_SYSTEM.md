@@ -133,13 +133,13 @@ oratio/content_importer/
 
 | 소스 | 타입 | 수집 수 | 대상 커뮤니티 | AI 선별 수 |
 |------|------|---------|-------------|-----------|
-| Reddit r/technology | RSS | 25 | reddit | 2 |
-| Reddit r/worldnews | RSS | 25 | reddit | 2 |
+| Reddit r/technology | RSS | 25 | reddit | 5 |
+| Reddit r/worldnews | RSS | 25 | reddit | 5 |
 | Ars Technica | RSS | 20 | arstechnica | 3 |
 | ScienceDaily | RSS | 20 | sciencedaily | 2 |
-| Reuters (Google News 경유) | RSS | 25 | reuters | 3 |
+| Reuters (Google News 경유) | RSS | 25 | reuters | 8 |
 | YouTube (US Trending) | API v3 | 25 | youtube | 2 |
-| Upgoat | HTML 스크래핑 (다중 페이지) | ~45-55 (13~72h 필터) | upgoat | 전체 (skip_ai) |
+| Upgoat | HTML 스크래핑 (다중 페이지) | ~45-55 (13~72h 필터) | upgoat | 10 (AI 선별) |
 | 4chan (전체 인기 보드) | JSON API (21개 SFW 보드 스캔, 복합 스코어링 + 필터링) | 20 | fourchan | 10 |
 | MGTOW.tv | HTML 스크래핑 | 15 | mgtowtv | 2 |
 | Bitchute (Trending) | HTML 스크래핑 (old.bitchute.com SSR) | 15 | bitchute | 2 |
@@ -431,3 +431,8 @@ docker-compose start content-importer
 | 2026-04-08 | **Bitchute/Rumble 채널당 1개 제한**: 같은 author/channel의 영상을 사이클당 최대 1개만 수집. 일일 에피소드 시리즈(Alex Jones, X22 Report, Timcast 등)가 trending을 독점하는 문제 해결 → AI 후보 풀 다양성 향상 |
 | 2026-04-08 | **General regex v3 + /int/ 국가 잡담방 차단**: (1) `/xxx/` 단독 제목 패턴 추가 (`^/\w{2,12}/\s*$`), (2) `/xxx/ +` 구분자 `+` 추가, (3) `brit/pol/` 등 국가별 정치 general 패턴, (4) `/v4/ /ori/` 복수 slug 패턴. `_INT_COUNTRY_GENERALS` frozenset 30개 — `/deutsch/`, `/sauna/`, `/cum/`, `/polska/` 등 /int/ 보드 recurring 국가 잡담방 exact-match 차단 |
 | 2026-04-08 | **빈 제목 게시 방지**: `lemmy_client.py`에 `_valid_title()` 추가 — alphanumeric 문자가 없는 제목(빈 문자열, 이모지만 등)은 Lemmy API 호출 전 스킵. `invalid_post_title` 400 에러 방지 |
+| 2026-04-16 | **Upgoat AI 선별 전환**: 전체 import (`skip_ai=True`) → AI 선별 사이클당 10개로 변경. 다른 소스와 동일한 품질 필터링 적용 |
+| 2026-04-16 | **Reuters ai_picks 증가**: 3 → 8. 사이클당 더 많은 뉴스 콘텐츠 import |
+| 2026-04-16 | **Reddit ai_picks 증가**: 소스당 3 → 5 (총 6 → 10). 사이클당 Reddit 콘텐츠 확대 |
+| 2026-04-16 | **Rumble 종교 콘텐츠 필터**: 성경 구절/설교/기독교 관련 제목 regex 필터 추가 (Matthew 16, sermon, gospel 등). 종교 콘텐츠 자동 스킵 |
+| 2026-04-16 | **Bitchute 채널 블록**: "Restored Republic" 채널 + 제목 패턴 블록. 반복적 일일 업데이트 시리즈 차단 |
